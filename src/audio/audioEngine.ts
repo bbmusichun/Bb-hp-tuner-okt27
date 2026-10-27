@@ -232,9 +232,9 @@ export class BBAudioEngine {
   }
 
   public analyze(
-    targetFundamentalHz = 146.50,
-    targetFifthHz = 220.00,
-    targetOctaveHz = 293.66,
+    targetFundamentalHz = 146.832384,
+    targetFifthHz = 440.497152,
+    targetOctaveHz = 293.664768,
     noteNames = { fundamental: 'D3', fifth: 'A4', octave: 'D4' }
   ): {
     alap: ResonanceMeasurement;
