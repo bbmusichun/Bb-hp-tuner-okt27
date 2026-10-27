@@ -38,6 +38,6 @@ These are **preliminary diagnostics only**, not certified tuning measurements. T
 1. Run `npm test`, `npm run lint`, and `npm run build`.
 2. Run `/?benchmark=sine` to verify digital measurement accuracy.
 3. Run `/?benchmark=wav` and analyze both supplied recordings locally.
-4. Compare the per-window frequencies, cents, and signal levels. Exclude no frames silently; invalid peaks must remain blank and weak/ambiguous readings must be identified.
+4. Compare the per-window frequencies, cents, signal levels, and local peak prominence. Peak prominence is the detected peak level minus the median spectrum level in its target band; treat it as a diagnostic contrast metric, not a calibrated confidence score. Exclude no frames silently; invalid peaks must remain blank and weak/ambiguous readings must be identified.
 5. Run the live microphone lab on the target device. Keep the acoustic loopback test separate from digital accuracy.
 6. Before describing the app as professionally calibrated, validate against a traceable external frequency reference and document device, microphone, distance, level, sample rate, and measurement uncertainty.

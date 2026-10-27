@@ -36,6 +36,13 @@ function median(values: number[]): number | null {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+/** Median absolute deviation: robust description of frame-to-frame spread, in cents. */
+function medianAbsoluteDeviation(values: number[]): number | null {
+  const center = median(values);
+  if (center === null) return null;
+  return median(values.map((value) => Math.abs(value - center)));
+}
+
 export default function ReferenceWavBench() {
   const [targetIndex, setTargetIndex] = useState(0);
   const [channelMode, setChannelMode] = useState<ChannelMode>('strongest');
@@ -60,7 +67,13 @@ export default function ReferenceWavBench() {
   const summary = [1, 2, 3].map((multiplier) => {
     const values = frames.map((frame) => frame.resonances[multiplier - 1].cents)
       .filter((value): value is number => value !== null && Number.isFinite(value));
-    return { multiplier, targetHz: target.hz * multiplier, count: values.length, medianCents: median(values) };
+    return {
+      multiplier,
+      targetHz: target.hz * multiplier,
+      count: values.length,
+      medianCents: median(values),
+      madCents: medianAbsoluteDeviation(values),
+    };
   });
 
   const loadFile = async (file?: File) => {
@@ -105,10 +118,10 @@ export default function ReferenceWavBench() {
   };
 
   const exportCsv = () => {
-    const header = 'timeSeconds,rmsDb,target1Hz,measured1Hz,cents1,peak1Db,target2Hz,measured2Hz,cents2,peak2Db,target3Hz,measured3Hz,cents3,peak3Db';
+    const header = 'timeSeconds,rmsDb,target1Hz,measured1Hz,cents1,peak1Db,prominence1Db,target2Hz,measured2Hz,cents2,peak2Db,prominence2Db,target3Hz,measured3Hz,cents3,peak3Db,prominence3Db';
     const rows = frames.map((frame) => [
       frame.timeSeconds, frame.rmsDb,
-      ...frame.resonances.flatMap((r) => [r.targetHz, r.measuredHz ?? '', r.cents ?? '', r.peakDb ?? '']),
+      ...frame.resonances.flatMap((r) => [r.targetHz, r.measuredHz ?? '', r.cents ?? '', r.peakDb ?? '', r.prominenceDb ?? '']),
     ].join(','));
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -138,7 +151,7 @@ export default function ReferenceWavBench() {
         <h2 className="font-semibold">1. Referenciafelvétel betöltése</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm text-slate-300">Alaphang célértéke
-            <select value={targetIndex} disabled={busy} onChange={(event) => { const nextIndex = Number(event.target.value); setTargetIndex(nextIndex); if (audioDataRef.current) analyzeLoadedAudio(TARGETS[nextIndex].hz, channelMode); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
+            <select value={targetIndex} disabled={busy} onChange={(event) => { const nextIndex = Number(event.target.value); setTargetIndex(nextIndex); const audio = audioDataRef.current; if (audio) analyzeLoadedAudio(TARGETS[nextIndex].hz, channelMode); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
               {TARGETS.map((item, index) => <option key={item.label} value={index}>{item.label} · {item.hz.toFixed(6)} Hz</option>)}
             </select>
           </label>
@@ -168,10 +181,11 @@ export default function ReferenceWavBench() {
               <p className="text-sm text-slate-400">{item.multiplier === 1 ? 'Alaphang · 1×' : item.multiplier === 2 ? 'Oktáv · 2×' : 'Harmadik részfelhang · 3×'}</p>
               <p className="mt-2 font-mono text-lg">{item.targetHz.toFixed(6)} Hz</p>
               <p className="mt-1 text-amber-300">Mediáneltérés: {fmtCents(item.medianCents)}</p>
+              <p className="mt-1 text-sm text-slate-300">Robusztus szóródás (MAD): {item.madCents === null ? '—' : item.madCents.toFixed(2) + ' cent'}</p>
               <p className="mt-1 text-xs text-slate-500">{item.count} érvényes ablak / {frames.length}</p>
             </article>)}
           </div>
-          <p className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3 text-sm leading-6 text-amber-100">Ez a medián a felvétel spektrumcsúcsainak diagnosztikai összegzése, nem hitelesített hangolási eredmény. A harmadik részfelhang célértéke 3× alaphang; nem azonos automatikusan az egyenletes temperálású A4 = 440 Hz céllal.</p>
+          <p className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3 text-sm leading-6 text-amber-100">A MAD a centeltérések ablakok közötti robusztus szóródását jelzi; nem műszeres mérési bizonytalanság. A medián a felvétel spektrumcsúcsainak diagnosztikai összegzése, nem hitelesített hangolási eredmény. A harmadik részfelhang célértéke 3× alaphang; nem azonos automatikusan az egyenletes temperálású A4 = 440 Hz céllal.</p>
         </section>
 
         <section className="space-y-3">
@@ -180,22 +194,22 @@ export default function ReferenceWavBench() {
             <button onClick={exportCsv} className="rounded-xl border border-slate-600 px-4 py-2 text-sm">CSV export</button>
           </div>
           <div className="overflow-x-auto rounded-2xl border border-slate-800">
-            <table className="w-full min-w-[900px] text-left text-xs">
+            <table className="w-full min-w-[1420px] text-left text-xs">
               <thead className="bg-slate-900 text-slate-400"><tr>
                 <th className="p-3">Idő (s)</th><th className="p-3">Jelszint (dB)</th>
-                <th className="p-3">1× Hz</th><th className="p-3">1× cent</th>
-                <th className="p-3">2× Hz</th><th className="p-3">2× cent</th>
-                <th className="p-3">3× Hz</th><th className="p-3">3× cent</th>
+                <th className="p-3">1× Hz</th><th className="p-3">1× cent</th><th className="p-3">1× csúcs dBFS</th><th className="p-3">1× kiemelkedés dB</th>
+                <th className="p-3">2× Hz</th><th className="p-3">2× cent</th><th className="p-3">2× csúcs dBFS</th><th className="p-3">2× kiemelkedés dB</th>
+                <th className="p-3">3× Hz</th><th className="p-3">3× cent</th><th className="p-3">3× csúcs dBFS</th><th className="p-3">3× kiemelkedés dB</th>
               </tr></thead>
               <tbody>{frames.map((frame, index) => <tr key={frame.timeSeconds} className="border-t border-slate-800">
                 <td className="p-3 font-mono">{frame.timeSeconds.toFixed(3)}</td><td className="p-3 font-mono">{frame.rmsDb.toFixed(1)}</td>
                 {frame.resonances.map((resonance, i) => <React.Fragment key={i}>
-                  <td className="p-3 font-mono">{fmt(resonance.measuredHz)}</td><td className="p-3 font-mono">{fmtCents(resonance.cents)}</td>
+                  <td className="p-3 font-mono">{fmt(resonance.measuredHz)}</td><td className="p-3 font-mono">{fmtCents(resonance.cents)}</td><td className="p-3 font-mono">{fmt(resonance.peakDb, 1)}</td><td className="p-3 font-mono">{fmt(resonance.prominenceDb, 1)}</td>
                 </React.Fragment>)}
               </tr>)}</tbody>
             </table>
           </div>
-          <p className="text-xs leading-5 text-slate-500">A táblázat minden sora egy külön, átfedő hangablak. A korai ütésből származó értékek eltérhetnek a lecsengés stabilabb szakaszától. A hiányzó csúcs „—” marad; a program nem gyárt hozzá becsült hangolási értéket.</p>
+          <p className="text-xs leading-5 text-slate-500">A táblázat minden sora egy külön, átfedő hangablak. A korai ütésből származó értékek eltérhetnek a lecsengés stabilabb szakaszától. A hiányzó csúcs „—” marad; a program nem gyárt hozzá becsült hangolási értéket. A csúcs dBFS a relatív digitális jelszintet mutatja, nem kalibrált hangnyomást. A kiemelkedés a csúcs szintjének különbsége a célsáv körüli medián spektrumszinthez képest; ez diagnosztikai mutató, nem hitelesített megbízhatósági pontszám.</p>
         </section>
       </>}
     </div>

@@ -5,6 +5,8 @@ export interface WavResonance {
   measuredHz: number | null;
   cents: number | null;
   peakDb: number | null;
+  /** Peak level minus the median surrounding spectrum level in the target band (dB). */
+  prominenceDb: number | null;
 }
 
 export interface WavFrameAnalysis {
@@ -24,6 +26,38 @@ function nextPowerOfTwo(value: number): number {
   let result = 1;
   while (result < value) result *= 2;
   return result;
+}
+
+function median(values: number[]): number | null {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+/**
+ * Estimate peak prominence against the median spectrum level in the target band.
+ * This is a diagnostic contrast metric, not a calibrated confidence score.
+ */
+function estimatePeakProminence(
+  targetHz: number,
+  peakBin: number,
+  spectrum: Float32Array,
+  sampleRate: number,
+  windowCents = 150,
+): number | null {
+  const binWidth = sampleRate / (spectrum.length * 2);
+  const minBin = Math.max(1, Math.floor(targetHz * Math.pow(2, -windowCents / 1200) / binWidth));
+  const maxBin = Math.min(spectrum.length - 2, Math.ceil(targetHz * Math.pow(2, windowCents / 1200) / binWidth));
+  const surrounding: number[] = [];
+  for (let bin = minBin; bin <= maxBin; bin++) {
+    // Exclude the peak and its immediate Blackman-window main lobe.
+    if (Math.abs(bin - peakBin) <= 2) continue;
+    if (Number.isFinite(spectrum[bin])) surrounding.push(spectrum[bin]);
+  }
+  const background = median(surrounding);
+  if (background === null) return null;
+  return spectrum[peakBin] - background;
 }
 
 /** Radix-2 in-place complex FFT. Arrays are expected to have equal power-of-two lengths. */
@@ -113,6 +147,9 @@ export function analyzeWavWindow(
       measuredHz: peak?.freq ?? null,
       cents: peak ? 1200 * Math.log2(peak.freq / target) : null,
       peakDb: peak?.magDb ?? null,
+      prominenceDb: peak
+        ? estimatePeakProminence(target, peak.bin, spectrum, sampleRate)
+        : null,
     };
   });
   return {

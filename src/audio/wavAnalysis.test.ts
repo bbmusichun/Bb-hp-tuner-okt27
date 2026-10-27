@@ -31,12 +31,23 @@ describe('offline WAV resonance analysis', () => {
       assert.ok(resonance.measuredHz !== null, 'expected all three synthetic partials to be found');
       assert.ok(Math.abs(cents(resonance.measuredHz!, resonance.targetHz)) < 1,
         'expected ' + resonance.targetHz + ' Hz, measured ' + resonance.measuredHz + ' Hz');
+      assert.ok(resonance.prominenceDb !== null && resonance.prominenceDb > 3,
+        'expected a visible local peak above its surrounding spectrum');
     }
   });
 
   it('returns no result for silence and too-short windows', () => {
     assert.equal(analyzeWavWindow(new Float32Array(FFT_SIZE), RATE), null);
     assert.equal(analyzeWavWindow(sine(D3, FFT_SIZE - 1), RATE), null);
+  });
+
+  it('does not report a below-floor sine as a valid resonance', () => {
+    const quiet = sine(D3, FFT_SIZE, RATE, 1e-5);
+    const result = analyzeWavWindow(quiet, RATE, { peakFloorDb: -82 });
+    assert.ok(result);
+    assert.ok(result.resonances.every(resonance =>
+      resonance.measuredHz === null && resonance.cents === null && resonance.peakDb === null
+    ));
   });
 
   it('rejects invalid FFT sizes and sample rates', () => {
