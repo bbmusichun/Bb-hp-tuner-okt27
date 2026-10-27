@@ -36,6 +36,13 @@ function median(values: number[]): number | null {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+/** Median absolute deviation: robust description of frame-to-frame spread, in cents. */
+function medianAbsoluteDeviation(values: number[]): number | null {
+  const center = median(values);
+  if (center === null) return null;
+  return median(values.map((value) => Math.abs(value - center)));
+}
+
 export default function ReferenceWavBench() {
   const [targetIndex, setTargetIndex] = useState(0);
   const [channelMode, setChannelMode] = useState<ChannelMode>('strongest');
@@ -60,7 +67,13 @@ export default function ReferenceWavBench() {
   const summary = [1, 2, 3].map((multiplier) => {
     const values = frames.map((frame) => frame.resonances[multiplier - 1].cents)
       .filter((value): value is number => value !== null && Number.isFinite(value));
-    return { multiplier, targetHz: target.hz * multiplier, count: values.length, medianCents: median(values) };
+    return {
+      multiplier,
+      targetHz: target.hz * multiplier,
+      count: values.length,
+      medianCents: median(values),
+      madCents: medianAbsoluteDeviation(values),
+    };
   });
 
   const loadFile = async (file?: File) => {
@@ -168,10 +181,11 @@ export default function ReferenceWavBench() {
               <p className="text-sm text-slate-400">{item.multiplier === 1 ? 'Alaphang · 1×' : item.multiplier === 2 ? 'Oktáv · 2×' : 'Harmadik részfelhang · 3×'}</p>
               <p className="mt-2 font-mono text-lg">{item.targetHz.toFixed(6)} Hz</p>
               <p className="mt-1 text-amber-300">Mediáneltérés: {fmtCents(item.medianCents)}</p>
+              <p className="mt-1 text-sm text-slate-300">Robusztus szóródás (MAD): {item.madCents === null ? '—' : item.madCents.toFixed(2) + ' cent'}</p>
               <p className="mt-1 text-xs text-slate-500">{item.count} érvényes ablak / {frames.length}</p>
             </article>)}
           </div>
-          <p className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3 text-sm leading-6 text-amber-100">Ez a medián a felvétel spektrumcsúcsainak diagnosztikai összegzése, nem hitelesített hangolási eredmény. A harmadik részfelhang célértéke 3× alaphang; nem azonos automatikusan az egyenletes temperálású A4 = 440 Hz céllal.</p>
+          <p className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3 text-sm leading-6 text-amber-100">A MAD a centeltérések ablakok közötti robusztus szóródását jelzi; nem műszeres mérési bizonytalanság. A medián a felvétel spektrumcsúcsainak diagnosztikai összegzése, nem hitelesített hangolási eredmény. A harmadik részfelhang célértéke 3× alaphang; nem azonos automatikusan az egyenletes temperálású A4 = 440 Hz céllal.</p>
         </section>
 
         <section className="space-y-3">
