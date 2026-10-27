@@ -17,7 +17,7 @@ export const BBMeresekView: React.FC<Props> = ({
 }) => {
   const handleExportCSV = () => {
     if (logs.length === 0) return;
-    const headers = ['Timestamp', 'Date', 'Note', 'Fundamental_Hz', 'Fundamental_Cents', 'Fifth_Hz', 'Fifth_Cents', 'Octave_Hz', 'Octave_Cents', 'In_Tune'];
+    const headers = ['Timestamp', 'Date', 'Note', 'Fundamental_Hz', 'Fundamental_Cents', 'Third_Partial_Hz', 'Third_Partial_Cents', 'Octave_Hz', 'Octave_Cents', 'In_Tune'];
     const rows = logs.map((l) => [
       l.timestamp,
       new Date(l.timestamp).toISOString(),
@@ -39,6 +39,7 @@ export const BBMeresekView: React.FC<Props> = ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(encodedUri);
   };
 
   const handleExportJSON = () => {
@@ -131,7 +132,7 @@ export const BBMeresekView: React.FC<Props> = ({
                 </div>
 
                 <div className="p-1.5 rounded bg-slate-900/60 border border-white/5">
-                  <div className="text-[9px] text-[#c084fc] font-sans font-semibold">Kvint</div>
+                  <div className="text-[9px] text-[#c084fc] font-sans font-semibold">3. parciális</div>
                   <div>{log.fifthHz.toFixed(1)}Hz</div>
                   <div className={Math.abs(log.fifthCents) <= 3 ? 'text-[#10b981] font-bold' : 'text-[#c084fc]'}>
                     {log.fifthCents > 0 ? '+' : ''}{log.fifthCents.toFixed(1)}¢
