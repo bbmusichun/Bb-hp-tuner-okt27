@@ -39,6 +39,15 @@ describe('offline WAV resonance analysis', () => {
     assert.equal(analyzeWavWindow(sine(D3, FFT_SIZE - 1), RATE), null);
   });
 
+  it('does not report a below-floor sine as a valid resonance', () => {
+    const quiet = sine(D3, FFT_SIZE, RATE, 1e-5);
+    const result = analyzeWavWindow(quiet, RATE, { peakFloorDb: -82 });
+    assert.ok(result);
+    assert.ok(result.resonances.every(resonance =>
+      resonance.measuredHz === null && resonance.cents === null && resonance.peakDb === null
+    ));
+  });
+
   it('rejects invalid FFT sizes and sample rates', () => {
     assert.equal(analyzeWavWindow(sine(D3, FFT_SIZE), RATE, { fftSize: 1000 }), null);
     assert.equal(analyzeWavWindow(sine(D3, FFT_SIZE), 0), null);
