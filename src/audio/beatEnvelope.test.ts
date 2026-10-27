@@ -127,3 +127,18 @@ test('beat estimate survives low-level deterministic broadband noise', () => {
   assert.ok(Math.abs(result.beatFrequencyHz! - 0.5) < 0.08,
     `expected noisy 0.5 Hz beat, got ${result.beatFrequencyHz}`);
 });
+
+
+test('long recordings can resolve a slow 0.1 Hz beat when enough cycles are present', () => {
+  const samples = makeTwoToneBeat(146.5, 146.6, 35);
+  const result = analyzeBeatEnvelope(samples, {
+    sampleRate: SAMPLE_RATE,
+    windowMs: 10,
+    hopMs: 5,
+    minBeatHz: 0.05,
+    maxBeatHz: 0.5,
+  });
+  assert.ok(result.beatFrequencyHz !== null, 'slow beat was not detected despite enough cycles');
+  assert.ok(Math.abs(result.beatFrequencyHz! - 0.1) < 0.02,
+    `expected 0.1 Hz beat, got ${result.beatFrequencyHz}`);
+});
