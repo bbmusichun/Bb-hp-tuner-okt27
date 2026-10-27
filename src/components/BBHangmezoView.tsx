@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ToneFieldNote } from '../types/tuner';
 import { Volume2 } from 'lucide-react';
 import { bbAudioEngine } from '../audio/audioEngine';
@@ -20,6 +20,24 @@ export const BBHangmezoView: React.FC<Props> = ({
 }) => {
   const ding = notes[0];
   const perimeter = notes.slice(1);
+  const toneStopTimerRef = useRef<number | null>(null);
+
+  const playReferenceTone = (frequency: number, durationMs: number) => {
+    if (toneStopTimerRef.current !== null) {
+      window.clearTimeout(toneStopTimerRef.current);
+      toneStopTimerRef.current = null;
+    }
+    bbAudioEngine.playTone(frequency);
+    toneStopTimerRef.current = window.setTimeout(() => {
+      bbAudioEngine.stopTone();
+      toneStopTimerRef.current = null;
+    }, durationMs);
+  };
+
+  useEffect(() => () => {
+    if (toneStopTimerRef.current !== null) window.clearTimeout(toneStopTimerRef.current);
+    bbAudioEngine.stopTone();
+  }, []);
 
   return (
     <div className="w-full flex flex-col items-center p-3 animate-in fade-in">
@@ -38,8 +56,7 @@ export const BBHangmezoView: React.FC<Props> = ({
           <button
             onClick={() => {
               onSelectNote(ding);
-              bbAudioEngine.playTone(ding.frequency);
-              setTimeout(() => bbAudioEngine.stopTone(), 600);
+              playReferenceTone(ding.frequency, 600);
             }}
             className={`w-20 h-20 rounded-full flex flex-col items-center justify-center shadow-lg transition-all z-10 ${
               selectedNote.id === ding.id
@@ -66,8 +83,7 @@ export const BBHangmezoView: React.FC<Props> = ({
               key={note.id}
               onClick={() => {
                 onSelectNote(note);
-                bbAudioEngine.playTone(note.frequency);
-                setTimeout(() => bbAudioEngine.stopTone(), 600);
+                playReferenceTone(note.frequency, 600);
               }}
               style={{
                 transform: `translate(${x}px, ${y}px)`,
@@ -101,8 +117,7 @@ export const BBHangmezoView: React.FC<Props> = ({
 
         <button
           onClick={() => {
-            bbAudioEngine.playTone(selectedNote.frequency);
-            setTimeout(() => bbAudioEngine.stopTone(), 700);
+            playReferenceTone(selectedNote.frequency, 700);
           }}
           className="p-2 rounded-lg bg-[#f59e0b]/20 text-[#f59e0b] hover:bg-[#f59e0b]/30 border border-[#f59e0b]/30"
           title="Hang lejátszása"
