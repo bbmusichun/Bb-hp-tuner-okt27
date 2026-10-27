@@ -31,7 +31,7 @@ export const BBCards: React.FC<Props> = ({
     {
       role: 'fifth' as const,
       title: '3. parciális',
-      note: kvint.noteName || 'A3',
+      note: kvint.noteName || 'A4',
       dotColor: '#c084fc',
       borderSelected: 'border-[#c084fc]/70 shadow-[#c084fc]/10',
       data: kvint,
