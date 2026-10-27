@@ -25,6 +25,7 @@ import { BBStabilityGraph } from './components/BBStabilityGraph';
 import { BBHangmezoView } from './components/BBHangmezoView';
 import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
+import { BBSpectrogram } from './components/BBSpectrogram';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
@@ -427,6 +428,7 @@ export default function App() {
               hasSignal={hasSignal}
               onSelectPeak={setSelectedRole}
             />
+            <BBSpectrogram active={isListening} />
             <BBStabilityGraph
               roleName="Alaphang"
               hasSignal={hasSignal}
