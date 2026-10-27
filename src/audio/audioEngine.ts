@@ -476,21 +476,30 @@ export class BBAudioEngine {
   }
 
   public stopTone(): void {
-    if (this.toneGain && this.audioCtx) {
-      const now = this.audioCtx.currentTime;
-      this.toneGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
-      setTimeout(() => {
-        try {
-          this.toneOsc?.stop();
-          this.toneOsc?.disconnect();
-          this.toneGain?.disconnect();
-        } catch {
-          // ignore
-        }
-        this.toneOsc = null;
-        this.toneGain = null;
-      }, 60);
+    const oscillator = this.toneOsc;
+    const gain = this.toneGain;
+    const context = this.audioCtx;
+    // Clear current references immediately so a delayed cleanup cannot stop a newer tone.
+    this.toneOsc = null;
+    this.toneGain = null;
+    if (!gain || !context) {
+      try { oscillator?.stop(); } catch { /* oscillator may already be stopped */ }
+      oscillator?.disconnect();
+      gain?.disconnect();
+      return;
     }
+    const now = context.currentTime;
+    try {
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setTargetAtTime(0.0001, now, 0.012);
+    } catch {
+      // Context may have been closed while stopping.
+    }
+    window.setTimeout(() => {
+      try { oscillator?.stop(); } catch { /* oscillator may already be stopped */ }
+      oscillator?.disconnect();
+      gain.disconnect();
+    }, 80);
   }
 }
 
