@@ -120,6 +120,16 @@ const SparklineCanvas: React.FC<{ lineColor: string; hasSignal: boolean; cents: 
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const historyRef = useRef<number[]>([]);
+  const latestRef = useRef({ lineColor, hasSignal, cents });
+  latestRef.current = { lineColor, hasSignal, cents };
+
+  // Store one sample per incoming React measurement update, not once per animation frame.
+  useEffect(() => {
+    if (!hasSignal || !Number.isFinite(cents)) return;
+    const history = historyRef.current;
+    history.push(Math.max(-10, Math.min(10, cents)));
+    if (history.length > 30) history.shift();
+  }, [hasSignal, cents]);
 
   useEffect(() => {
     let animId = 0;
@@ -128,25 +138,14 @@ const SparklineCanvas: React.FC<{ lineColor: string; hasSignal: boolean; cents: 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Push new point
-    if (historyRef.current.length === 0) {
-      historyRef.current = new Array(30).fill(0);
-    }
-
     function draw() {
       if (!ctx || !canvas) return;
       const w = canvas.width;
       const h = canvas.height;
       const centerY = h / 2;
-
+      const latest = latestRef.current;
       ctx.clearRect(0, 0, w, h);
 
-      // Add a slight procedural wave based on cents error
-      const sample = hasSignal && Number.isFinite(cents) ? Math.max(-10, Math.min(10, cents)) : 0;
-      historyRef.current.push(sample);
-      if (historyRef.current.length > 30) historyRef.current.shift();
-
-      // Zero line
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -154,26 +153,27 @@ const SparklineCanvas: React.FC<{ lineColor: string; hasSignal: boolean; cents: 
       ctx.lineTo(w, centerY);
       ctx.stroke();
 
-      // Sparkline
-      ctx.strokeStyle = lineColor;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-
-      const step = w / (historyRef.current.length - 1);
-      historyRef.current.forEach((val, idx) => {
-        const x = idx * step;
-        const y = centerY - (val / 10) * (h * 0.42);
-        if (idx === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
+      const history = historyRef.current;
+      if (history.length > 1) {
+        ctx.strokeStyle = latest.lineColor;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        const step = w / (history.length - 1);
+        history.forEach((value, idx) => {
+          const x = idx * step;
+          const y = centerY - (value / 10) * (h * 0.42);
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
 
       animId = requestAnimationFrame(draw);
     }
 
     animId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(animId);
-  }, [hasSignal, cents, lineColor]);
+  }, []);
 
   return <canvas ref={canvasRef} width={80} height={20} className="w-full h-full block" />;
 };
