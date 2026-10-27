@@ -6,6 +6,7 @@
 
 import { ResonanceMeasurement, MicState } from '../types/tuner';
 import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
+import { isTransientHoldoffActive } from './transientGuard';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -26,7 +27,6 @@ export class BBAudioEngine {
   private sampleRate = 48000;
   private previousRms = 0;
   private lastTransientAt = 0;
-  private transientPeakRms = 0;
   private transientDetected = false;
   private transientHoldoff = false;
 
@@ -112,7 +112,6 @@ export class BBAudioEngine {
     this.inputLevelDb = -100;
     this.previousRms = 0;
     this.lastTransientAt = 0;
-    this.transientPeakRms = 0;
     this.transientDetected = false;
     this.transientHoldoff = false;
     this.stabilityHistory = [];
@@ -279,21 +278,20 @@ export class BBAudioEngine {
     const hasSignal = db > -58; // RMS gate for audio presence
     const highInputLevel = db > -8; // Near-full-scale input can clip or distort transients.
 
-    // Detect a sharp attack from the RMS envelope. The FFT frame overlaps the attack,
-    // but waiting the full 683 ms window made the tuner unnecessarily sluggish. Hold
-    // measurements briefly, then release once the envelope has fallen, with a hard cap.
+    // Detect a sharp attack from the RMS envelope. Because AnalyserNode returns a rolling
+    // FFT frame, ignore measurements until the whole FFT window has moved past the attack,
+    // plus a 50 ms safety guard. A shorter lockout could still measure the strike transient.
     const transientDetected = hasSignal && rms > 0.003 &&
       (this.previousRms < 0.001 || rms > this.previousRms * 2.5);
-    if (transientDetected) {
-      this.lastTransientAt = now;
-      this.transientPeakRms = rms;
-    }
+    if (transientDetected) this.lastTransientAt = now;
     this.previousRms = rms;
-    const transientElapsed = this.lastTransientAt > 0 ? now - this.lastTransientAt : Infinity;
-    const transientDecayed = this.transientPeakRms > 0 && rms <= this.transientPeakRms * 0.55;
-    const transientHoldoff = transientElapsed < 450 &&
-      (transientElapsed < 180 || !transientDecayed);
-    if (!transientHoldoff) this.transientPeakRms = 0;
+    const transientHoldoff = isTransientHoldoffActive(
+      this.lastTransientAt,
+      now,
+      this.fftSize,
+      this.sampleRate,
+      50,
+    );
     this.transientDetected = transientDetected;
     this.transientHoldoff = transientHoldoff;
 
