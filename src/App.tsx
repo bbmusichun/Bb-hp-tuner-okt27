@@ -28,7 +28,8 @@ import { BBSettingsModal } from './components/BBSettingsModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);\n  const [autoDetect, setAutoDetect] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [autoDetect, setAutoDetect] = useState(true);
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(440);
@@ -43,8 +44,8 @@ export default function App() {
       const f0 = midiToFreq(n.midi, a4Ref);
       // Handpan acoustic resonances:
       // Fundamental: f0 (e.g. D3 = 146.83 Hz)
-      // Kvint: 1.5 * f0 (e.g. A3 = 220.24 Hz)
-      // Oktáv: 2.0 * f0 (e.g. D4 = 293.66 Hz)
+      // Traditional handpan partials: fundamental (1x), octave (2x), compound fifth (3x).
+      // The third partial is not the ordinary 1.5x musical fifth.
       return {
         id: `note_${idx}_${n.name}`,
         noteName: n.name,
@@ -71,8 +72,8 @@ export default function App() {
     // Otherwise calculate octave and fifth names
     return {
       fundamental: selectedNote.noteName,
-      fifth: selectedNote.positionIndex === 0 ? 'A3' : `${selectedNote.noteName} (5th)`,
-      octave: selectedNote.positionIndex === 0 ? 'D4' : `${selectedNote.noteName} (Oct)`,
+      fifth: `${selectedNote.noteName} (3. parciális)`,
+      octave: `${selectedNote.noteName} (oktáv)`,
     };
   }, [selectedNote]);
 
@@ -126,7 +127,14 @@ export default function App() {
   });
 
   // Measurements Log
-  const [logs, setLogs] = useState<TuningLogEntry[]>(() => {\n    try { return JSON.parse(localStorage.getItem('bb-tuner-measurements-v1') || '[]') as TuningLogEntry[]; }\n    catch { return []; }\n  });\n\n  useEffect(() => {\n    try { localStorage.setItem('bb-tuner-measurements-v1', JSON.stringify(logs)); } catch (error) { console.warn('Nem sikerült menteni a mérési naplót:', error); }\n  }, [logs]);
+  const [logs, setLogs] = useState<TuningLogEntry[]>(() => {
+    try { return JSON.parse(localStorage.getItem('bb-tuner-measurements-v1') || '[]') as TuningLogEntry[]; }
+    catch { return []; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('bb-tuner-measurements-v1', JSON.stringify(logs)); } catch (error) { console.warn('Nem sikerült menteni a mérési naplót:', error); }
+  }, [logs]);
 
   // Audio Analysis Loop (~30 Hz)
   useEffect(() => {
