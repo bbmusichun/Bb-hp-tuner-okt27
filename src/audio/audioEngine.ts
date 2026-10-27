@@ -397,11 +397,12 @@ export class BBAudioEngine {
     const currentPeak = hasSignal ? peak : null;
     const cents = currentPeak ? 1200 * Math.log2(currentPeak.freq / targetHz) : null;
     const confidence = currentPeak ? Math.max(0, Math.min(1, (currentPeak.magDb + 100) / 65)) : 0;
-    // A missing frame can briefly occur between FFT updates. Preserve the last good
-    // numerical reading for up to 250 ms to prevent UI flicker, but keep status no-signal
-    // so the interface never claims a stale reading is currently live.
-    const status = !hasSignal || !currentPeak ? 'no-signal'
-      : confidence > 0.25 && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain';
+    // Handpan resonances can decay at different rates. Keep each last valid reading
+    // visible for 2.5 s, explicitly marked as held rather than live, so the player can
+    // read the value after the strike without confusing it with a current measurement.
+    const status = currentPeak && hasSignal
+      ? confidence > 0.25 && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      : 'no-signal';
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
         hz: currentPeak.freq,
@@ -412,19 +413,19 @@ export class BBAudioEngine {
       };
     }
     const cached = this.lastValidResonances[role];
-    const cachedIsFresh = cached !== undefined && now - cached.timestampMs <= 250;
+    const cachedIsFresh = cached !== undefined && now - cached.timestampMs <= 2500;
 
     return {
       role,
       name,
       noteName,
-      measuredHz: currentPeak ? currentPeak.freq : hasSignal && cachedIsFresh ? cached!.hz : null,
+      measuredHz: currentPeak ? currentPeak.freq : cachedIsFresh ? cached!.hz : null,
       targetHz,
-      deviationCents: cents !== null ? cents : hasSignal && cachedIsFresh ? cached!.cents : null,
-      amplitudeDb: currentPeak ? currentPeak.magDb : hasSignal && cachedIsFresh ? cached!.amplitudeDb : null,
-      confidence: currentPeak ? confidence : hasSignal && cachedIsFresh ? cached!.confidence : 0,
-      timestampMs: currentPeak ? now : hasSignal && cachedIsFresh ? cached!.timestampMs : now,
-      status,
+      deviationCents: cents !== null ? cents : cachedIsFresh ? cached!.cents : null,
+      amplitudeDb: currentPeak ? currentPeak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
+      confidence: currentPeak ? confidence : cachedIsFresh ? cached!.confidence : 0,
+      timestampMs: currentPeak ? now : cachedIsFresh ? cached!.timestampMs : now,
+      status: !currentPeak && cachedIsFresh ? 'held' : status,
     };
   }
 
