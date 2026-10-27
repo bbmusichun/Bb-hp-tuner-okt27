@@ -141,7 +141,7 @@ export default function App() {
   const [inputLevelDb, setInputLevelDb] = useState(-100);
   const [transientHoldoff, setTransientHoldoff] = useState(false);
   const [highInputLevel, setHighInputLevel] = useState(false);
-  const [sampleRateKhz, setSampleRateKhz] = useState(48);
+  const [sampleRateKhz, setSampleRateKhz] = useState<number | null>(null);
   const [standardDeviationCents, setStandardDeviationCents] = useState(0);
 
   // The 3 resonance measurements
@@ -402,7 +402,7 @@ export default function App() {
 
             {/* Right: Sample rate, input level dB, and LED meter */}
             <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-              <span>{sampleRateKhz} kHz</span>
+              <span>{sampleRateKhz !== null ? `${sampleRateKhz} kHz` : '— kHz'}</span>
               <span className="text-slate-600">|</span>
               <span className="w-11 text-right">{isListening && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}</span>
 
