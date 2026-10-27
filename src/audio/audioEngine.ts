@@ -1,10 +1,12 @@
 /**
  * BB Tuner Audio Acoustic Engine
- * Real-time microphone input, FFT analysis, multi-resonance tracking (Alaphang, Kvint, Oktáv),
+ * Real-time microphone input, FFT analysis, multi-resonance tracking (Alaphang, 3. parciális, Oktáv),
  * parabolic peak interpolation, input dB calculation, and stability tracking.
  */
 
 import { ResonanceMeasurement, MicState } from '../types/tuner';
+import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
+import { isTransientHoldoffActive } from './transientGuard';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -25,11 +27,13 @@ export class BBAudioEngine {
   private sampleRate = 48000;
   private previousRms = 0;
   private lastTransientAt = 0;
-  private transientPeakRms = 0;
   private transientDetected = false;
+  private transientHoldoff = false;
 
   // Pitch stability history (rolling 10 seconds)
   private stabilityHistory: { timestamp: number; cents: number; valid: boolean }[] = [];
+  private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
+  private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
 
   // Tone generator for audio reference
   private toneOsc: OscillatorNode | null = null;
@@ -37,6 +41,12 @@ export class BBAudioEngine {
 
   public async startMicrophone(): Promise<boolean> {
     try {
+      if (this.micState === 'active' && this.microphoneStream) return true;
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        this.micState = 'error';
+        this.errorMessage = 'Ez a böngésző nem biztosít mikrofon-hozzáférést. Nyisd meg az alkalmazást támogatott, HTTPS-kapcsolaton.';
+        return false;
+      }
       if (!this.audioCtx) {
         const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
@@ -74,8 +84,18 @@ export class BBAudioEngine {
       return true;
     } catch (err: unknown) {
       console.error('Microphone error:', err);
+      this.microphoneStream?.getTracks().forEach((track) => track.stop());
+      this.microphoneStream = null;
+      this.sourceNode?.disconnect();
+      this.sourceNode = null;
+      this.analyser = null;
       this.micState = 'error';
-      this.errorMessage = err instanceof Error ? err.message : 'Nem sikerült hozzáférni a mikrofonhoz';
+      const name = err instanceof DOMException ? err.name : '';
+      this.errorMessage = name === 'NotAllowedError' || name === 'SecurityError'
+        ? 'A mikrofonhoz nincs engedély. Engedélyezd a mikrofont a böngésző beállításaiban, és HTTPS-kapcsolaton nyisd meg az alkalmazást.'
+        : name === 'NotFoundError'
+        ? 'Nem található mikrofon ezen az eszközön.'
+        : err instanceof Error ? err.message : 'Nem sikerült hozzáférni a mikrofonhoz';
       return false;
     }
   }
@@ -93,8 +113,8 @@ export class BBAudioEngine {
     this.inputLevelDb = -100;
     this.previousRms = 0;
     this.lastTransientAt = 0;
-    this.transientPeakRms = 0;
     this.transientDetected = false;
+    this.transientHoldoff = false;
     this.stabilityHistory = [];
   }
 
@@ -193,8 +213,8 @@ export class BBAudioEngine {
    */
   /** Detect the most likely struck note from the complete configured scale. Harmonic evidence is
    * combined across f0, 2*f0 and 3*f0; low-confidence/ambiguous frames are rejected. */
-  public detectNote(candidates: { id: string; noteName: string; frequency: number }[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
-    if (!this.analyser || this.micState !== 'active' || candidates.length === 0) return null;
+  public detectNote(candidates: NoteCandidate[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
+    if (!this.analyser || this.micState !== 'active' || candidates.length === 0 || this.transientHoldoff) return null;
     this.analyser.getFloatFrequencyData(this.freqData as any);
     const binWidth = this.sampleRate / (this.freqData.length * 2);
     const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number } | null => {
@@ -209,29 +229,14 @@ export class BBAudioEngine {
       if (best < 0 || this.freqData[best] < -78) return null;
       return { db: this.freqData[best], hz: this.interpolatePeak(best, this.freqData).freq };
     };
-    const ranked = candidates.map((candidate) => {
-      const fundamental = peakNear(candidate.frequency, 65);
-      const octave = peakNear(candidate.frequency * 2, 55);
-      const third = peakNear(candidate.frequency * 3, 55);
-      if (!fundamental) return { ...candidate, score: -Infinity, confidence: 0 };
-      // Fundamental dominates; partials corroborate the candidate without requiring all to be loud.
-      const score = fundamental.db + (octave ? Math.max(-18, octave.db - fundamental.db) * 0.28 : -5) + (third ? Math.max(-18, third.db - fundamental.db) * 0.22 : -5);
-      const confidence = Math.max(0, Math.min(1, (fundamental.db + 90) / 45));
-      return { ...candidate, score, confidence };
-    }).sort((a, b) => b.score - a.score);
-    const best = ranked[0];
-    const runnerUp = ranked[1];
-    if (!best || !Number.isFinite(best.score) || best.confidence < 0.18) return null;
-    // Avoid jumping between near-identical scale candidates when evidence is ambiguous.
-    if (runnerUp && Number.isFinite(runnerUp.score) && best.score - runnerUp.score < 2.5) return null;
-    return { id: best.id, noteName: best.noteName, frequency: best.frequency, confidence: best.confidence };
+    return chooseNoteCandidate(candidates, peakNear);
   }
 
   public analyze(
-    targetFundamentalHz = 146.50,
-    targetFifthHz = 220.00,
-    targetOctaveHz = 293.66,
-    noteNames = { fundamental: 'D3', fifth: 'A3', octave: 'D4' }
+    targetFundamentalHz = 146.832384,
+    targetFifthHz = 440.497152,
+    targetOctaveHz = 293.664768,
+    noteNames = { fundamental: 'D3', fifth: 'A4', octave: 'D4' }
   ): {
     alap: ResonanceMeasurement;
     kvint: ResonanceMeasurement;
@@ -248,7 +253,7 @@ export class BBAudioEngine {
     if (!this.analyser || this.micState !== 'active') {
       return {
         alap: this.createEmptyResonance('fundamental', 'Alap', noteNames.fundamental, targetFundamentalHz),
-        kvint: this.createEmptyResonance('fifth', 'Kvint', noteNames.fifth, targetFifthHz),
+        kvint: this.createEmptyResonance('fifth', '3. parciális', noteNames.fifth, targetFifthHz),
         oktav: this.createEmptyResonance('octave', 'Oktáv', noteNames.octave, targetOctaveHz),
         hasSignal: false,
         inputLevelDb: -100,
@@ -274,22 +279,22 @@ export class BBAudioEngine {
     const hasSignal = db > -58; // RMS gate for audio presence
     const highInputLevel = db > -8; // Near-full-scale input can clip or distort transients.
 
-    // Detect a sharp attack from the RMS envelope. The FFT frame overlaps the attack,
-    // but waiting the full 683 ms window made the tuner unnecessarily sluggish. Hold
-    // measurements briefly, then release once the envelope has fallen, with a hard cap.
+    // Detect a sharp attack from the RMS envelope. Because AnalyserNode returns a rolling
+    // FFT frame, ignore measurements until the whole FFT window has moved past the attack,
+    // plus a 50 ms safety guard. A shorter lockout could still measure the strike transient.
     const transientDetected = hasSignal && rms > 0.003 &&
       (this.previousRms < 0.001 || rms > this.previousRms * 2.5);
-    if (transientDetected) {
-      this.lastTransientAt = now;
-      this.transientPeakRms = rms;
-    }
+    if (transientDetected) this.lastTransientAt = now;
     this.previousRms = rms;
-    const transientElapsed = this.lastTransientAt > 0 ? now - this.lastTransientAt : Infinity;
-    const transientDecayed = this.transientPeakRms > 0 && rms <= this.transientPeakRms * 0.55;
-    const transientHoldoff = transientElapsed < 450 &&
-      (transientElapsed < 180 || !transientDecayed);
-    if (!transientHoldoff) this.transientPeakRms = 0;
+    const transientHoldoff = isTransientHoldoffActive(
+      this.lastTransientAt,
+      now,
+      this.fftSize,
+      this.sampleRate,
+      50,
+    );
     this.transientDetected = transientDetected;
+    this.transientHoldoff = transientHoldoff;
 
     // Search for the 3 resonances:
     // 1. Alaphang (Fundamental): search within ±150 cents of target
@@ -311,7 +316,7 @@ export class BBAudioEngine {
 
     const kvint = this.buildResonanceMeasurement(
       'fifth',
-      'Kvint',
+      '3. parciális',
       noteNames.fifth,
       qPeak,
       targetFifthHz,
@@ -329,29 +334,24 @@ export class BBAudioEngine {
       hasSignal
     );
 
-    // Update stability history (for Alaphang)
-    if (alap.status === 'valid' && alap.deviationCents !== null) {
-      this.stabilityHistory.push({
-        timestamp: now,
-        cents: alap.deviationCents,
-        valid: true,
-      });
-    } else if (hasSignal) {
-      // Do not inject synthetic zero-cent points for invalid measurements.
+    // Stability history follows the currently displayed resonance. Exclude transient and
+    // invalid frames; never synthesize zero-cent samples for missing measurements.
+    const stabilityMeasurement = this.stabilityRole === 'fundamental'
+      ? alap
+      : this.stabilityRole === 'fifth' ? kvint : oktav;
+    if (!transientHoldoff && stabilityMeasurement.status === 'valid' && stabilityMeasurement.deviationCents !== null) {
+      this.stabilityHistory.push({ timestamp: now, cents: stabilityMeasurement.deviationCents, valid: true });
     }
 
-    // Keep rolling 10 seconds of stability points
     const tenSecAgo = now - 10000;
     while (this.stabilityHistory.length > 0 && this.stabilityHistory[0].timestamp < tenSecAgo) {
       this.stabilityHistory.shift();
     }
-
-    // Compute standard deviation (Szórás) on valid points
-    const validPoints = this.stabilityHistory.filter((p) => p.valid);
+    const validPoints = this.stabilityHistory.filter((point) => point.valid && Number.isFinite(point.cents));
     let standardDeviationCents = 0;
     if (validPoints.length > 2) {
-      const mean = validPoints.reduce((acc, p) => acc + p.cents, 0) / validPoints.length;
-      const variance = validPoints.reduce((acc, p) => acc + Math.pow(p.cents - mean, 2), 0) / validPoints.length;
+      const mean = validPoints.reduce((acc, point) => acc + point.cents, 0) / validPoints.length;
+      const variance = validPoints.reduce((acc, point) => acc + Math.pow(point.cents - mean, 2), 0) / validPoints.length;
       standardDeviationCents = Math.sqrt(variance);
     }
 
@@ -368,6 +368,17 @@ export class BBAudioEngine {
     };
   }
 
+  public setStabilityRole(role: 'fundamental' | 'fifth' | 'octave'): void {
+    if (this.stabilityRole !== role) {
+      this.stabilityRole = role;
+      this.stabilityHistory = [];
+    }
+  }
+
+  public resetStabilityHistory(): void {
+    this.stabilityHistory = [];
+  }
+
   public getStabilityHistory(): { timestamp: number; cents: number; valid: boolean }[] {
     return this.stabilityHistory;
   }
@@ -381,37 +392,35 @@ export class BBAudioEngine {
     now: number,
     hasSignal: boolean
   ): ResonanceMeasurement {
-    if (!hasSignal || !peak) {
-      return {
-        role,
-        name,
-        noteName,
-        measuredHz: peak ? peak.freq : null,
-        targetHz,
-        deviationCents: null,
-        amplitudeDb: peak ? peak.magDb : null,
-        confidence: 0,
+    const cents = peak ? 1200 * Math.log2(peak.freq / targetHz) : null;
+    const confidence = peak ? Math.max(0, Math.min(1, (peak.magDb + 100) / 65)) : 0;
+    // A missing frame can briefly occur between FFT updates. Preserve the last good
+    // numerical reading for up to 250 ms to prevent UI flicker, but keep status no-signal
+    // so the interface never claims a stale reading is currently live.
+    const status = !hasSignal || !peak ? 'no-signal'
+      : confidence > 0.25 && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain';
+    if (status === 'valid' && peak && cents !== null) {
+      this.lastValidResonances[role] = {
+        hz: peak.freq,
+        cents,
+        amplitudeDb: peak.magDb,
+        confidence,
         timestampMs: now,
-        status: hasSignal ? 'uncertain' : 'no-signal',
       };
     }
-
-    const cents = 1200 * Math.log2(peak.freq / targetHz);
-    const confidence = Math.max(0, Math.min(1, (peak.magDb + 100) / 65));
-    // Measurement validity is independent of tuning quality: an out-of-tune peak must
-    // remain measurable so the strobe can show the direction and magnitude of error.
-    const status = confidence > 0.25 && Number.isFinite(cents) ? 'valid' : 'uncertain';
+    const cached = this.lastValidResonances[role];
+    const cachedIsFresh = cached !== undefined && now - cached.timestampMs <= 250;
 
     return {
       role,
       name,
       noteName,
-      measuredHz: peak.freq,
+      measuredHz: peak ? peak.freq : cachedIsFresh ? cached!.hz : null,
       targetHz,
-      deviationCents: cents,
-      amplitudeDb: peak.magDb,
-      confidence,
-      timestampMs: now,
+      deviationCents: cents !== null ? cents : cachedIsFresh ? cached!.cents : null,
+      amplitudeDb: peak ? peak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
+      confidence: peak ? confidence : cachedIsFresh ? cached!.confidence : 0,
+      timestampMs: peak ? now : cachedIsFresh ? cached!.timestampMs : now,
       status,
     };
   }
@@ -438,6 +447,7 @@ export class BBAudioEngine {
 
   // Reference tone generator
   public playTone(freqHz: number): void {
+    if (!Number.isFinite(freqHz) || freqHz <= 0) return;
     this.stopTone();
     if (!this.audioCtx) {
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -460,21 +470,30 @@ export class BBAudioEngine {
   }
 
   public stopTone(): void {
-    if (this.toneGain && this.audioCtx) {
-      const now = this.audioCtx.currentTime;
-      this.toneGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
-      setTimeout(() => {
-        try {
-          this.toneOsc?.stop();
-          this.toneOsc?.disconnect();
-          this.toneGain?.disconnect();
-        } catch {
-          // ignore
-        }
-        this.toneOsc = null;
-        this.toneGain = null;
-      }, 60);
+    const oscillator = this.toneOsc;
+    const gain = this.toneGain;
+    const context = this.audioCtx;
+    // Clear current references immediately so a delayed cleanup cannot stop a newer tone.
+    this.toneOsc = null;
+    this.toneGain = null;
+    if (!gain || !context) {
+      try { oscillator?.stop(); } catch { /* oscillator may already be stopped */ }
+      oscillator?.disconnect();
+      gain?.disconnect();
+      return;
     }
+    const now = context.currentTime;
+    try {
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setTargetAtTime(0.0001, now, 0.012);
+    } catch {
+      // Context may have been closed while stopping.
+    }
+    window.setTimeout(() => {
+      try { oscillator?.stop(); } catch { /* oscillator may already be stopped */ }
+      oscillator?.disconnect();
+      gain.disconnect();
+    }, 80);
   }
 }
 

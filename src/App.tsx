@@ -16,7 +16,8 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { bbAudioEngine } from './audio/audioEngine';
-import { PRESET_SCALES, midiToFreq } from './audio/scales';
+import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
+import { isWithinTuningTolerance } from './audio/tuningTolerance';
 import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
@@ -27,15 +28,53 @@ import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
 import { BBSpectrogram } from './components/BBSpectrogram';
 
+function loadTuningPreferences(): { a4Ref: number; scaleId: string; autoDetect: boolean } {
+  const defaults = { a4Ref: 440, scaleId: PRESET_SCALES[0].id, autoDetect: true };
+  try {
+    const raw = localStorage.getItem('bb-tuner-preferences-v1');
+    if (!raw) return defaults;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return defaults;
+    const prefs = parsed as { a4Ref?: unknown; scaleId?: unknown; autoDetect?: unknown };
+    return {
+      a4Ref: typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
+        ? prefs.a4Ref : defaults.a4Ref,
+      scaleId: typeof prefs.scaleId === 'string' && PRESET_SCALES.some((scale) => scale.id === prefs.scaleId)
+        ? prefs.scaleId : defaults.scaleId,
+      autoDetect: typeof prefs.autoDetect === 'boolean' ? prefs.autoDetect : defaults.autoDetect,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
+  if (!value || typeof value !== 'object') return false;
+  const entry = value as Partial<TuningLogEntry>;
+  return typeof entry.id === 'string' &&
+    typeof entry.noteName === 'string' &&
+    typeof entry.timestamp === 'number' && Number.isFinite(entry.timestamp) && Number.isFinite(new Date(entry.timestamp).getTime()) &&
+    typeof entry.fundamentalHz === 'number' && Number.isFinite(entry.fundamentalHz) && entry.fundamentalHz > 0 &&
+    typeof entry.fundamentalCents === 'number' && Number.isFinite(entry.fundamentalCents) &&
+    typeof entry.fifthHz === 'number' && Number.isFinite(entry.fifthHz) && entry.fifthHz > 0 &&
+    typeof entry.fifthCents === 'number' && Number.isFinite(entry.fifthCents) &&
+    typeof entry.octaveHz === 'number' && Number.isFinite(entry.octaveHz) && entry.octaveHz > 0 &&
+    typeof entry.octaveCents === 'number' && Number.isFinite(entry.octaveCents) &&
+    typeof entry.overallInTune === 'boolean';
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [autoDetect, setAutoDetect] = useState(true);
+  const [autoDetect, setAutoDetect] = useState(() => loadTuningPreferences().autoDetect);
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
 
   // Calibration and Scale
-  const [a4Ref, setA4Ref] = useState<number>(440);
-  const [currentScale, setCurrentScale] = useState<HandpanScale>(PRESET_SCALES[0]); // D Kurd 9
+  const [a4Ref, setA4Ref] = useState<number>(() => loadTuningPreferences().a4Ref);
+  const [currentScale, setCurrentScale] = useState<HandpanScale>(() => {
+    const prefs = loadTuningPreferences();
+    return PRESET_SCALES.find((scale) => scale.id === prefs.scaleId) ?? PRESET_SCALES[0];
+  }); // D Kurd 9 by default
 
   // Selected resonance focus for the main display and stability graph
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
@@ -64,7 +103,7 @@ export default function App() {
 
   useEffect(() => {
     if (toneNotes.length > 0) {
-      setSelectedNote(toneNotes[0]);
+      setSelectedNote((previous) => toneNotes.find((note) => note.id === previous.id) ?? toneNotes[0]);
     }
   }, [toneNotes]);
 
@@ -74,27 +113,44 @@ export default function App() {
     // Otherwise calculate octave and fifth names
     return {
       fundamental: selectedNote.noteName,
-      fifth: `${selectedNote.noteName} ×3`,
-      octave: `${selectedNote.noteName} (oktáv)`,
+      fifth: freqToNoteAndCents(selectedNote.fifthFreq, a4Ref).note,
+      octave: freqToNoteAndCents(selectedNote.octaveFreq, a4Ref).note,
     };
-  }, [selectedNote]);
+  }, [selectedNote, a4Ref]);
+
+  // The stability graph and dispersion readout use the same selected resonance.
+  useEffect(() => {
+    bbAudioEngine.setStabilityRole(selectedRole);
+    setStandardDeviationCents(0);
+  }, [selectedRole]);
+
+  // Stability samples belong to a single selected note; don't mix different targets.
+  const previousNoteIdRef = useRef(selectedNote.id);
+  useEffect(() => {
+    if (previousNoteIdRef.current !== selectedNote.id) {
+      bbAudioEngine.resetStabilityHistory();
+      setStandardDeviationCents(0);
+      previousNoteIdRef.current = selectedNote.id;
+    }
+  }, [selectedNote.id]);
 
   // Live Audio Analysis State
   const [isListening, setIsListening] = useState(false);
+  const [micError, setMicError] = useState('');
   const [hasSignal, setHasSignal] = useState(false);
   const [inputLevelDb, setInputLevelDb] = useState(-100);
   const [transientHoldoff, setTransientHoldoff] = useState(false);
   const [highInputLevel, setHighInputLevel] = useState(false);
-  const [sampleRateKhz, setSampleRateKhz] = useState(48);
-  const [standardDeviationCents, setStandardDeviationCents] = useState(1.2);
+  const [sampleRateKhz, setSampleRateKhz] = useState<number | null>(null);
+  const [standardDeviationCents, setStandardDeviationCents] = useState(0);
 
   // The 3 resonance measurements
   const [alap, setAlap] = useState<ResonanceMeasurement>({
     role: 'fundamental',
     name: 'Alap',
-    noteName: 'D3',
+    noteName: toneNotes[0].noteName,
     measuredHz: null,
-    targetHz: 146.50,
+    targetHz: toneNotes[0].frequency,
     deviationCents: null,
     amplitudeDb: null,
     confidence: 0,
@@ -104,10 +160,10 @@ export default function App() {
 
   const [kvint, setKvint] = useState<ResonanceMeasurement>({
     role: 'fifth',
-    name: 'Kvint',
-    noteName: 'A3',
+    name: '3. parciális',
+    noteName: resonanceNoteNames.fifth,
     measuredHz: null,
-    targetHz: 220.00,
+    targetHz: toneNotes[0].fifthFreq,
     deviationCents: null,
     amplitudeDb: null,
     confidence: 0,
@@ -118,9 +174,9 @@ export default function App() {
   const [oktav, setOktav] = useState<ResonanceMeasurement>({
     role: 'octave',
     name: 'Oktáv',
-    noteName: 'D4',
+    noteName: resonanceNoteNames.octave,
     measuredHz: null,
-    targetHz: 293.66,
+    targetHz: toneNotes[0].octaveFreq,
     deviationCents: null,
     amplitudeDb: null,
     confidence: 0,
@@ -130,13 +186,29 @@ export default function App() {
 
   // Measurements Log
   const [logs, setLogs] = useState<TuningLogEntry[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bb-tuner-measurements-v1') || '[]') as TuningLogEntry[]; }
-    catch { return []; }
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem('bb-tuner-measurements-v1') || '[]');
+      return Array.isArray(parsed) ? parsed.filter(isValidTuningLogEntry) : [];
+    } catch {
+      return [];
+    }
   });
 
   useEffect(() => {
     try { localStorage.setItem('bb-tuner-measurements-v1', JSON.stringify(logs)); } catch (error) { console.warn('Nem sikerült menteni a mérési naplót:', error); }
   }, [logs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bb-tuner-preferences-v1', JSON.stringify({
+        a4Ref,
+        scaleId: currentScale.id,
+        autoDetect,
+      }));
+    } catch (error) {
+      console.warn('Nem sikerült menteni a hangoló beállításait:', error);
+    }
+  }, [a4Ref, currentScale.id, autoDetect]);
 
   // Audio Analysis Loop (~30 Hz)
   useEffect(() => {
@@ -205,6 +277,7 @@ export default function App() {
     if (isListening) {
       bbAudioEngine.stopMicrophone();
       setIsListening(false);
+      setMicError('');
       setHasSignal(false);
       setInputLevelDb(-100);
       setTransientHoldoff(false);
@@ -217,9 +290,12 @@ export default function App() {
       setKvint(clearMeasurement(kvint, selectedNote.fifthFreq));
       setOktav(clearMeasurement(oktav, selectedNote.octaveFreq));
     } else {
+      setMicError('');
       const ok = await bbAudioEngine.startMicrophone();
       if (ok) {
         setIsListening(true);
+      } else {
+        setMicError(bbAudioEngine.getErrorMessage() || 'A mikrofon nem indítható el. Ellenőrizd az engedélyeket.');
       }
     }
   };
@@ -238,9 +314,9 @@ export default function App() {
       octaveHz: oktav.measuredHz!,
       octaveCents: oktav.deviationCents!,
       overallInTune:
-        Math.abs(alap.deviationCents!) <= 3 &&
-        Math.abs(kvint.deviationCents!) <= 3 &&
-        Math.abs(oktav.deviationCents!) <= 3,
+        isWithinTuningTolerance(alap.deviationCents, alap.targetHz) &&
+        isWithinTuningTolerance(kvint.deviationCents, kvint.targetHz) &&
+        isWithinTuningTolerance(oktav.deviationCents, oktav.targetHz),
     };
     setLogs((prev) => [newEntry, ...prev]);
   };
@@ -248,7 +324,7 @@ export default function App() {
   // Determine active resonance details for Section B header
   const activeResonance = selectedRole === 'fundamental' ? alap : selectedRole === 'fifth' ? kvint : oktav;
   const activeCents = activeResonance.deviationCents;
-  const isNearTune = activeResonance.status === 'valid' && activeCents !== null && Math.abs(activeCents) <= 3.0;
+  const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz);
 
   // Textual assessment (e.g. "(kissé magas)", "(kissé mély)", "(pontos)")
   const assessmentText = !hasSignal
@@ -267,6 +343,11 @@ export default function App() {
       <div className="w-full max-w-[420px] min-h-screen flex flex-col justify-between px-3.5 pt-2 pb-24 relative select-none">
         
         {/* ================= SECTION A: HEADER & MIKROFONÁLLAPOT ================= */}
+        {micError && (
+          <div role="alert" className="mx-1 mt-2 rounded-lg border border-rose-500/30 bg-rose-950/40 px-3 py-2 text-xs text-rose-200">
+            {micError}
+          </div>
+        )}
         <div>
           {/* Header Bar */}
           <header className="flex items-center justify-between py-1.5 px-1">
@@ -321,7 +402,7 @@ export default function App() {
 
             {/* Right: Sample rate, input level dB, and LED meter */}
             <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-              <span>{sampleRateKhz} kHz</span>
+              <span>{sampleRateKhz !== null ? `${sampleRateKhz} kHz` : '— kHz'}</span>
               <span className="text-slate-600">|</span>
               <span className="w-11 text-right">{isListening && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}</span>
 
@@ -397,7 +478,7 @@ export default function App() {
                   }}
                   className="px-2.5 py-1.5 rounded-full border border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#f59e0b] text-xs font-medium flex items-center gap-1 hover:bg-[#f59e0b]/20 transition"
                 >
-                  <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint' : 'Oktáv'}</span>
+                  <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}</span>
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -434,9 +515,10 @@ export default function App() {
 
             {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
             <BBStabilityGraph
-              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint' : 'Oktáv'}
+              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
               hasSignal={hasSignal}
               currentCents={activeCents ?? 0}
+              targetHz={activeResonance.targetHz}
               standardDeviationCents={standardDeviationCents}
             />
           </div>
@@ -454,9 +536,10 @@ export default function App() {
             />
             <BBSpectrogram active={isListening} />
             <BBStabilityGraph
-              roleName="Alaphang"
+              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
               hasSignal={hasSignal}
               currentCents={activeCents ?? 0}
+              targetHz={activeResonance.targetHz}
               standardDeviationCents={standardDeviationCents}
             />
             <div className="p-3 rounded-xl bg-[#0b0f14] border border-white/5 text-xs text-slate-300">
@@ -502,6 +585,7 @@ export default function App() {
               logs={logs}
               onClearLogs={() => setLogs([])}
               onCapture={handleCaptureSnapshot}
+              canCapture={[alap, kvint, oktav].every((m) => m.status === 'valid' && m.measuredHz !== null && m.deviationCents !== null)}
               hasSignal={hasSignal}
             />
           </div>
@@ -581,10 +665,13 @@ export default function App() {
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           a4Ref={a4Ref}
-          onChangeA4={setA4Ref}
+          onChangeA4={(value) => {
+            if (Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
+          }}
           selectedScaleId={currentScale.id}
           onSelectScale={setCurrentScale}
           sampleRateKhz={sampleRateKhz}
+          isListening={isListening}
         />
       </div>
     </div>

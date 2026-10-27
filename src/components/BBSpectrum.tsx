@@ -18,6 +18,8 @@ export const BBSpectrum: React.FC<Props> = ({
   onSelectPeak,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const latestMeasurementsRef = useRef({ alap, kvint, oktav, hasSignal });
+  latestMeasurementsRef.current = { alap, kvint, oktav, hasSignal };
 
   useEffect(() => {
     let animId = 0;
@@ -28,6 +30,7 @@ export const BBSpectrum: React.FC<Props> = ({
 
     function render() {
       if (!ctx || !canvas) return;
+      const measurement = latestMeasurementsRef.current;
       const w = canvas.width;
       const h = canvas.height;
 
@@ -112,7 +115,7 @@ export const BBSpectrum: React.FC<Props> = ({
       for (let i = 1; i <= maxBin; i++) {
         const f = i * binWidth;
         const x = padL + (f / maxFreq) * plotW;
-        const valDb = Math.max(minDb, Math.min(maxDb, freqData[i]));
+        const valDb = Math.max(minDb, Math.min(maxDb, measurement.hasSignal ? freqData[i] : minDb));
         const normY = (valDb - maxDb) / (minDb - maxDb);
         const y = padT + normY * plotH;
 
@@ -131,7 +134,7 @@ export const BBSpectrum: React.FC<Props> = ({
       ctx.closePath();
 
       const fillGrad = ctx.createLinearGradient(0, padT, 0, bottomY);
-      fillGrad.addColorStop(0, hasSignal ? 'rgba(0, 192, 240, 0.28)' : 'rgba(56, 189, 248, 0.08)');
+      fillGrad.addColorStop(0, measurement.hasSignal ? 'rgba(0, 192, 240, 0.28)' : 'rgba(56, 189, 248, 0.08)');
       fillGrad.addColorStop(1, 'rgba(0, 192, 240, 0.0)');
       ctx.fillStyle = fillGrad;
       ctx.fill();
@@ -142,7 +145,7 @@ export const BBSpectrum: React.FC<Props> = ({
       for (let i = 1; i <= maxBin; i++) {
         const f = i * binWidth;
         const x = padL + (f / maxFreq) * plotW;
-        const valDb = Math.max(minDb, Math.min(maxDb, freqData[i]));
+        const valDb = Math.max(minDb, Math.min(maxDb, measurement.hasSignal ? freqData[i] : minDb));
         const normY = (valDb - maxDb) / (minDb - maxDb);
         const y = padT + normY * plotH;
 
@@ -153,31 +156,31 @@ export const BBSpectrum: React.FC<Props> = ({
           ctx.lineTo(x, y);
         }
       }
-      ctx.strokeStyle = hasSignal ? '#00e5ff' : '#0284c7';
+      ctx.strokeStyle = measurement.hasSignal ? '#00e5ff' : '#0284c7';
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // Resonant Peak Pins (Alaphang, Kvint, Oktáv)
+      // Resonant Peak Pins (Alaphang, 3. parciális, Oktáv)
       const peaks = [
         {
           role: 'fundamental' as const,
           color: '#f59e0b', // Amber/gold
-          hz: alap.measuredHz || alap.targetHz || 146.83,
-          note: alap.noteName || 'D3',
+          hz: measurement.alap.status === 'valid' && measurement.alap.measuredHz !== null ? measurement.alap.measuredHz : measurement.alap.targetHz || 146.83,
+          note: measurement.alap.noteName || 'D3',
           visible: true,
         },
         {
           role: 'fifth' as const,
           color: '#c084fc', // Purple
-          hz: kvint.measuredHz || kvint.targetHz || 220.21,
-          note: kvint.noteName || 'A3',
+          hz: measurement.kvint.status === 'valid' && measurement.kvint.measuredHz !== null ? measurement.kvint.measuredHz : measurement.kvint.targetHz || 440.50,
+          note: measurement.kvint.noteName || 'A4',
           visible: true,
         },
         {
           role: 'octave' as const,
           color: '#38bdf8', // Cyan
-          hz: oktav.measuredHz || oktav.targetHz || 293.66,
-          note: oktav.noteName || 'D4',
+          hz: measurement.oktav.status === 'valid' && measurement.oktav.measuredHz !== null ? measurement.oktav.measuredHz : measurement.oktav.targetHz || 293.66,
+          note: measurement.oktav.noteName || 'D4',
           visible: true,
         },
       ];
@@ -188,9 +191,9 @@ export const BBSpectrum: React.FC<Props> = ({
         const x = padL + (p.hz / maxFreq) * plotW;
         // Find approximate peak dB or calculate height
         const bin = Math.round(p.hz / binWidth);
-        const peakDb = freqData[bin] ? Math.max(-85, Math.min(-20, freqData[bin])) : -45;
+        const peakDb = measurement.hasSignal && freqData[bin] ? Math.max(-85, Math.min(-20, freqData[bin])) : -45;
         const normY = (peakDb - maxDb) / (minDb - maxDb);
-        const peakY = hasSignal ? padT + normY * plotH : padT + 0.35 * plotH;
+        const peakY = measurement.hasSignal ? padT + normY * plotH : padT + 0.35 * plotH;
 
         // Vertical dashed pin line
         ctx.beginPath();
@@ -226,7 +229,7 @@ export const BBSpectrum: React.FC<Props> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [alap, kvint, oktav, hasSignal]);
+  }, []);
 
   return (
     <div className="w-full bg-[#0b0f14] rounded-xl border border-white/5 overflow-hidden shadow-lg p-1.5 my-1">
@@ -236,12 +239,33 @@ export const BBSpectrum: React.FC<Props> = ({
         height={140}
         className="w-full h-[140px] block cursor-pointer"
         onClick={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const clickX = e.clientX - rect.left;
-          const pct = clickX / rect.width;
-          if (pct < 0.38) onSelectPeak?.('fundamental');
-          else if (pct < 0.65) onSelectPeak?.('fifth');
-          else onSelectPeak?.('octave');
+          if (!onSelectPeak) return;
+          const canvas = e.currentTarget;
+          const rect = canvas.getBoundingClientRect();
+          const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+          const plotLeft = 32;
+          const plotWidth = canvas.width - plotLeft - 12;
+          const frequencyAtClick = ((canvasX - plotLeft) / plotWidth) * 2400;
+          if (frequencyAtClick < 0 || frequencyAtClick > 2400) return;
+
+          const peakCandidates = [
+            {
+              role: 'fundamental' as const,
+              hz: alap.status === 'valid' && alap.measuredHz !== null ? alap.measuredHz : alap.targetHz ?? 146.83,
+            },
+            {
+              role: 'fifth' as const,
+              hz: kvint.status === 'valid' && kvint.measuredHz !== null ? kvint.measuredHz : kvint.targetHz ?? 440.50,
+            },
+            {
+              role: 'octave' as const,
+              hz: oktav.status === 'valid' && oktav.measuredHz !== null ? oktav.measuredHz : oktav.targetHz ?? 293.66,
+            },
+          ];
+          const nearest = peakCandidates.reduce((best, peak) =>
+            Math.abs(peak.hz - frequencyAtClick) < Math.abs(best.hz - frequencyAtClick) ? peak : best
+          );
+          onSelectPeak(nearest.role);
         }}
       />
     </div>

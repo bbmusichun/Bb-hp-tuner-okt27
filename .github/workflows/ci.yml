@@ -25,5 +25,7 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: TypeScript validation
         run: npm run lint
+      - name: Automated pitch math tests
+        run: npm test
       - name: Production build
         run: npm run build

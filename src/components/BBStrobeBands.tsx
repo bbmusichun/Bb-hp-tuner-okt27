@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
+import { tuningToleranceCents } from '../audio/tuningTolerance';
 
 interface Props {
   alap: ResonanceMeasurement;
@@ -19,10 +20,13 @@ export const BBStrobeBands: React.FC<Props> = ({
   onSelectRole,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const latestMeasurementsRef = useRef({ alap, kvint, oktav, hasSignal });
+  latestMeasurementsRef.current = { alap, kvint, oktav, hasSignal };
 
   // Time-integrated phases for each band
   const phasesRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
   const lastTimeRef = useRef<number>(performance.now());
+  const lastMeasurementTimeRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
 
   // Smoothed deviation cents
   const smoothCentsRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
@@ -38,6 +42,7 @@ export const BBStrobeBands: React.FC<Props> = ({
 
     function render(currentTime: number) {
       if (!ctx || !canvas) return;
+      const measurement = latestMeasurementsRef.current;
 
       const dt = Math.min(0.1, (currentTime - lastTimeRef.current) / 1000); // in seconds
       lastTimeRef.current = currentTime;
@@ -47,30 +52,31 @@ export const BBStrobeBands: React.FC<Props> = ({
       const rowHeight = (h - 8) / 3; // 3 rows with 4px gap
 
       // Smooth cents toward measured values
-      const targetCentsAlap = hasSignal && alap.deviationCents !== null ? alap.deviationCents : 0;
-      const targetCentsKvint = hasSignal && kvint.deviationCents !== null ? kvint.deviationCents : 0;
-      const targetCentsOktav = hasSignal && oktav.deviationCents !== null ? oktav.deviationCents : 0;
+      const targetCentsAlap = measurement.hasSignal && measurement.alap.status === 'valid' && measurement.alap.deviationCents !== null ? measurement.alap.deviationCents : 0;
+      const targetCentsKvint = measurement.hasSignal && measurement.kvint.status === 'valid' && measurement.kvint.deviationCents !== null ? measurement.kvint.deviationCents : 0;
+      const targetCentsOktav = measurement.hasSignal && measurement.oktav.status === 'valid' && measurement.oktav.deviationCents !== null ? measurement.oktav.deviationCents : 0;
 
       smoothCentsRef.current.alap += (targetCentsAlap - smoothCentsRef.current.alap) * 0.15;
       smoothCentsRef.current.kvint += (targetCentsKvint - smoothCentsRef.current.kvint) * 0.15;
       smoothCentsRef.current.oktav += (targetCentsOktav - smoothCentsRef.current.oktav) * 0.15;
 
-      // Integrate phase: speed proportional to cents
-      // When cents = 0, speed = 0 (perfect standstill)
-      // Positive cents = moves right, Negative cents = moves left
-      // Strobe drift follows the physical frequency difference (beat rate), not a
-      // cents-only linear scale: Δf = f_target * (2^(cents/1200) - 1).
-      const beatDeltaHz = (targetHz: number, cents: number) =>
-        targetHz * (Math.pow(2, cents / 1200) - 1);
-      if (hasSignal && alap.status === 'valid' && alap.deviationCents !== null) {
-        phasesRef.current.alap += beatDeltaHz(alap.targetHz ?? 146.83, smoothCentsRef.current.alap) * 40 * dt;
-      }
-      if (hasSignal && kvint.status === 'valid' && kvint.deviationCents !== null) {
-        phasesRef.current.kvint += beatDeltaHz(kvint.targetHz ?? 220.25, smoothCentsRef.current.kvint) * 68 * dt;
-      }
-      if (hasSignal && oktav.status === 'valid' && oktav.deviationCents !== null) {
-        phasesRef.current.oktav += beatDeltaHz(oktav.targetHz ?? 293.66, smoothCentsRef.current.oktav) * 108 * dt;
-      }
+      // Strobe drift follows physical frequency error (beat Hz) with one shared pixels-per-Hz
+      // scale. Higher partials naturally drift faster for the same cents error because Δf is larger.
+      const validAlap = measurement.hasSignal && measurement.alap.status === 'valid' && measurement.alap.deviationCents !== null && Number.isFinite(measurement.alap.deviationCents);
+      const validKvint = measurement.hasSignal && measurement.kvint.status === 'valid' && measurement.kvint.deviationCents !== null && Number.isFinite(measurement.kvint.deviationCents);
+      const validOktav = measurement.hasSignal && measurement.oktav.status === 'valid' && measurement.oktav.deviationCents !== null && Number.isFinite(measurement.oktav.deviationCents);
+      if (validAlap) lastMeasurementTimeRef.current.alap = currentTime;
+      if (validKvint) lastMeasurementTimeRef.current.kvint = currentTime;
+      if (validOktav) lastMeasurementTimeRef.current.oktav = currentTime;
+      const integrate = (valid: boolean, lastTime: number, cents: number, targetHz: number, key: 'alap' | 'kvint' | 'oktav') => {
+        if (!valid && currentTime - lastTime > 250) return;
+        const deltaHz = targetHz * (Math.pow(2, cents / 1200) - 1);
+        const speed = Math.max(-220, Math.min(220, deltaHz * 65));
+        phasesRef.current[key] += speed * dt;
+      };
+      integrate(validAlap, lastMeasurementTimeRef.current.alap, smoothCentsRef.current.alap, measurement.alap.targetHz ?? 146.83, 'alap');
+      integrate(validKvint, lastMeasurementTimeRef.current.kvint, smoothCentsRef.current.kvint, measurement.kvint.targetHz ?? 440.50, 'kvint');
+      integrate(validOktav, lastMeasurementTimeRef.current.oktav, smoothCentsRef.current.oktav, measurement.oktav.targetHz ?? 293.66, 'oktav');
 
       ctx.clearRect(0, 0, w, h);
 
@@ -85,45 +91,45 @@ export const BBStrobeBands: React.FC<Props> = ({
           key: 'alap',
           role: 'fundamental' as const,
           name: 'Alap',
-          note: alap.noteName || 'D3',
+          note: measurement.alap.noteName || 'D3',
           noteColor: '#f59e0b',
           phase: phasesRef.current.alap,
           stripeWidth: 20, // Fine stripes for Alaphang
           cents: smoothCentsRef.current.alap,
-          targetHz: alap.targetHz ?? alap.measuredHz ?? 146.83,
-          isValid: hasSignal && alap.status === 'valid',
+          targetHz: measurement.alap.targetHz ?? measurement.alap.measuredHz ?? 146.83,
+          isValid: measurement.hasSignal && measurement.alap.status === 'valid',
         },
         {
           key: 'kvint',
           role: 'fifth' as const,
           name: '3× parciális',
-          note: kvint.noteName || 'A3',
+          note: measurement.kvint.noteName || 'A4',
           noteColor: '#c084fc',
           phase: phasesRef.current.kvint,
           stripeWidth: 34, // Medium stripes for Kvint
           cents: smoothCentsRef.current.kvint,
-          targetHz: kvint.targetHz ?? kvint.measuredHz ?? 220.25,
-          isValid: hasSignal && kvint.status === 'valid',
+          targetHz: measurement.kvint.targetHz ?? measurement.kvint.measuredHz ?? 440.50,
+          isValid: measurement.hasSignal && measurement.kvint.status === 'valid',
         },
         {
           key: 'oktav',
           role: 'octave' as const,
           name: 'Oktáv',
-          note: oktav.noteName || 'D4',
+          note: measurement.oktav.noteName || 'D4',
           noteColor: '#38bdf8',
           phase: phasesRef.current.oktav,
           stripeWidth: 54, // Wide block stripes for Oktáv
           cents: smoothCentsRef.current.oktav,
-          targetHz: oktav.targetHz ?? oktav.measuredHz ?? 293.66,
-          isValid: hasSignal && oktav.status === 'valid',
+          targetHz: measurement.oktav.targetHz ?? measurement.oktav.measuredHz ?? 293.66,
+          isValid: measurement.hasSignal && measurement.oktav.status === 'valid',
         },
       ];
 
       rows.forEach((row, idx) => {
         const now = currentTime;
         const key = row.key as 'alap' | 'kvint' | 'oktav';
-        // Practical psychoacoustic display bands (not a claim that JND equals this value).
-        const toleranceCents = row.targetHz < 180 ? 1.5 : row.targetHz < 260 ? 2.0 : 3.0;
+        // Smooth frequency-dependent product threshold; not presented as a proven JND model.
+        const toleranceCents = tuningToleranceCents(row.targetHz);
         const inTolerance = row.isValid && Number.isFinite(row.cents) && Math.abs(row.cents) <= toleranceCents;
         if (inTolerance) {
           if (greenSinceRef.current[key] === null) greenSinceRef.current[key] = now;
@@ -158,8 +164,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         ctx.fillRect(0, y, w, rowHeight);
 
         // 2. Alternating red stripes
-        const isNearZero = isConfirmedGreen;
-        const stripeBase = isConfirmedGreen ? '#147a48' : isNearButUnconfirmed ? '#a36b16' : redColor;
+          const stripeBase = isConfirmedGreen ? '#147a48' : isNearButUnconfirmed ? '#a36b16' : redColor;
         const stripeLight = isConfirmedGreen ? '#31d889' : isNearButUnconfirmed ? '#e4ad43' : redLightColor;
         ctx.fillStyle = stripeBase;
 
@@ -200,11 +205,11 @@ export const BBStrobeBands: React.FC<Props> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [alap, kvint, oktav, hasSignal]);
+  }, []);
 
   const rows = [
     { role: 'fundamental' as const, name: 'Alap', note: alap.noteName || 'D3', color: '#f59e0b' },
-    { role: 'fifth' as const, name: '3× parciális', note: kvint.noteName || 'A3', color: '#c084fc' },
+    { role: 'fifth' as const, name: '3× parciális', note: kvint.noteName || 'A4', color: '#c084fc' },
     { role: 'octave' as const, name: 'Oktáv', note: oktav.noteName || 'D4', color: '#38bdf8' },
   ];
 

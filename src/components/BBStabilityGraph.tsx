@@ -1,10 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
+import { isWithinTuningTolerance } from '../audio/tuningTolerance';
 
 interface Props {
   roleName: string;
   hasSignal: boolean;
   currentCents: number;
+  targetHz: number | null;
   standardDeviationCents: number;
 }
 
@@ -12,9 +14,12 @@ export const BBStabilityGraph: React.FC<Props> = ({
   roleName,
   hasSignal,
   currentCents,
+  targetHz,
   standardDeviationCents,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const latestPropsRef = useRef({ hasSignal, currentCents, targetHz });
+  latestPropsRef.current = { hasSignal, currentCents, targetHz };
 
   useEffect(() => {
     let animId = 0;
@@ -25,6 +30,7 @@ export const BBStabilityGraph: React.FC<Props> = ({
 
     function render() {
       if (!ctx || !canvas) return;
+      const latest = latestPropsRef.current;
       const w = canvas.width;
       const h = canvas.height;
 
@@ -97,44 +103,34 @@ export const BBStabilityGraph: React.FC<Props> = ({
       const now = Date.now();
       const tenSec = 10000;
 
-      if (history.length > 1) {
+      const recentHistory = history.filter((pt) => now - pt.timestamp <= tenSec && Number.isFinite(pt.cents));
+      if (recentHistory.length > 1) {
         ctx.beginPath();
         let started = false;
-
-        for (let i = 0; i < history.length; i++) {
-          const pt = history[i];
+        let previousX = 0;
+        for (const pt of recentHistory) {
           const age = now - pt.timestamp;
-          if (age > tenSec) continue;
-
-          // x goes from padL (10s ago) to padL + plotW (now)
-          const normTime = 1 - age / tenSec;
-          const x = padL + normTime * plotW;
-
-          // y clamped to [-5, +5]
-          const clampedCents = Math.max(-5.5, Math.min(5.5, pt.cents));
+          const x = padL + (1 - age / tenSec) * plotW;
+          const clampedCents = Math.max(-5, Math.min(5, pt.cents));
           const y = centerY - (clampedCents / 5) * (plotH / 2);
-
-          if (!started) {
-            ctx.moveTo(x, y);
-            started = true;
-          } else {
-            ctx.lineTo(x, y);
-          }
+          // Break the curve after long gaps; do not draw a misleading straight line through silence.
+          if (!started || x - previousX > plotW * 0.22) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+          started = true;
+          previousX = x;
         }
-
-        ctx.strokeStyle = hasSignal ? '#00e5ff' : '#0284c7';
+        ctx.strokeStyle = latest.hasSignal ? '#00e5ff' : '#0284c7';
         ctx.lineWidth = 1.6;
         ctx.stroke();
-
-        // Current point pip
-        if (hasSignal && history.length > 0) {
-          const last = history[history.length - 1];
-          const lastClamped = Math.max(-5.5, Math.min(5.5, last.cents));
+        const last = recentHistory[recentHistory.length - 1];
+        const lastAge = now - last.timestamp;
+        if (latest.hasSignal && lastAge < 2500) {
+          const lastClamped = Math.max(-5, Math.min(5, last.cents));
           const lastY = centerY - (lastClamped / 5) * (plotH / 2);
-
+          const lastX = padL + (1 - lastAge / tenSec) * plotW;
           ctx.beginPath();
-          ctx.arc(padL + plotW, lastY, 3, 0, Math.PI * 2);
-          ctx.fillStyle = Math.abs(last.cents) <= 1.0 ? '#10b981' : '#00e5ff';
+          ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+          ctx.fillStyle = isWithinTuningTolerance(last.cents, latest.targetHz) ? '#10b981' : '#00e5ff';
           ctx.fill();
         }
       }
@@ -144,7 +140,7 @@ export const BBStabilityGraph: React.FC<Props> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [hasSignal, currentCents]);
+  }, []);
 
   return (
     <div className="w-full bg-[#0b0f14] rounded-xl border border-white/5 overflow-hidden shadow-lg p-2.5 my-1">

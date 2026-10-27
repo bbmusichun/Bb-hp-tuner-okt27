@@ -6,6 +6,7 @@ export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A',
  * Convert MIDI note to frequency with custom A4
  */
 export function midiToFreq(midi: number, a4 = 440): number {
+  if (!Number.isFinite(midi) || !Number.isFinite(a4) || a4 <= 0) return Number.NaN;
   return a4 * Math.pow(2, (midi - 69) / 12);
 }
 
@@ -13,7 +14,9 @@ export function midiToFreq(midi: number, a4 = 440): number {
  * Convert frequency to closest MIDI note and cent offset
  */
 export function freqToNoteAndCents(freq: number, a4 = 440): { note: string; midi: number; cents: number; exactFreq: number } {
-  if (freq <= 0) return { note: '--', midi: 0, cents: 0, exactFreq: 0 };
+  if (!Number.isFinite(freq) || freq <= 0 || !Number.isFinite(a4) || a4 <= 0) {
+    return { note: '--', midi: 0, cents: 0, exactFreq: 0 };
+  }
   const fractionalMidi = 69 + 12 * Math.log2(freq / a4);
   const midi = Math.round(fractionalMidi);
   const cents = (fractionalMidi - midi) * 100;
@@ -27,7 +30,7 @@ export function freqToNoteAndCents(freq: number, a4 = 440): { note: string; midi
  * Calculate cents difference between detected frequency and target frequency
  */
 export function calculateCents(measured: number, target: number): number {
-  if (measured <= 0 || target <= 0) return 0;
+  if (!Number.isFinite(measured) || !Number.isFinite(target) || measured <= 0 || target <= 0) return Number.NaN;
   return 1200 * Math.log2(measured / target);
 }
 

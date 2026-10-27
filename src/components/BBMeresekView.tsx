@@ -7,6 +7,7 @@ interface Props {
   onClearLogs: () => void;
   onCapture: () => void;
   hasSignal: boolean;
+  canCapture?: boolean;
 }
 
 export const BBMeresekView: React.FC<Props> = ({
@@ -14,6 +15,7 @@ export const BBMeresekView: React.FC<Props> = ({
   onClearLogs,
   onCapture,
   hasSignal,
+  canCapture = hasSignal,
 }) => {
   const handleExportCSV = () => {
     if (logs.length === 0) return;
@@ -66,7 +68,9 @@ export const BBMeresekView: React.FC<Props> = ({
         <div className="flex items-center gap-1.5">
           <button
             onClick={onCapture}
-            className="px-2.5 py-1 rounded-lg bg-[#f59e0b] hover:bg-[#d97706] text-slate-950 font-bold text-xs shadow-md transition"
+            disabled={!canCapture}
+            title={!canCapture ? 'Csak mindhárom érvényes mérési csatorna esetén rögzíthető' : 'Mérés rögzítése'}
+            className="px-2.5 py-1 rounded-lg bg-[#f59e0b] hover:bg-[#d97706] text-slate-950 font-bold text-xs shadow-md transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             + Rögzítés
           </button>
@@ -97,6 +101,7 @@ export const BBMeresekView: React.FC<Props> = ({
         </div>
       </div>
 
+      {!canCapture && logs.length > 0 && <p className="text-[10px] text-slate-500 mb-2">Új mérés csak akkor rögzíthető, ha mindhárom csatorna érvényes.</p>}
       <div className="space-y-2 overflow-y-auto max-h-[380px] pr-1">
         {logs.length === 0 ? (
           <div className="py-12 text-center text-xs text-slate-500">
@@ -115,7 +120,7 @@ export const BBMeresekView: React.FC<Props> = ({
                 </div>
                 {log.overallInTune ? (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-[#10b981] bg-[#10b981]/15 px-2 py-0.5 rounded-full">
-                    <CheckCircle className="w-3 h-3" /> Célértéken (±3¢)
+                    <CheckCircle className="w-3 h-3" /> Célértéken (dinamikus tolerancia)
                   </span>
                 ) : (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-[#f59e0b] bg-[#f59e0b]/15 px-2 py-0.5 rounded-full">
