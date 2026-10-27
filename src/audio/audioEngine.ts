@@ -189,6 +189,42 @@ export class BBAudioEngine {
   /**
    * Main multi-resonance analyzer according to functional specification
    */
+  /** Detect the most likely struck note from the complete configured scale. Harmonic evidence is
+   * combined across f0, 2*f0 and 3*f0; low-confidence/ambiguous frames are rejected. */
+  public detectNote(candidates: { id: string; noteName: string; frequency: number }[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
+    if (!this.analyser || this.micState !== 'active' || candidates.length === 0) return null;
+    this.analyser.getFloatFrequencyData(this.freqData as any);
+    const binWidth = this.sampleRate / (this.freqData.length * 2);
+    const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number } | null => {
+      const minHz = targetHz * Math.pow(2, -centsWindow / 1200);
+      const maxHz = targetHz * Math.pow(2, centsWindow / 1200);
+      const lo = Math.max(1, Math.floor(minHz / binWidth));
+      const hi = Math.min(this.freqData.length - 2, Math.ceil(maxHz / binWidth));
+      let best = -1;
+      for (let i = lo; i <= hi; i++) {
+        if (this.freqData[i] > this.freqData[i - 1] && this.freqData[i] >= this.freqData[i + 1] && (best < 0 || this.freqData[i] > this.freqData[best])) best = i;
+      }
+      if (best < 0 || this.freqData[best] < -78) return null;
+      return { db: this.freqData[best], hz: this.interpolatePeak(best, this.freqData).freq };
+    };
+    const ranked = candidates.map((candidate) => {
+      const fundamental = peakNear(candidate.frequency, 65);
+      const octave = peakNear(candidate.frequency * 2, 55);
+      const third = peakNear(candidate.frequency * 3, 55);
+      if (!fundamental) return { ...candidate, score: -Infinity, confidence: 0 };
+      // Fundamental dominates; partials corroborate the candidate without requiring all to be loud.
+      const score = fundamental.db + (octave ? Math.max(-18, octave.db - fundamental.db) * 0.28 : -5) + (third ? Math.max(-18, third.db - fundamental.db) * 0.22 : -5);
+      const confidence = Math.max(0, Math.min(1, (fundamental.db + 90) / 45));
+      return { ...candidate, score, confidence };
+    }).sort((a, b) => b.score - a.score);
+    const best = ranked[0];
+    const runnerUp = ranked[1];
+    if (!best || !Number.isFinite(best.score) || best.confidence < 0.18) return null;
+    // Avoid jumping between near-identical scale candidates when evidence is ambiguous.
+    if (runnerUp && Number.isFinite(runnerUp.score) && best.score - runnerUp.score < 2.5) return null;
+    return { id: best.id, noteName: best.noteName, frequency: best.frequency, confidence: best.confidence };
+  }
+
   public analyze(
     targetFundamentalHz = 146.50,
     targetFifthHz = 220.00,

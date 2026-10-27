@@ -34,7 +34,7 @@ export interface ToneFieldNote {
   id: string;
   noteName: string; // e.g. "D3", "A3", "Bb3"
   frequency: number; // Target fundamental Hz
-  fifthFreq: number; // Target 3x or fifth Hz
+  fifthFreq: number; // Target third partial (3x fundamental) Hz
   octaveFreq: number; // Target 2x Hz
   positionIndex: number; // 0 = Ding, 1..N = perimeter
 }

@@ -74,8 +74,8 @@ export const BBSpectrum: React.FC<Props> = ({
       });
 
       // Frequency ticks: 0, 100, 200, 300, 400, 500, 600, 700, 800, 1k
-      const maxFreq = 1000;
-      const freqTicks = [0, 100, 200, 300, 400, 500, 600, 700, 800, 1000];
+      const maxFreq = 2400;
+      const freqTicks = [0, 200, 400, 600, 800, 1000, 1200, 1600, 2000, 2400];
 
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';

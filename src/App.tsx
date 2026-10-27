@@ -25,10 +25,13 @@ import { BBStabilityGraph } from './components/BBStabilityGraph';
 import { BBHangmezoView } from './components/BBHangmezoView';
 import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
+import { BBSpectrogram } from './components/BBSpectrogram';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [autoDetect, setAutoDetect] = useState(true);
+  const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(440);
@@ -43,13 +46,13 @@ export default function App() {
       const f0 = midiToFreq(n.midi, a4Ref);
       // Handpan acoustic resonances:
       // Fundamental: f0 (e.g. D3 = 146.83 Hz)
-      // Kvint: 1.5 * f0 (e.g. A3 = 220.24 Hz)
-      // Oktáv: 2.0 * f0 (e.g. D4 = 293.66 Hz)
+      // Traditional handpan partials: fundamental (1x), octave (2x), compound fifth (3x).
+      // The third partial is not the ordinary 1.5x musical fifth.
       return {
         id: `note_${idx}_${n.name}`,
         noteName: n.name,
         frequency: f0,
-        fifthFreq: f0 * 1.5,
+        fifthFreq: f0 * 3.0,
         octaveFreq: f0 * 2.0,
         positionIndex: idx,
       };
@@ -67,12 +70,12 @@ export default function App() {
 
   // Note names for the 3 resonances of the selected note
   const resonanceNoteNames = useMemo(() => {
-    // If D3 is selected: Alap = D3, Kvint = A3, Oktáv = D4
+    // If D3 is selected: Alap = D3, oktáv = D4, 3. parciális = A4
     // Otherwise calculate octave and fifth names
     return {
       fundamental: selectedNote.noteName,
-      fifth: selectedNote.positionIndex === 0 ? 'A3' : `${selectedNote.noteName} (5th)`,
-      octave: selectedNote.positionIndex === 0 ? 'D4' : `${selectedNote.noteName} (Oct)`,
+      fifth: `${selectedNote.noteName} ×3`,
+      octave: `${selectedNote.noteName} (oktáv)`,
     };
   }, [selectedNote]);
 
@@ -126,7 +129,14 @@ export default function App() {
   });
 
   // Measurements Log
-  const [logs, setLogs] = useState<TuningLogEntry[]>([]);
+  const [logs, setLogs] = useState<TuningLogEntry[]>(() => {
+    try { return JSON.parse(localStorage.getItem('bb-tuner-measurements-v1') || '[]') as TuningLogEntry[]; }
+    catch { return []; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('bb-tuner-measurements-v1', JSON.stringify(logs)); } catch (error) { console.warn('Nem sikerült menteni a mérési naplót:', error); }
+  }, [logs]);
 
   // Audio Analysis Loop (~30 Hz)
   useEffect(() => {
@@ -136,6 +146,24 @@ export default function App() {
     function loop(now: number) {
       if (now - lastTick >= 33) {
         lastTick = now;
+
+        if (autoDetect) {
+          const detected = bbAudioEngine.detectNote(
+            toneNotes.map((note) => ({ id: note.id, noteName: note.noteName, frequency: note.frequency }))
+          );
+          if (detected) {
+            if (autoDetectionRef.current?.id === detected.id) {
+              autoDetectionRef.current.count += 1;
+            } else {
+              autoDetectionRef.current = { id: detected.id, count: 1 };
+            }
+            const matched = toneNotes.find((note) => note.id === detected.id);
+            // Require three consecutive matching frames to avoid note changes from a single transient.
+            if (matched && matched.id !== selectedNote.id && autoDetectionRef.current.count >= 3) setSelectedNote(matched);
+          } else {
+            autoDetectionRef.current = null;
+          }
+        }
 
         const result = bbAudioEngine.analyze(
           selectedNote.frequency,
@@ -170,7 +198,7 @@ export default function App() {
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isListening, selectedNote, resonanceNoteNames]);
+  }, [isListening, selectedNote, resonanceNoteNames, autoDetect, toneNotes]);
 
   // Toggle microphone
   const handleToggleMic = async () => {
@@ -261,13 +289,18 @@ export default function App() {
               </div>
             </div>
 
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-1 text-slate-300 hover:text-white transition"
-              title="Beállítások"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setAutoDetect((value) => !value)}
+                className={`px-2 py-1 rounded-full border text-[10px] font-semibold ${autoDetect ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 text-slate-400'}`}
+                title="Automatikus hangfelismerés kapcsolása"
+              >
+                AUTO {autoDetect ? 'BE' : 'KI'}
+              </button>
+              <button onClick={() => setIsSettingsOpen(true)} className="p-1 text-slate-300 hover:text-white transition" title="Beállítások">
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
           </header>
 
           {/* Microphone Status Bar */}
@@ -419,6 +452,7 @@ export default function App() {
               hasSignal={hasSignal}
               onSelectPeak={setSelectedRole}
             />
+            <BBSpectrogram active={isListening} />
             <BBStabilityGraph
               roleName="Alaphang"
               hasSignal={hasSignal}
@@ -434,7 +468,7 @@ export default function App() {
                   <div className="text-slate-400">Amp: {alap.amplitudeDb ? `${alap.amplitudeDb.toFixed(1)} dB` : '--'}</div>
                 </div>
                 <div className="p-2 rounded bg-slate-900/60 border border-white/5">
-                  <div className="text-[#c084fc] font-sans font-semibold">1.5× Kvint</div>
+                  <div className="text-[#c084fc] font-sans font-semibold">3× Parciális</div>
                   <div>{kvint.measuredHz ? `${kvint.measuredHz.toFixed(2)} Hz` : '--'}</div>
                   <div className="text-slate-400">Amp: {kvint.amplitudeDb ? `${kvint.amplitudeDb.toFixed(1)} dB` : '--'}</div>
                 </div>
