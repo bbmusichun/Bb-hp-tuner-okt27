@@ -115,7 +115,7 @@ export const BBSpectrum: React.FC<Props> = ({
       for (let i = 1; i <= maxBin; i++) {
         const f = i * binWidth;
         const x = padL + (f / maxFreq) * plotW;
-        const valDb = Math.max(minDb, Math.min(maxDb, freqData[i]));
+        const valDb = Math.max(minDb, Math.min(maxDb, measurement.hasSignal ? freqData[i] : minDb));
         const normY = (valDb - maxDb) / (minDb - maxDb);
         const y = padT + normY * plotH;
 
@@ -165,21 +165,21 @@ export const BBSpectrum: React.FC<Props> = ({
         {
           role: 'fundamental' as const,
           color: '#f59e0b', // Amber/gold
-          hz: measurement.alap.measuredHz || measurement.alap.targetHz || 146.83,
+          hz: measurement.alap.status === 'valid' && measurement.alap.measuredHz !== null ? measurement.alap.measuredHz : measurement.alap.targetHz || 146.83,
           note: measurement.alap.noteName || 'D3',
           visible: true,
         },
         {
           role: 'fifth' as const,
           color: '#c084fc', // Purple
-          hz: measurement.kvint.measuredHz || measurement.kvint.targetHz || 440.50,
+          hz: measurement.kvint.status === 'valid' && measurement.kvint.measuredHz !== null ? measurement.kvint.measuredHz : measurement.kvint.targetHz || 440.50,
           note: measurement.kvint.noteName || 'A4',
           visible: true,
         },
         {
           role: 'octave' as const,
           color: '#38bdf8', // Cyan
-          hz: measurement.oktav.measuredHz || measurement.oktav.targetHz || 293.66,
+          hz: measurement.oktav.status === 'valid' && measurement.oktav.measuredHz !== null ? measurement.oktav.measuredHz : measurement.oktav.targetHz || 293.66,
           note: measurement.oktav.noteName || 'D4',
           visible: true,
         },
@@ -191,7 +191,7 @@ export const BBSpectrum: React.FC<Props> = ({
         const x = padL + (p.hz / maxFreq) * plotW;
         // Find approximate peak dB or calculate height
         const bin = Math.round(p.hz / binWidth);
-        const peakDb = freqData[bin] ? Math.max(-85, Math.min(-20, freqData[bin])) : -45;
+        const peakDb = measurement.hasSignal && freqData[bin] ? Math.max(-85, Math.min(-20, freqData[bin])) : -45;
         const normY = (peakDb - maxDb) / (minDb - maxDb);
         const peakY = measurement.hasSignal ? padT + normY * plotH : padT + 0.35 * plotH;
 
