@@ -73,7 +73,7 @@ export default function App() {
     // Otherwise calculate octave and fifth names
     return {
       fundamental: selectedNote.noteName,
-      fifth: `${selectedNote.noteName} (3. parciális)`,
+      fifth: `${selectedNote.noteName} ×3`,
       octave: `${selectedNote.noteName} (oktáv)`,
     };
   }, [selectedNote]);
