@@ -145,7 +145,7 @@ export const BBSpectrum: React.FC<Props> = ({
       for (let i = 1; i <= maxBin; i++) {
         const f = i * binWidth;
         const x = padL + (f / maxFreq) * plotW;
-        const valDb = Math.max(minDb, Math.min(maxDb, freqData[i]));
+        const valDb = Math.max(minDb, Math.min(maxDb, measurement.hasSignal ? freqData[i] : minDb));
         const normY = (valDb - maxDb) / (minDb - maxDb);
         const y = padT + normY * plotH;
 
