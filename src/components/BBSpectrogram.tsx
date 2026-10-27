@@ -139,9 +139,9 @@ export const BBSpectrogram: React.FC<Props> = ({ active, alap, oktav, kvint }) =
         ctx.fillStyle = '#90a4bf';
         ctx.textAlign = 'left';
         ctx.font = '10px system-ui, sans-serif';
-        ctx.fillText('−5 s', left, h - 9);
+        ctx.fillText(`−${windowSeconds} s`, left, h - 9);
         ctx.textAlign = 'center';
-        ctx.fillText('−2.5 s', left + plotW / 2, h - 9);
+        ctx.fillText(`−${windowSeconds / 2} s`, left + plotW / 2, h - 9);
         ctx.textAlign = 'right';
         ctx.fillText('Most', w - right, h - 9);
       }
