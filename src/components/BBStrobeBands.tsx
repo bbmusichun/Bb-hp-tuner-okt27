@@ -59,28 +59,23 @@ export const BBStrobeBands: React.FC<Props> = ({
       smoothCentsRef.current.kvint += (targetCentsKvint - smoothCentsRef.current.kvint) * 0.15;
       smoothCentsRef.current.oktav += (targetCentsOktav - smoothCentsRef.current.oktav) * 0.15;
 
-      // Integrate phase from the latest valid measurement, with one consistent display scale.
-      // Speed sign follows detuning: sharp right, flat left; the scale is visual, not a physical beat simulation.
-      // When cents = 0, speed = 0 (perfect standstill)
-      // Positive cents = moves right, Negative cents = moves left
-      // Strobe drift follows the physical frequency difference (beat rate), not a
-      // cents-only linear scale: Δf = f_target * (2^(cents/1200) - 1).
+      // Strobe drift follows physical frequency error (beat Hz) with one shared pixels-per-Hz
+      // scale. Higher partials naturally drift faster for the same cents error because Δf is larger.
       const validAlap = measurement.hasSignal && measurement.alap.status === 'valid' && measurement.alap.deviationCents !== null && Number.isFinite(measurement.alap.deviationCents);
       const validKvint = measurement.hasSignal && measurement.kvint.status === 'valid' && measurement.kvint.deviationCents !== null && Number.isFinite(measurement.kvint.deviationCents);
       const validOktav = measurement.hasSignal && measurement.oktav.status === 'valid' && measurement.oktav.deviationCents !== null && Number.isFinite(measurement.oktav.deviationCents);
       if (validAlap) lastMeasurementTimeRef.current.alap = currentTime;
       if (validKvint) lastMeasurementTimeRef.current.kvint = currentTime;
       if (validOktav) lastMeasurementTimeRef.current.oktav = currentTime;
-      const integrate = (valid: boolean, lastTime: number, cents: number, key: 'alap' | 'kvint' | 'oktav') => {
-        const stale = !valid && currentTime - lastTime > 250;
-        if (stale) return;
-        // Same cents-to-pixel-speed scale for all three tracks keeps their motion comparable.
-        const speed = Math.max(-180, Math.min(180, cents * 5.5));
+      const integrate = (valid: boolean, lastTime: number, cents: number, targetHz: number, key: 'alap' | 'kvint' | 'oktav') => {
+        if (!valid && currentTime - lastTime > 250) return;
+        const deltaHz = targetHz * (Math.pow(2, cents / 1200) - 1);
+        const speed = Math.max(-220, Math.min(220, deltaHz * 65));
         phasesRef.current[key] += speed * dt;
       };
-      integrate(validAlap, lastMeasurementTimeRef.current.alap, smoothCentsRef.current.alap, 'alap');
-      integrate(validKvint, lastMeasurementTimeRef.current.kvint, smoothCentsRef.current.kvint, 'kvint');
-      integrate(validOktav, lastMeasurementTimeRef.current.oktav, smoothCentsRef.current.oktav, 'oktav');
+      integrate(validAlap, lastMeasurementTimeRef.current.alap, smoothCentsRef.current.alap, measurement.alap.targetHz ?? 146.83, 'alap');
+      integrate(validKvint, lastMeasurementTimeRef.current.kvint, smoothCentsRef.current.kvint, measurement.kvint.targetHz ?? 440.50, 'kvint');
+      integrate(validOktav, lastMeasurementTimeRef.current.oktav, smoothCentsRef.current.oktav, measurement.oktav.targetHz ?? 293.66, 'oktav');
 
       ctx.clearRect(0, 0, w, h);
 
