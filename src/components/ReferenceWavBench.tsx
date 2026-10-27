@@ -1,5 +1,15 @@
 import React, { useRef, useState } from 'react';
 import { analyzeWavRecording, downmixChannels, WavFrameAnalysis } from '../audio/wavAnalysis';
+import {
+  MeasurementQualityReason,
+  MeasurementQualityStatus,
+  summarizeWavPartial,
+} from '../audio/measurementQuality';
+import {
+  IdentifiabilityReason,
+  IdentifiabilityStatus,
+  summarizeFundamentalIdentifiability,
+} from '../audio/fundamentalIdentifiability';
 
 type ChannelMode = 'strongest' | 'average' | 'left' | 'right';
 
@@ -29,12 +39,46 @@ function fmt(value: number | null, digits = 3): string {
 function fmtCents(value: number | null): string {
   return value === null || !Number.isFinite(value) ? '—' : (value > 0 ? '+' : '') + value.toFixed(2) + ' cent';
 }
-function median(values: number[]): number | null {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
+const QUALITY_LABEL: Record<MeasurementQualityStatus, string> = {
+  reliable: 'megbízható',
+  marginal: 'korlátozottan megbízható',
+  insufficient: 'nem értékelhető',
+};
+
+const QUALITY_CLASS: Record<MeasurementQualityStatus, string> = {
+  reliable: 'text-emerald-300',
+  marginal: 'text-amber-300',
+  insufficient: 'text-rose-300',
+};
+
+const QUALITY_REASON_LABEL: Record<MeasurementQualityReason, string> = {
+  'no-measurement': 'nincs érvényes csúcs',
+  'too-few-windows': 'kevés elemzett ablak',
+  'low-coverage': 'kevés érvényes ablak',
+  unstable: 'instabil frekvencia',
+  'weak-peak': 'gyenge csúcs',
+  'low-prominence': 'alacsony helyi kiemelkedés',
+};
+
+const IDENTIFIABILITY_LABEL: Record<IdentifiabilityStatus, string> = {
+  identified: 'alaphang azonosítva',
+  ambiguous: 'bizonytalan alaphang',
+  unidentified: 'alaphang nem azonosítható',
+};
+
+const IDENTIFIABILITY_CLASS: Record<IdentifiabilityStatus, string> = {
+  identified: 'text-emerald-300',
+  ambiguous: 'text-amber-300',
+  unidentified: 'text-rose-300',
+};
+
+const IDENTIFIABILITY_REASON_LABEL: Record<IdentifiabilityReason, string> = {
+  'no-fundamental': 'nincs alaphang-csúcs',
+  'strong-subharmonic': 'a céllal összemérhető mélyebb gyökér (oktávhiba)',
+  'missing-octave': 'hiányzó oktáv részfelhang',
+  'missing-twelfth': 'hiányzó tizenketted részfelhang',
+  'inconsistent-octave': 'az oktáv nem a mért alaphang 2×-án van',
+};
 
 export default function ReferenceWavBench() {
   const [targetIndex, setTargetIndex] = useState(0);
@@ -58,10 +102,10 @@ export default function ReferenceWavBench() {
 
   const target = TARGETS[targetIndex];
   const summary = [1, 2, 3].map((multiplier) => {
-    const values = frames.map((frame) => frame.resonances[multiplier - 1].cents)
-      .filter((value): value is number => value !== null && Number.isFinite(value));
-    return { multiplier, targetHz: target.hz * multiplier, count: values.length, medianCents: median(values) };
+    const partial = summarizeWavPartial(frames, multiplier);
+    return { ...partial, targetHz: partial.targetHz || target.hz * multiplier };
   });
+  const identifiability = summarizeFundamentalIdentifiability(frames);
 
   const loadFile = async (file?: File) => {
     if (!file) return;
@@ -105,10 +149,14 @@ export default function ReferenceWavBench() {
   };
 
   const exportCsv = () => {
-    const header = 'timeSeconds,rmsDb,target1Hz,measured1Hz,cents1,peak1Db,target2Hz,measured2Hz,cents2,peak2Db,target3Hz,measured3Hz,cents3,peak3Db';
+    const header = 'channelMode,timeSeconds,rmsDb,identifiability,target1Hz,measured1Hz,cents1,quality1,peak1Db,prominence1Db,target2Hz,measured2Hz,cents2,quality2,peak2Db,prominence2Db,target3Hz,measured3Hz,cents3,quality3,peak3Db,prominence3Db';
     const rows = frames.map((frame) => [
-      frame.timeSeconds, frame.rmsDb,
-      ...frame.resonances.flatMap((r) => [r.targetHz, r.measuredHz ?? '', r.cents ?? '', r.peakDb ?? '']),
+      channelMode, frame.timeSeconds, frame.rmsDb, frame.identifiability?.status ?? '',
+      ...frame.resonances.flatMap((r, index) => [
+        r.targetHz, r.measuredHz ?? '', r.cents ?? '',
+        summary[index].quality.status,
+        r.peakDb ?? '', r.prominenceDb ?? '',
+      ]),
     ].join(','));
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -138,7 +186,7 @@ export default function ReferenceWavBench() {
         <h2 className="font-semibold">1. Referenciafelvétel betöltése</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm text-slate-300">Alaphang célértéke
-            <select value={targetIndex} disabled={busy} onChange={(event) => { const nextIndex = Number(event.target.value); setTargetIndex(nextIndex); const audio = audioDataRef.current; if (audio) setFrames(analyzeWavRecording(audio.samples, audio.sampleRate, { fftSize: 16384, hopSize: 8192, targetHz: TARGETS[nextIndex].hz, peakFloorDb: -82 })); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
+            <select value={targetIndex} disabled={busy} onChange={(event) => { const nextIndex = Number(event.target.value); setTargetIndex(nextIndex); const audio = audioDataRef.current; if (audio) analyzeLoadedAudio(TARGETS[nextIndex].hz, channelMode); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
               {TARGETS.map((item, index) => <option key={item.label} value={index}>{item.label} · {item.hz.toFixed(6)} Hz</option>)}
             </select>
           </label>
@@ -168,10 +216,22 @@ export default function ReferenceWavBench() {
               <p className="text-sm text-slate-400">{item.multiplier === 1 ? 'Alaphang · 1×' : item.multiplier === 2 ? 'Oktáv · 2×' : 'Harmadik részfelhang · 3×'}</p>
               <p className="mt-2 font-mono text-lg">{item.targetHz.toFixed(6)} Hz</p>
               <p className="mt-1 text-amber-300">Mediáneltérés: {fmtCents(item.medianCents)}</p>
-              <p className="mt-1 text-xs text-slate-500">{item.count} érvényes ablak / {frames.length}</p>
+              <p className="mt-1 text-sm text-slate-300">Robusztus szóródás (MAD): {item.madCents === null ? '—' : item.madCents.toFixed(2) + ' cent'}</p>
+              <p className={'mt-1 text-sm font-semibold ' + QUALITY_CLASS[item.quality.status]}>Mérésminőség: {QUALITY_LABEL[item.quality.status]}</p>
+              {item.quality.reasons.length > 0 && <p className="mt-1 text-xs text-slate-500">Korlát: {item.quality.reasons.map((reason) => QUALITY_REASON_LABEL[reason]).join(', ')}</p>}
+              <p className="mt-1 text-xs text-slate-500">{item.measuredWindows} érvényes ablak / {frames.length}</p>
             </article>)}
           </div>
-          <p className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3 text-sm leading-6 text-amber-100">Ez a medián a felvétel spektrumcsúcsainak diagnosztikai összegzése, nem hitelesített hangolási eredmény. A harmadik részfelhang célértéke 3× alaphang; nem azonos automatikusan az egyenletes temperálású A4 = 440 Hz céllal.</p>
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="font-semibold">Alaphang azonosíthatósága (harmonikus szerkezet)</h3>
+              <p className={'text-sm font-semibold ' + IDENTIFIABILITY_CLASS[identifiability.status]}>{IDENTIFIABILITY_LABEL[identifiability.status]}</p>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{identifiability.identifiedWindows} azonosított / {identifiability.windows} ablak · {identifiability.ambiguousWindows} bizonytalan · {identifiability.unidentifiedWindows} nem azonosítható</p>
+            {identifiability.reasons.length > 0 && <p className="mt-1 text-xs text-slate-500">Korlát: {identifiability.reasons.map((reason) => IDENTIFIABILITY_REASON_LABEL[reason]).join(', ')}</p>}
+            <p className="mt-2 text-sm leading-6 text-slate-400">Az ellenőrzés azt vizsgálja, hogy az elemzett cél valóban egy felhangsort megalapozó alaphang-e: megvan-e az oktáv (2×) és a tizenketted (3×), és nincs-e a célnál összemérhető erősségű mélyebb gyökér (a klasszikus oktávhiba). Egyetlen csúcs önmagában nem alaphang.</p>
+          </article>
+          <p className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3 text-sm leading-6 text-amber-100">A mérésminőség a csúcs szintjét, a helyi kiemelkedést, az érvényes ablakok arányát és a szóródást együtt értékeli; a küszöbök mérnöki kritériumok, nem hitelesített bizonytalanság. A MAD a centeltérések ablakok közötti robusztus szóródását jelzi; nem műszeres mérési bizonytalanság. A medián a felvétel spektrumcsúcsainak diagnosztikai összegzése, nem hitelesített hangolási eredmény. A harmadik részfelhang célértéke 3× alaphang; nem azonos automatikusan az egyenletes temperálású A4 = 440 Hz céllal.</p>
         </section>
 
         <section className="space-y-3">
@@ -180,22 +240,22 @@ export default function ReferenceWavBench() {
             <button onClick={exportCsv} className="rounded-xl border border-slate-600 px-4 py-2 text-sm">CSV export</button>
           </div>
           <div className="overflow-x-auto rounded-2xl border border-slate-800">
-            <table className="w-full min-w-[900px] text-left text-xs">
+            <table className="w-full min-w-[1420px] text-left text-xs">
               <thead className="bg-slate-900 text-slate-400"><tr>
                 <th className="p-3">Idő (s)</th><th className="p-3">Jelszint (dB)</th>
-                <th className="p-3">1× Hz</th><th className="p-3">1× cent</th>
-                <th className="p-3">2× Hz</th><th className="p-3">2× cent</th>
-                <th className="p-3">3× Hz</th><th className="p-3">3× cent</th>
+                <th className="p-3">1× Hz</th><th className="p-3">1× cent</th><th className="p-3">1× csúcs dBFS</th><th className="p-3">1× kiemelkedés dB</th>
+                <th className="p-3">2× Hz</th><th className="p-3">2× cent</th><th className="p-3">2× csúcs dBFS</th><th className="p-3">2× kiemelkedés dB</th>
+                <th className="p-3">3× Hz</th><th className="p-3">3× cent</th><th className="p-3">3× csúcs dBFS</th><th className="p-3">3× kiemelkedés dB</th>
               </tr></thead>
               <tbody>{frames.map((frame, index) => <tr key={frame.timeSeconds} className="border-t border-slate-800">
                 <td className="p-3 font-mono">{frame.timeSeconds.toFixed(3)}</td><td className="p-3 font-mono">{frame.rmsDb.toFixed(1)}</td>
                 {frame.resonances.map((resonance, i) => <React.Fragment key={i}>
-                  <td className="p-3 font-mono">{fmt(resonance.measuredHz)}</td><td className="p-3 font-mono">{fmtCents(resonance.cents)}</td>
+                  <td className="p-3 font-mono">{fmt(resonance.measuredHz)}</td><td className="p-3 font-mono">{fmtCents(resonance.cents)}</td><td className="p-3 font-mono">{fmt(resonance.peakDb, 1)}</td><td className="p-3 font-mono">{fmt(resonance.prominenceDb, 1)}</td>
                 </React.Fragment>)}
               </tr>)}</tbody>
             </table>
           </div>
-          <p className="text-xs leading-5 text-slate-500">A táblázat minden sora egy külön, átfedő hangablak. A korai ütésből származó értékek eltérhetnek a lecsengés stabilabb szakaszától. A hiányzó csúcs „—” marad; a program nem gyárt hozzá becsült hangolási értéket.</p>
+          <p className="text-xs leading-5 text-slate-500">A táblázat minden sora egy külön, átfedő hangablak. A korai ütésből származó értékek eltérhetnek a lecsengés stabilabb szakaszától. A hiányzó csúcs „—” marad; a program nem gyárt hozzá becsült hangolási értéket. A csúcs dBFS a relatív digitális jelszintet mutatja, nem kalibrált hangnyomást. A kiemelkedés a csúcs szintjének különbsége a célsáv körüli medián spektrumszinthez képest; ez diagnosztikai mutató, nem hitelesített megbízhatósági pontszám.</p>
         </section>
       </>}
     </div>

@@ -95,6 +95,26 @@ describe('sine-reference validation of the live spectral peak algorithm', () => 
     }
   }
 
+  it('keeps the peak estimate far below one cent for off-bin sines across the handpan range', () => {
+    // Sweep the whole handpan register at deliberately non-bin-aligned frequencies: the
+    // bin centre is up to ~34 cents away at D3, so this exercises the interpolator only.
+    const errors: { hz: number; errorCents: number }[] = [];
+    for (let index = 0; index < 24; index++) {
+      const hz = 60 * Math.pow(2, index * 0.16) * Math.pow(2, (index % 5) * 0.019);
+      const spectrum = sineReferenceSpectrum(hz, hz);
+      const measured = findSpectralPeakInWindow(hz, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+      assert.ok(measured, 'expected a peak for ' + hz.toFixed(3) + ' Hz');
+      errors.push({ hz, errorCents: Math.abs(centsError(measured.freq, hz)) });
+    }
+    const worst = errors.reduce((a, b) => (b.errorCents > a.errorCents ? b : a));
+    assert.ok(
+      worst.errorCents < 0.05,
+      `worst offset ${worst.errorCents.toFixed(4)} cents at ${worst.hz.toFixed(3)} Hz (mean ${
+        (errors.reduce((sum, item) => sum + item.errorCents, 0) / errors.length).toFixed(4)
+      } cents)`,
+    );
+  });
+
   it('retains sub-cent peak accuracy for a low-level sine above the noise floor', () => {
     const actualHz = 146.832384 * Math.pow(2, 10 / 1200);
     const spectrum = sineReferenceSpectrum(actualHz, 146.832384, SAMPLE_RATE, FFT_SIZE, 0.0001);
