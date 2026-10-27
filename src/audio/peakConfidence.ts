@@ -8,5 +8,5 @@ export function resonanceConfidenceFromDb(amplitudeDb: number): number {
 }
 
 export function isReliableResonanceConfidence(confidence: number): boolean {
-  return Number.isFinite(confidence) && confidence >= 0.4;
+  return Number.isFinite(confidence) && confidence >= 0.28;
 }
