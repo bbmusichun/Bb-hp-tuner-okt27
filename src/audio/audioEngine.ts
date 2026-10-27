@@ -7,6 +7,7 @@
 import { ResonanceMeasurement, MicState } from '../types/tuner';
 import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 import { isTransientHoldoffActive } from './transientGuard';
+import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -34,6 +35,7 @@ export class BBAudioEngine {
   private stabilityHistory: { timestamp: number; cents: number; valid: boolean }[] = [];
   private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
   private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
+  private pitchHistory: Record<'fundamental' | 'fifth' | 'octave', PitchSample[]> = { fundamental: [], fifth: [], octave: [] };
 
   // Tone generator for audio reference
   private toneOsc: OscillatorNode | null = null;
@@ -117,6 +119,7 @@ export class BBAudioEngine {
     this.transientHoldoff = false;
     this.stabilityHistory = [];
     this.lastValidResonances = {};
+    this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
   }
 
   public getMicState(): MicState {
@@ -394,7 +397,13 @@ export class BBAudioEngine {
     hasSignal: boolean
   ): ResonanceMeasurement {
     // Never accept a spectral peak when the time-domain gate says there is no usable signal.
-    const currentPeak = hasSignal ? peak : null;
+    const rawPeak = hasSignal ? peak : null;
+    let currentPeak = rawPeak;
+    if (rawPeak) {
+      const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now);
+      this.pitchHistory[role] = smoothed.history;
+      currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
+    }
     const cents = currentPeak ? 1200 * Math.log2(currentPeak.freq / targetHz) : null;
     const confidence = currentPeak ? Math.max(0, Math.min(1, (currentPeak.magDb + 100) / 65)) : 0;
     // Handpan resonances can decay at different rates. Keep each last valid reading
