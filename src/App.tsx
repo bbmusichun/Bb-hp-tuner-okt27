@@ -97,6 +97,7 @@ export default function App() {
 
   // Live Audio Analysis State
   const [isListening, setIsListening] = useState(false);
+  const [micError, setMicError] = useState('');
   const [hasSignal, setHasSignal] = useState(false);
   const [inputLevelDb, setInputLevelDb] = useState(-100);
   const [transientHoldoff, setTransientHoldoff] = useState(false);
@@ -221,6 +222,7 @@ export default function App() {
     if (isListening) {
       bbAudioEngine.stopMicrophone();
       setIsListening(false);
+      setMicError('');
       setHasSignal(false);
       setInputLevelDb(-100);
       setTransientHoldoff(false);
@@ -233,9 +235,12 @@ export default function App() {
       setKvint(clearMeasurement(kvint, selectedNote.fifthFreq));
       setOktav(clearMeasurement(oktav, selectedNote.octaveFreq));
     } else {
+      setMicError('');
       const ok = await bbAudioEngine.startMicrophone();
       if (ok) {
         setIsListening(true);
+      } else {
+        setMicError(bbAudioEngine.getErrorMessage() || 'A mikrofon nem indítható el. Ellenőrizd az engedélyeket.');
       }
     }
   };
@@ -283,6 +288,11 @@ export default function App() {
       <div className="w-full max-w-[420px] min-h-screen flex flex-col justify-between px-3.5 pt-2 pb-24 relative select-none">
         
         {/* ================= SECTION A: HEADER & MIKROFONÁLLAPOT ================= */}
+        {micError && (
+          <div role="alert" className="mx-1 mt-2 rounded-lg border border-rose-500/30 bg-rose-950/40 px-3 py-2 text-xs text-rose-200">
+            {micError}
+          </div>
+        )}
         <div>
           {/* Header Bar */}
           <header className="flex items-center justify-between py-1.5 px-1">
