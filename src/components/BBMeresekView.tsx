@@ -32,25 +32,27 @@ export const BBMeresekView: React.FC<Props> = ({
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((row) => row.map((value) => '"' + String(value).replace(/"/g, '""') + '"').join(','))].join('\n');
-    const encodedUri = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
+    const encodedUri = URL.createObjectURL(new Blob(['\uFEFF', csvContent], { type: 'text/csv;charset=utf-8;' }));
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     link.setAttribute('download', `BB_Tuner_Measurements_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(encodedUri);
+    window.setTimeout(() => URL.revokeObjectURL(encodedUri), 1000);
   };
 
   const handleExportJSON = () => {
     if (logs.length === 0) return;
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(logs, null, 2))}`;
+    const jsonBlob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json;charset=utf-8;' });
+    const jsonUrl = URL.createObjectURL(jsonBlob);
     const link = document.createElement('a');
-    link.setAttribute('href', jsonString);
+    link.setAttribute('href', jsonUrl);
     link.setAttribute('download', `BB_Tuner_Measurements_${Date.now()}.json`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(jsonUrl), 1000);
   };
 
   return (
