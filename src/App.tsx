@@ -26,7 +26,7 @@ import { BBStabilityGraph } from './components/BBStabilityGraph';
 import { BBHangmezoView } from './components/BBHangmezoView';
 import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
-import { BBSpectrogram } from './components/BBSpectrogram';
+import { BBSpectrumWaterfall } from './components/BBSpectrumWaterfall';
 
 function loadTuningPreferences(): { a4Ref: number; scaleId: string; autoDetect: boolean } {
   const defaults = { a4Ref: 440, scaleId: PRESET_SCALES[0].id, autoDetect: true };
@@ -536,7 +536,7 @@ export default function App() {
         {/* ================= TAB 2: DETAILED SPECTRUM VIEW ================= */}
         {activeTab === 'spektrum' && (
           <div className="flex-1 flex flex-col gap-2 py-1 min-h-0">
-            <BBSpectrogram active={isListening} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
+            <BBSpectrumWaterfall active={isListening} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
             <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
               <button onClick={() => setSelectedRole('fundamental')} className={`rounded-lg border p-2 text-left ${selectedRole === 'fundamental' ? 'border-amber-400/60 bg-amber-400/10' : 'border-white/10 bg-slate-900/50'}`}>
                 <div className="font-sans font-semibold text-amber-400">1× Alaphang</div>
