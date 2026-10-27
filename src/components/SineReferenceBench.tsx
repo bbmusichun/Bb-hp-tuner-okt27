@@ -300,8 +300,9 @@ export default function SineReferenceBench() {
               Az első az algoritmust, a második az eszköz akusztikus bemeneti útját is vizsgálja.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <a href="/?benchmark=1" className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-300">Valós handpan labor</a>
+            <a href="/?benchmark=wav" className="rounded-xl border border-cyan-500/40 px-3 py-2 text-sm text-cyan-200">WAV-elemzés</a>
             <a href="/" className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-300">Vissza</a>
           </div>
         </header>
