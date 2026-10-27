@@ -53,10 +53,11 @@ export const BBCards: React.FC<Props> = ({
     <div className="w-full grid grid-cols-3 gap-2 my-1">
       {cards.map((c) => {
         const isSelected = selectedRole === c.role;
-        const measuredStr = c.data.measuredHz !== null && c.data.status === 'valid' ? `${c.data.measuredHz.toFixed(2)} Hz` : '— Hz';
+        const isHeld = c.data.status === 'held' && c.data.measuredHz !== null && c.data.deviationCents !== null;
+        const measuredStr = c.data.measuredHz !== null && (c.data.status === 'valid' || isHeld) ? `${c.data.measuredHz.toFixed(2)} Hz` : '— Hz';
         const targetStr = `Cél: ${c.data.targetHz ? c.data.targetHz.toFixed(2) : '--'} Hz`;
         const cents = c.data.deviationCents;
-        const centsStr = cents !== null && c.data.status === 'valid' ? `${cents > 0 ? '+' : ''}${cents.toFixed(1)} cent` : '— cent';
+        const centsStr = cents !== null && (c.data.status === 'valid' || isHeld) ? `${cents > 0 ? '+' : ''}${cents.toFixed(1)} cent` : '— cent';
         const inTune = c.data.status === 'valid' && isWithinTuningTolerance(cents, c.data.targetHz);
 
         return (
@@ -95,8 +96,13 @@ export const BBCards: React.FC<Props> = ({
                 inTune ? 'text-[#10b981]' : Math.abs(cents || 0) > 10 ? 'text-[#f43f5e]' : 'text-[#f59e0b]'
               }`}
             >
-              {!hasSignal || c.data.status === 'no-signal' ? 'Nincs jel' : centsStr}
+              {isHeld
+                ? `Utolsó ütés · ${Math.max(0, (Date.now() - c.data.timestampMs) / 1000).toFixed(1)} s`
+                : !hasSignal || c.data.status === 'no-signal' ? 'Nincs jel' : centsStr}
             </div>
+            {isHeld && (
+              <div className="text-[10px] font-mono text-slate-300/70">{centsStr}</div>
+            )}
 
             {/* Mini Sparkline Canvas */}
             <div className="w-full h-5 mt-1 overflow-hidden">
