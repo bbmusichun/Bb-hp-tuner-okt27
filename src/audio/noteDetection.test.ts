@@ -1,0 +1,52 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { chooseNoteCandidate, NoteCandidate, SpectralPeak } from './noteDetection';
+
+const d3: NoteCandidate = { id: 'd3', noteName: 'D3', frequency: 146.832 };
+const a3: NoteCandidate = { id: 'a3', noteName: 'A3', frequency: 220.0 };
+
+function mappedPeaks(peaks: Array<{ hz: number; db: number }>) {
+  return (targetHz: number): SpectralPeak | null => {
+    const peak = peaks.find((candidate) => Math.abs(candidate.hz - targetHz) < 2.0);
+    return peak ? { hz: peak.hz, db: peak.db } : null;
+  };
+}
+
+describe('conservative spectral note detection', () => {
+  it('selects a candidate with strong fundamental and corroborating partials', () => {
+    const detect = mappedPeaks([
+      { hz: d3.frequency, db: -38 },
+      { hz: d3.frequency * 2, db: -47 },
+      { hz: d3.frequency * 3, db: -45 },
+    ]);
+    assert.equal(chooseNoteCandidate([d3, a3], detect)?.id, 'd3');
+  });
+
+  it('rejects similarly scored fundamentals rather than guessing', () => {
+    const candidates = [
+      { id: 'n1', noteName: 'N1', frequency: 200 },
+      { id: 'n2', noteName: 'N2', frequency: 220 },
+    ];
+    const detect = (hz: number) =>
+      Math.abs(hz - 200) < 0.1 || Math.abs(hz - 220) < 0.1 ? { hz, db: -40 } : null;
+    assert.equal(chooseNoteCandidate(candidates, detect), null);
+  });
+
+  it('can recover a missing fundamental only when both partials are present', () => {
+    const detect = mappedPeaks([
+      { hz: d3.frequency * 2, db: -40 },
+      { hz: d3.frequency * 3, db: -43 },
+    ]);
+    assert.equal(chooseNoteCandidate([d3, a3], detect)?.id, 'd3');
+  });
+
+  it('rejects a missing fundamental when only one partial is found', () => {
+    const detect = mappedPeaks([{ hz: d3.frequency * 2, db: -35 }]);
+    assert.equal(chooseNoteCandidate([d3, a3], detect), null);
+  });
+
+  it('ignores invalid candidate frequencies', () => {
+    const invalid = { id: 'bad', noteName: 'bad', frequency: Number.NaN };
+    assert.equal(chooseNoteCandidate([invalid], () => null), null);
+  });
+});
