@@ -665,7 +665,9 @@ export default function App() {
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           a4Ref={a4Ref}
-          onChangeA4={setA4Ref}
+          onChangeA4={(value) => {
+            if (Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
+          }}
           selectedScaleId={currentScale.id}
           onSelectScale={setCurrentScale}
           sampleRateKhz={sampleRateKhz}
