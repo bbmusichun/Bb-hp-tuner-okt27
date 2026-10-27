@@ -1,10 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
+import { isWithinTuningTolerance } from '../audio/tuningTolerance';
 
 interface Props {
   roleName: string;
   hasSignal: boolean;
   currentCents: number;
+  targetHz: number | null;
   standardDeviationCents: number;
 }
 
@@ -12,11 +14,12 @@ export const BBStabilityGraph: React.FC<Props> = ({
   roleName,
   hasSignal,
   currentCents,
+  targetHz,
   standardDeviationCents,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestPropsRef = useRef({ hasSignal, currentCents });
-  latestPropsRef.current = { hasSignal, currentCents };
+  const latestPropsRef = useRef({ hasSignal, currentCents, targetHz });
+  latestPropsRef.current = { hasSignal, currentCents, targetHz };
 
   useEffect(() => {
     let animId = 0;
@@ -127,7 +130,7 @@ export const BBStabilityGraph: React.FC<Props> = ({
           const lastX = padL + (1 - lastAge / tenSec) * plotW;
           ctx.beginPath();
           ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
-          ctx.fillStyle = Math.abs(last.cents) <= 1.0 ? '#10b981' : '#00e5ff';
+          ctx.fillStyle = isWithinTuningTolerance(last.cents, latest.targetHz) ? '#10b981' : '#00e5ff';
           ctx.fill();
         }
       }
