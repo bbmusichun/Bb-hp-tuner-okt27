@@ -31,6 +31,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [autoDetect, setAutoDetect] = useState(true);
+  const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(440);
@@ -151,8 +152,16 @@ export default function App() {
             toneNotes.map((note) => ({ id: note.id, noteName: note.noteName, frequency: note.frequency }))
           );
           if (detected) {
+            if (autoDetectionRef.current?.id === detected.id) {
+              autoDetectionRef.current.count += 1;
+            } else {
+              autoDetectionRef.current = { id: detected.id, count: 1 };
+            }
             const matched = toneNotes.find((note) => note.id === detected.id);
-            if (matched && matched.id !== selectedNote.id) setSelectedNote(matched);
+            // Require three consecutive matching frames to avoid note changes from a single transient.
+            if (matched && matched.id !== selectedNote.id && autoDetectionRef.current.count >= 3) setSelectedNote(matched);
+          } else {
+            autoDetectionRef.current = null;
           }
         }
 
