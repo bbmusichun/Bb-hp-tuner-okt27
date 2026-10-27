@@ -35,7 +35,7 @@ export const BBSpectrumWaterfall: React.FC<Props> = ({ active, alap, oktav, kvin
   const latestRef = useRef({ active, alap, oktav, kvint });
   const framesRef = useRef<SpectrumFrame[]>([]);
   const [windowSeconds, setWindowSeconds] = useState(5);
-  const [rangeSemitones, setRangeSemitones] = useState(15);
+  const [rangeSemitones, setRangeSemitones] = useState(1);
   latestRef.current = { active, alap, oktav, kvint };
 
   useEffect(() => {
@@ -153,7 +153,7 @@ export const BBSpectrumWaterfall: React.FC<Props> = ({ active, alap, oktav, kvin
         </div>
         <div className="flex items-center gap-1">
           <span className="mr-1">Hangterjedelem:</span>
-          {[12, 15, 18].map((semitones) => <button key={semitones} type="button" onClick={() => setRangeSemitones(semitones)} aria-pressed={rangeSemitones === semitones} className={`rounded-md border px-2 py-1 ${rangeSemitones === semitones ? 'border-cyan-400/60 bg-cyan-400/10 text-cyan-200' : 'border-slate-700 text-slate-400'}`}>{semitones} félhang</button>)}
+          {[1, 2, 3].map((semitones) => <button key={semitones} type="button" onClick={() => setRangeSemitones(semitones)} aria-pressed={rangeSemitones === semitones} className={`rounded-md border px-2 py-1 ${rangeSemitones === semitones ? 'border-cyan-400/60 bg-cyan-400/10 text-cyan-200' : 'border-slate-700 text-slate-400'}`}>{semitones} félhang ráhagyás</button>)}
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/60 px-2.5 py-2 text-[10px]">
