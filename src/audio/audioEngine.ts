@@ -16,8 +16,8 @@ export class BBAudioEngine {
   private errorMessage = '';
 
   // Audio configuration
-  private fftSize = 8192; // High-resolution FFT
-  private timeData: Float32Array = new Float32Array(8192);
+  private fftSize = 32768; // Longer analysis window for finer low-frequency resolution
+  private timeData: Float32Array = new Float32Array(32768);
   private freqData: Float32Array = new Float32Array(4096);
 
   // Metering & input level
@@ -55,7 +55,7 @@ export class BBAudioEngine {
 
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.fftSize;
-      this.analyser.smoothingTimeConstant = 0.82;
+      this.analyser.smoothingTimeConstant = 0.15; // Avoid excessive temporal smearing in tuner measurements
       this.analyser.minDecibels = -100;
       this.analyser.maxDecibels = -10;
 
@@ -226,11 +226,11 @@ export class BBAudioEngine {
 
     // Search for the 3 resonances:
     // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const fPeak = this.findPeakInWindow(targetFundamentalHz, 160, this.freqData);
+    const fPeak = this.findPeakInWindow(targetFundamentalHz, 240, this.freqData);
     // 2. Kvint (Fifth): search within ±150 cents of target
-    const qPeak = this.findPeakInWindow(targetFifthHz, 160, this.freqData);
+    const qPeak = this.findPeakInWindow(targetFifthHz, 240, this.freqData);
     // 3. Oktáv (Octave): search within ±150 cents of target
-    const oPeak = this.findPeakInWindow(targetOctaveHz, 160, this.freqData);
+    const oPeak = this.findPeakInWindow(targetOctaveHz, 240, this.freqData);
 
     // Construct measurements
     const alap = this.buildResonanceMeasurement(
@@ -271,11 +271,7 @@ export class BBAudioEngine {
         valid: true,
       });
     } else if (hasSignal) {
-      this.stabilityHistory.push({
-        timestamp: now,
-        cents: 0,
-        valid: false,
-      });
+      // Do not inject synthetic zero-cent points for invalid measurements.
     }
 
     // Keep rolling 10 seconds of stability points
@@ -286,7 +282,7 @@ export class BBAudioEngine {
 
     // Compute standard deviation (Szórás) on valid points
     const validPoints = this.stabilityHistory.filter((p) => p.valid);
-    let standardDeviationCents = 1.2; // default
+    let standardDeviationCents = 0;
     if (validPoints.length > 2) {
       const mean = validPoints.reduce((acc, p) => acc + p.cents, 0) / validPoints.length;
       const variance = validPoints.reduce((acc, p) => acc + Math.pow(p.cents - mean, 2), 0) / validPoints.length;
@@ -333,8 +329,10 @@ export class BBAudioEngine {
     }
 
     const cents = 1200 * Math.log2(peak.freq / targetHz);
-    const confidence = Math.max(0, Math.min(1, (peak.magDb + 85) / 55));
-    const status = Math.abs(cents) <= 50 && confidence > 0.35 ? 'valid' : 'uncertain';
+    const confidence = Math.max(0, Math.min(1, (peak.magDb + 100) / 65));
+    // Measurement validity is independent of tuning quality: an out-of-tune peak must
+    // remain measurable so the strobe can show the direction and magnitude of error.
+    const status = confidence > 0.25 && Number.isFinite(cents) ? 'valid' : 'uncertain';
 
     return {
       role,
