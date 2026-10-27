@@ -5,6 +5,7 @@ const TARGETS = [
   { id: 'D3', label: 'D3 alaphang', hz: 146.832384 },
   { id: 'A3', label: 'A3 hang', hz: 220 },
   { id: 'D4', label: 'D4 oktáv', hz: 293.664768 },
+  { id: 'A4-ET', label: 'A4 egyenletes temperálás (440 Hz)', hz: 440 },
   { id: 'D3-3x', label: 'D3 harmadik részfelhang (3×)', hz: 146.832384 * 3 },
 ] as const;
 const DETUNINGS = [-40, -10, 0, 10, 40] as const;
@@ -353,6 +354,12 @@ export default function SineReferenceBench() {
             A teszt a böngésző digitális audióútját és ugyanazt a spektrumcsúcs-algoritmust ellenőrzi,
             amelyet a fő hangoló használ. Az elvárt frekvencia a program által beállított szinusz frekvenciája,
             nem egy handpan felvétel becsült hangmagassága.
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
+            Fontos különbség: a D3 harmadik részfelhangjának referenciaértéke 3 × 146.832384 = 440.497152 Hz,
+            míg az egyenletesen temperált A4 célértéke 440.000000 Hz. A különbség körülbelül +1.96 cent.
+            Ezek eltérő célok, ezért a hangolónak világosan meg kell különböztetnie a felhangarány szerinti
+            referenciaértéket és a temperált hangjegy célfrekvenciáját.
           </p>
           <p className="mt-2 text-sm leading-6 text-slate-400">
             Ez önmagában nem bizonyítja a teljes akusztikus mérőlánc pontosságát. A hangszóró, a helyiség,
