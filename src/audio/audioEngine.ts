@@ -12,6 +12,7 @@ import { estimatePitchYin } from './yinPitch';
 import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
 import { findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
+import { finalizePeakReading } from './resonanceMetrics';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -363,14 +364,17 @@ export class BBAudioEngine {
       this.pitchHistory[role] = smoothed.history;
       currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
     }
-    const cents = currentPeak ? 1200 * Math.log2(currentPeak.freq / targetHz) : null;
     const confidence = currentPeak ? resonanceConfidenceFromDb(currentPeak.magDb) : 0;
     const stability = rawPeak
       ? this.stablePitchTrackers[role].observe({ frequencyHz: rawPeak.freq, confidence, timestampMs: now })
       : (this.stablePitchTrackers[role].reset(), { stable: false, frequencyHz: null, count: 0 });
-    if (currentPeak && stability.stable && stability.frequencyHz !== null) {
-      currentPeak = { ...currentPeak, freq: stability.frequencyHz };
-    }
+    const finalized = finalizePeakReading(
+      currentPeak,
+      stability.stable ? stability.frequencyHz : null,
+      targetHz,
+    );
+    currentPeak = finalized.peak;
+    const cents = finalized.deviationCents;
     // Handpan resonances can decay at different rates. Keep the last valid reading
     // visible for 8 s after the live peak disappears, explicitly marked as held rather
     // than live. This gives the player time to read the value after a strike while
