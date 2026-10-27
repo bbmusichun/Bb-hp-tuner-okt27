@@ -10,7 +10,7 @@ interface Props {
   onChangeA4: (a4: number) => void;
   selectedScaleId: string;
   onSelectScale: (scale: HandpanScale) => void;
-  sampleRateKhz: number;
+  sampleRateKhz: number | null;
   isListening: boolean;
 }
 
@@ -117,7 +117,7 @@ export const BBSettingsModal: React.FC<Props> = ({
               <ShieldCheck className="w-3.5 h-3.5 text-[#10b981]" />
               <span>Akusztikai Mérési Környezet</span>
             </div>
-            <div>{isListening ? 'Aktuális mintavételezés' : 'Legutóbbi mintavételezés'}: <span className="font-mono text-white">{sampleRateKhz} kHz (Web Audio API)</span></div>
+            <div>{isListening ? 'Aktuális mintavételezés' : 'Legutóbbi mintavételezés'}: <span className="font-mono text-white">{sampleRateKhz !== null ? `${sampleRateKhz} kHz (Web Audio API)` : '— (a mérés indításakor jelenik meg)'}</span></div>
             <div>FFT felbontás: <span className="font-mono text-white">32768 pont + parabolikus csúcsinterpoláció</span></div>
             <div>Zajcsökkentés / AGC: <span className="font-mono text-[#10b981]">Kikapcsolva (Nyers jel)</span></div>
           </div>
