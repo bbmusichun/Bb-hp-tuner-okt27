@@ -2,272 +2,43 @@ import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
 import { bbAudioEngine } from '../audio/audioEngine';
 
-interface Props {
-  alap: ResonanceMeasurement;
-  kvint: ResonanceMeasurement;
-  oktav: ResonanceMeasurement;
-  hasSignal: boolean;
-  onSelectPeak?: (role: 'fundamental' | 'fifth' | 'octave') => void;
-}
+interface Props { alap: ResonanceMeasurement; kvint: ResonanceMeasurement; oktav: ResonanceMeasurement; hasSignal: boolean; onSelectPeak?: (role: 'fundamental' | 'fifth' | 'octave') => void; }
+const COLORS = { fundamental: '#fbbf24', octave: '#22d3ee', fifth: '#c084fc' };
+const NOTES = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+function noteName(hz:number) { if (!Number.isFinite(hz)||hz<=0) return '--'; const m=Math.round(69+12*Math.log2(hz/440)); return NOTES[((m%12)+12)%12]+(Math.floor(m/12)-1); }
 
-export const BBSpectrum: React.FC<Props> = ({
-  alap,
-  kvint,
-  oktav,
-  hasSignal,
-  onSelectPeak,
-}) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestMeasurementsRef = useRef({ alap, kvint, oktav, hasSignal });
-  latestMeasurementsRef.current = { alap, kvint, oktav, hasSignal };
-
-  useEffect(() => {
-    let animId = 0;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    function render() {
-      if (!ctx || !canvas) return;
-      const measurement = latestMeasurementsRef.current;
-      const w = canvas.width;
-      const h = canvas.height;
-
-      const padL = 32;
-      const padR = 12;
-      const padT = 36;
-      const padB = 22;
-
-      const plotW = w - padL - padR;
-      const plotH = h - padT - padB;
-
-      ctx.clearRect(0, 0, w, h);
-
-      // Panel background
-      ctx.fillStyle = '#0b0f14';
-      ctx.fillRect(0, 0, w, h);
-
-      // dB Axis grid lines: -20, -40, -60, -80, -100 dB
-      const dbTicks = [-20, -40, -60, -80, -100];
-      const minDb = -100;
-      const maxDb = -20;
-
-      ctx.fillStyle = '#64748b';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'middle';
-
-      ctx.fillText('dB', padL - 6, padT - 12);
-
-      dbTicks.forEach((db) => {
-        const normY = (db - maxDb) / (minDb - maxDb);
-        const y = padT + normY * plotH;
-
-        // Grid horizontal line
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(padL, y);
-        ctx.lineTo(w - padR, y);
-        ctx.stroke();
-
-        ctx.fillStyle = '#64748b';
-        ctx.fillText(`${db}`, padL - 4, y);
-      });
-
-      // Frequency ticks: 0, 100, 200, 300, 400, 500, 600, 700, 800, 1k
-      const maxFreq = 2400;
-      const freqTicks = [0, 200, 400, 600, 800, 1000, 1200, 1600, 2000, 2400];
-
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-
-      freqTicks.forEach((f) => {
-        const x = padL + (f / maxFreq) * plotW;
-
-        // Grid vertical line
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-        ctx.beginPath();
-        ctx.moveTo(x, padT);
-        ctx.lineTo(x, padT + plotH);
-        ctx.stroke();
-
-        ctx.fillStyle = '#64748b';
-        ctx.fillText(f === 1000 ? '1k' : `${f}`, x, padT + plotH + 3);
-      });
-
-      // Horizontal axis title
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '9px -apple-system, sans-serif';
-      ctx.fillText('Frekvencia (Hz)', padL + plotW / 2, padT + plotH + 12);
-
-      // FFT Curve
-      const freqData = bbAudioEngine.getFloatFrequencyData();
-      const sampleRate = bbAudioEngine.getSampleRate();
-      const binCount = freqData.length;
-      const binWidth = sampleRate / (binCount * 2);
-      const maxBin = Math.min(binCount - 1, Math.ceil(maxFreq / binWidth));
-
-      ctx.beginPath();
-      let started = false;
-
-      for (let i = 1; i <= maxBin; i++) {
-        const f = i * binWidth;
-        const x = padL + (f / maxFreq) * plotW;
-        const valDb = Math.max(minDb, Math.min(maxDb, measurement.hasSignal ? freqData[i] : minDb));
-        const normY = (valDb - maxDb) / (minDb - maxDb);
-        const y = padT + normY * plotH;
-
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-
-      // Cyan fill gradient
-      const bottomY = padT + plotH;
-      ctx.lineTo(padL + plotW, bottomY);
-      ctx.lineTo(padL, bottomY);
-      ctx.closePath();
-
-      const fillGrad = ctx.createLinearGradient(0, padT, 0, bottomY);
-      fillGrad.addColorStop(0, measurement.hasSignal ? 'rgba(0, 192, 240, 0.28)' : 'rgba(56, 189, 248, 0.08)');
-      fillGrad.addColorStop(1, 'rgba(0, 192, 240, 0.0)');
-      ctx.fillStyle = fillGrad;
-      ctx.fill();
-
-      // Stroke line
-      ctx.beginPath();
-      started = false;
-      for (let i = 1; i <= maxBin; i++) {
-        const f = i * binWidth;
-        const x = padL + (f / maxFreq) * plotW;
-        const valDb = Math.max(minDb, Math.min(maxDb, measurement.hasSignal ? freqData[i] : minDb));
-        const normY = (valDb - maxDb) / (minDb - maxDb);
-        const y = padT + normY * plotH;
-
-        if (!started) {
-          ctx.moveTo(x, y);
-          started = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
-      ctx.strokeStyle = measurement.hasSignal ? '#00e5ff' : '#0284c7';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      // Resonant Peak Pins (Alaphang, 3. parciális, Oktáv)
-      const peaks = [
-        {
-          role: 'fundamental' as const,
-          color: '#f59e0b', // Amber/gold
-          hz: measurement.alap.status === 'valid' && measurement.alap.measuredHz !== null ? measurement.alap.measuredHz : measurement.alap.targetHz || 146.83,
-          note: measurement.alap.noteName || 'D3',
-          visible: true,
-        },
-        {
-          role: 'fifth' as const,
-          color: '#c084fc', // Purple
-          hz: measurement.kvint.status === 'valid' && measurement.kvint.measuredHz !== null ? measurement.kvint.measuredHz : measurement.kvint.targetHz || 440.50,
-          note: measurement.kvint.noteName || 'A4',
-          visible: true,
-        },
-        {
-          role: 'octave' as const,
-          color: '#38bdf8', // Cyan
-          hz: measurement.oktav.status === 'valid' && measurement.oktav.measuredHz !== null ? measurement.oktav.measuredHz : measurement.oktav.targetHz || 293.66,
-          note: measurement.oktav.noteName || 'D4',
-          visible: true,
-        },
+export const BBSpectrum: React.FC<Props> = ({ alap, kvint, oktav, hasSignal, onSelectPeak }) => {
+  const canvasRef=useRef<HTMLCanvasElement>(null);
+  const latest=useRef({alap,kvint,oktav,hasSignal}); latest.current={alap,kvint,oktav,hasSignal};
+  useEffect(()=>{
+    const canvas=canvasRef.current, ctx=canvas?.getContext('2d'); if(!canvas||!ctx)return;
+    let raf=0;
+    const draw=()=>{
+      const s=latest.current,w=canvas.width,h=canvas.height,L=54,R=16,T=84,B=36,pw=w-L-R,ph=h-T-B;
+      const base=s.alap.targetHz>0?s.alap.targetHz:146.83, low=Math.max(40,base*.55), high=Math.max(base*3.35,700), minDb=-100,maxDb=-20;
+      const X=(hz:number)=>L+(hz-low)/(high-low)*pw, Y=(db:number)=>T+(maxDb-Math.max(minDb,Math.min(maxDb,db)))/(maxDb-minDb)*ph;
+      ctx.clearRect(0,0,w,h); const bg=ctx.createLinearGradient(0,0,0,h);bg.addColorStop(0,'#0a101b');bg.addColorStop(1,'#070b12');ctx.fillStyle=bg;ctx.fillRect(0,0,w,h);ctx.fillStyle='#0b1421';ctx.fillRect(L,T,pw,ph);
+      ctx.font='12px system-ui';ctx.textAlign='right';ctx.textBaseline='middle';
+      [-20,-40,-60,-80,-100].forEach(db=>{const y=Y(db);ctx.strokeStyle='#253348';ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.fillStyle='#8192aa';ctx.fillText(String(db),L-9,y);});
+      ctx.fillStyle='#8192aa';ctx.textAlign='left';ctx.fillText('dB',12,T-12);
+      const step=high-low>850?100:50;ctx.textAlign='center';ctx.textBaseline='top';
+      for(let hz=Math.ceil(low/step)*step;hz<=high;hz+=step){const x=X(hz);ctx.strokeStyle='#1b2a3d';ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke();ctx.fillStyle='#91a4bf';ctx.fillText(String(hz),x,T+ph+7);}
+      ctx.fillStyle='#91a4bf';ctx.font='13px system-ui';ctx.fillText('Frekvencia (Hz)',L+pw/2,h-18);
+      const data=bbAudioEngine.getFloatFrequencyData(), sr=bbAudioEngine.getSampleRate(), binW=sr/(data.length*2), pts:Array<{x:number;y:number}>=[];
+      for(let i=1;i<data.length;i++){const hz=i*binW;if(hz>=low&&hz<=high)pts.push({x:X(hz),y:Y(Number.isFinite(data[i])?data[i]:minDb)});}
+      if(pts.length){ctx.beginPath();ctx.moveTo(pts[0].x,T+ph);pts.forEach(p=>ctx.lineTo(p.x,p.y));ctx.lineTo(pts[pts.length-1].x,T+ph);ctx.closePath();const g=ctx.createLinearGradient(0,T,0,T+ph);g.addColorStop(0,'rgba(56,189,248,.17)');g.addColorStop(1,'rgba(56,189,248,.005)');ctx.fillStyle=g;ctx.fill();ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.strokeStyle='#3baed4';ctx.lineWidth=1.6;ctx.stroke();}
+      const peaks=[
+        {role:'fundamental' as const,label:'1× Alaphang',m:s.alap,fallback:base,color:COLORS.fundamental},
+        {role:'octave' as const,label:'2× Oktáv',m:s.oktav,fallback:base*2,color:COLORS.octave},
+        {role:'fifth' as const,label:'3× Parciális',m:s.kvint,fallback:base*3,color:COLORS.fifth}
       ];
-
-      peaks.forEach((p) => {
-        if (!p.visible || p.hz <= 0 || p.hz > maxFreq) return;
-
-        const x = padL + (p.hz / maxFreq) * plotW;
-        // Find approximate peak dB or calculate height
-        const bin = Math.round(p.hz / binWidth);
-        const peakDb = measurement.hasSignal && freqData[bin] ? Math.max(-85, Math.min(-20, freqData[bin])) : -45;
-        const normY = (peakDb - maxDb) / (minDb - maxDb);
-        const peakY = measurement.hasSignal ? padT + normY * plotH : padT + 0.35 * plotH;
-
-        // Vertical dashed pin line
-        ctx.beginPath();
-        ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = p.color;
-        ctx.lineWidth = 1;
-        ctx.moveTo(x, padT - 4);
-        ctx.lineTo(x, peakY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Peak Circle Dot
-        ctx.beginPath();
-        ctx.arc(x, peakY, 4, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
-        ctx.fill();
-        ctx.strokeStyle = '#0b0f14';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Pin Label (e.g. "D3" above, "146.8 Hz" below)
-        ctx.textAlign = 'center';
-        ctx.fillStyle = p.color;
-        ctx.font = 'bold 9px monospace';
-        ctx.fillText(p.note, x, padT - 22);
-
-        ctx.font = '8px monospace';
-        ctx.fillText(`${p.hz.toFixed(1)} Hz`, x, padT - 11);
+      peaks.forEach((p,i)=>{const target=p.m.targetHz>0?p.m.targetHz:p.fallback,hz=p.m.measuredHz!==null&&(p.m.status==='valid'||p.m.status==='held')?p.m.measuredHz:target;if(hz<low||hz>high)return;const x=X(hz),bin=Math.max(0,Math.min(data.length-1,Math.round(hz/binW))),db=s.hasSignal&&Number.isFinite(data[bin])?data[bin]:-75,y=Y(db);
+        ctx.save();ctx.setLineDash([6,5]);ctx.strokeStyle=p.color;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x,T-3);ctx.lineTo(x,y);ctx.stroke();ctx.restore();
+        const cw=118,ch=64,cx=Math.max(4,Math.min(w-cw-4,x-cw/2)),cy=7+(i===1?5:0);ctx.fillStyle='#0a1320';ctx.strokeStyle=p.color;ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(cx,cy,cw,ch,12);ctx.fill();ctx.stroke();
+        ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=p.color;ctx.font='bold 17px system-ui';ctx.fillText(p.m.noteName||noteName(target),cx+cw/2,cy+17);ctx.fillStyle='#f8fafc';ctx.font='bold 15px ui-monospace';ctx.fillText(s.hasSignal&&p.m.measuredHz!==null?p.m.measuredHz.toFixed(2)+' Hz':target.toFixed(2)+' Hz',cx+cw/2,cy+37);const c=p.m.deviationCents;ctx.fillStyle=c===null?'#94a3b8':Math.abs(c)<=3?'#34d399':'#fbbf24';ctx.font='bold 14px ui-monospace';ctx.fillText(c===null?'— cent':(c>0?'+':'')+c.toFixed(1)+' c',cx+cw/2,cy+54);ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();
       });
-
-      animId = requestAnimationFrame(render);
-    }
-
-    animId = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animId);
-  }, []);
-
-  return (
-    <div className="w-full bg-[#0b0f14] rounded-xl border border-white/5 overflow-hidden shadow-lg p-1.5 my-1">
-      <canvas
-        ref={canvasRef}
-        width={380}
-        height={140}
-        className="w-full h-[140px] block cursor-pointer"
-        onClick={(e) => {
-          if (!onSelectPeak) return;
-          const canvas = e.currentTarget;
-          const rect = canvas.getBoundingClientRect();
-          const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
-          const plotLeft = 32;
-          const plotWidth = canvas.width - plotLeft - 12;
-          const frequencyAtClick = ((canvasX - plotLeft) / plotWidth) * 2400;
-          if (frequencyAtClick < 0 || frequencyAtClick > 2400) return;
-
-          const peakCandidates = [
-            {
-              role: 'fundamental' as const,
-              hz: alap.status === 'valid' && alap.measuredHz !== null ? alap.measuredHz : alap.targetHz ?? 146.83,
-            },
-            {
-              role: 'fifth' as const,
-              hz: kvint.status === 'valid' && kvint.measuredHz !== null ? kvint.measuredHz : kvint.targetHz ?? 440.50,
-            },
-            {
-              role: 'octave' as const,
-              hz: oktav.status === 'valid' && oktav.measuredHz !== null ? oktav.measuredHz : oktav.targetHz ?? 293.66,
-            },
-          ];
-          const nearest = peakCandidates.reduce((best, peak) =>
-            Math.abs(peak.hz - frequencyAtClick) < Math.abs(best.hz - frequencyAtClick) ? peak : best
-          );
-          onSelectPeak(nearest.role);
-        }}
-      />
-    </div>
-  );
+      raf=requestAnimationFrame(draw);
+    };raf=requestAnimationFrame(draw);return()=>cancelAnimationFrame(raf);
+  },[]);
+  return <div className="my-2 w-full overflow-hidden rounded-2xl border border-white/10 bg-[#080e18] shadow-lg"><div className="flex items-center justify-between gap-2 px-3 pt-3 pb-1"><div><h3 className="text-sm font-bold text-white">Frekvenciaspektrum · csúcsértékek</h3><p className="text-[11px] text-slate-400">Nagyított nézet · alaphang, oktáv és 3× parciális</p></div><span className="shrink-0 rounded-full border border-slate-700 px-2 py-1 text-[10px] text-slate-400">{hasSignal?'Élő mérés':'Várakozás'}</span></div><canvas ref={canvasRef} width={760} height={300} className="block h-[270px] sm:h-[300px] w-full cursor-pointer" onClick={e=>{if(!onSelectPeak)return;const rect=e.currentTarget.getBoundingClientRect(),x=(e.clientX-rect.left)*e.currentTarget.width/rect.width,L=54,pw=e.currentTarget.width-L-16,base=alap.targetHz>0?alap.targetHz:146.83,low=Math.max(40,base*.55),high=Math.max(base*3.35,700),hz=low+(x-L)/pw*(high-low);const cs=[{role:'fundamental' as const,hz:alap.measuredHz??alap.targetHz??base},{role:'octave' as const,hz:oktav.measuredHz??oktav.targetHz??base*2},{role:'fifth' as const,hz:kvint.measuredHz??kvint.targetHz??base*3}];onSelectPeak(cs.reduce((a,p)=>Math.abs(p.hz-hz)<Math.abs(a.hz-hz)?p:a).role);}}/><div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/5 px-3 py-2 text-[11px] text-slate-400"><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-amber-400"/>1× Alaphang</span><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-cyan-400"/>2× Oktáv</span><span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-full bg-purple-400"/>3× Parciális</span></div></div>;
 };

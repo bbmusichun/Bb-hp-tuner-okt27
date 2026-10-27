@@ -41,7 +41,8 @@ export default function PitchBenchmark() {
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef(0);
   const lastPeakRef = useRef<{ parts: Reading[]; yinHz: number | null; yinCents: number | null; yinClarity: number; snacHz: number | null; snacCents: number | null; snacClarity: number; time: number } | null>(null);
-  const targetRef = useRef(targetHz);\n  const lastAlgorithmRunRef = useRef(0);
+  const targetRef = useRef(targetHz);
+  const lastAlgorithmRunRef = useRef(0);
   targetRef.current = targetHz;
 
   useEffect(() => () => { cancelAnimationFrame(rafRef.current); streamRef.current?.getTracks().forEach(t => t.stop()); void ctxRef.current?.close(); }, []);
