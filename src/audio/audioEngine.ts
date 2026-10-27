@@ -11,6 +11,7 @@ import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
 import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
+import { findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -154,72 +155,6 @@ export class BBAudioEngine {
     return this.freqData;
   }
 
-  /**
-   * Refined parabolic peak interpolation for sub-bin frequency accuracy
-   */
-  private interpolatePeak(bin: number, spectrum: Float32Array): { freq: number; magDb: number } {
-    const binCount = spectrum.length;
-    const binWidth = this.sampleRate / (binCount * 2);
-
-    if (bin <= 0 || bin >= binCount - 1) {
-      return { freq: bin * binWidth, magDb: spectrum[bin] ?? -100 };
-    }
-
-    const alpha = spectrum[bin - 1];
-    const beta = spectrum[bin];
-    const gamma = spectrum[bin + 1];
-
-    const denom = alpha - 2 * beta + gamma;
-    let delta = 0;
-    if (Math.abs(denom) > 1e-6) {
-      delta = 0.5 * ((alpha - gamma) / denom);
-    }
-    delta = Math.max(-0.5, Math.min(0.5, delta));
-
-    const peakBin = bin + delta;
-    const freq = peakBin * binWidth;
-    const magDb = beta - 0.25 * (alpha - gamma) * delta;
-
-    return { freq, magDb };
-  }
-
-  /**
-   * Find peak in a targeted window around expected frequency
-   */
-  private findPeakInWindow(
-    targetFreq: number,
-    windowCents: number,
-    spectrum: Float32Array
-  ): { freq: number; magDb: number; bin: number } | null {
-    const minFreq = targetFreq * Math.pow(2, -windowCents / 1200);
-    const maxFreq = targetFreq * Math.pow(2, windowCents / 1200);
-
-    const binCount = spectrum.length;
-    const binWidth = this.sampleRate / (binCount * 2);
-
-    const minBin = Math.max(1, Math.floor(minFreq / binWidth));
-    const maxBin = Math.min(binCount - 2, Math.ceil(maxFreq / binWidth));
-
-    if (minBin >= maxBin) return null;
-
-    let maxVal = -Infinity;
-    let bestBin = -1;
-
-    for (let i = minBin; i <= maxBin; i++) {
-      if (spectrum[i] > maxVal && spectrum[i] > spectrum[i - 1] && spectrum[i] > spectrum[i + 1]) {
-        maxVal = spectrum[i];
-        bestBin = i;
-      }
-    }
-
-    // Noise floor check
-    if (bestBin === -1 || maxVal < -82) {
-      return null;
-    }
-
-    const { freq, magDb } = this.interpolatePeak(bestBin, spectrum);
-    return { freq, magDb, bin: bestBin };
-  }
 
   /**
    * Main multi-resonance analyzer according to functional specification
@@ -240,7 +175,7 @@ export class BBAudioEngine {
         if (this.freqData[i] > this.freqData[i - 1] && this.freqData[i] >= this.freqData[i + 1] && (best < 0 || this.freqData[i] > this.freqData[best])) best = i;
       }
       if (best < 0 || this.freqData[best] < -78) return null;
-      return { db: this.freqData[best], hz: this.interpolatePeak(best, this.freqData).freq };
+      return { db: this.freqData[best], hz: interpolateSpectralPeak(best, this.freqData, this.sampleRate).freq };
     };
     return chooseNoteCandidate(candidates, peakNear);
   }
@@ -321,10 +256,10 @@ export class BBAudioEngine {
 
     // Search for the 3 resonances:
     // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const fPeak = transientHoldoff ? null : this.findPeakInWindow(targetFundamentalHz, 150, this.freqData);
+    const fPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);
     // Search each resonance independently to reduce masking by a dominant fundamental.
-    const qPeak = transientHoldoff ? null : this.findPeakInWindow(targetFifthHz, 150, this.freqData);
-    const oPeak = transientHoldoff ? null : this.findPeakInWindow(targetOctaveHz, 150, this.freqData);
+    const qPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
+    const oPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
 
     // Construct measurements
     const alap = this.buildResonanceMeasurement(
