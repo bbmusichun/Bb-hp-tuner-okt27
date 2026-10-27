@@ -1,0 +1,631 @@
+Handpan Tuner — mérnöki szoftverkövetelmény-specifikáció
+
+SRS v1.0 · Webalkalmazás · Professzionális akusztikai mérés és hangoláselemzés · 2026. október
+
+1. A rendszer célja és hatóköre
+
+A Handpan Tuner egy böngészőben futó, professzionális akusztikai mérőrendszer, amely handpan-készítők számára teszi lehetővé a hangszer egyes hangmezőinek frekvencia-, rezonancia- és időbeli viselkedésének vizsgálatát.
+
+A rendszer nem egyszerű kromatikus hangoló. A cél egy olyan mérőeszköz létrehozása, amely a hangmezők akusztikai tulajdonságait megfigyelhetővé, számszerűsíthetővé és ismételt mérések között összehasonlíthatóvá teszi.
+
+A szoftvernek támogatnia kell:
+
+* az élő mikrofonhang folyamatos rögzítését;
+* az egyedi ütések automatikus felismerését és elemzését;
+* az alaprezgés és a további rezonanciák frekvenciabecslését;
+* a felhasználó által megadott célfrekvenciáktól való eltérés számítását;
+* a hangindítás és a lecsengés időbeli vizsgálatát;
+* több mérés statisztikai összehasonlítását;
+* a hangolási profilok, mérési sorozatok és eredmények tárolását;
+* az eredmények exportját és későbbi visszaellenőrzését.
+
+1.1. Alapvető mérnöki megkülönböztetés
+
+A rendszernek három különböző fogalmat kell szétválasztania:
+
+* Mérési adat: a mikrofonból származó jelből becsült fizikai mennyiség, például frekvencia, amplitúdó vagy lecsengési idő.
+* Hangolási értékelés: a mérési adat és a felhasználó által meghatározott célérték összehasonlítása.
+* Szakmai értelmezés: annak megállapítása, hogy az eltérés mit jelent a hangszer készítése vagy hangolása szempontjából.
+
+Az első kettő automatizálható közvetlenül. A harmadikhoz validált akusztikai modell és hangszerspecifikus szakmai ismeretek szükségesek. A program nem állíthatja, hogy egy adott fémalakítási művelet biztosan meghatározott frekvenciaváltozást eredményez, amíg ezt kísérleti adatok nem támasztják alá.
+
+2. Rendszerhatárok és működési környezet
+
+Akusztikai mérési környezet
+
+Handpan · mikrofon · helyiségakusztika · háttérzaj
+
+Böngészős hangfeldolgozó motor
+
+Web Audio API · AudioWorklet · frekvencia- és rezonanciaelemzés
+
+Elemzési és mérési réteg
+
+Célértékek · mérési bizonytalanság · statisztika · időbeli trendek
+
+Felhasználói felület és adattárolás
+
+Élő spektrum · mérési napló · profilok · export
+
+2.1. Platformkövetelmények
+
+* A rendszer modern, Web Audio API-t támogató böngészőben fusson.
+* Az élő hangbemenethez a felhasználó explicit mikrofonengedélye szükséges.
+* Mikrofonhasználat esetén HTTPS-környezetet kell biztosítani, kivéve a böngésző által biztonságosnak tekintett fejlesztői környezeteket.
+* A mérési alapfunkciók lehetőleg szerverkapcsolat nélkül is működjenek.
+* A böngésző és a hardver által alkalmazott mintavételezést a programnak le kell kérdeznie és rögzítenie kell.
+* A felhasználói felületnek mobilon és asztali gépen is használhatónak kell lennie, de a professzionális mérési nézetet nagyobb kijelzőre is optimalizálni kell.
+
+A böngésző által szolgáltatott hang nem feltétlenül nyers mikrofonjel: automatikus zajszűrés, visszhangcsökkentés és automatikus erősítésszabályozás módosíthatja azt. A szoftvernek ezért támogatnia kell a rendelkezésre álló hangbemeneti feldolgozás beállításainak lekérdezését, ahol ez lehetséges, és jeleznie kell a mérési korlátokat.
+
+3. Funkcionális követelmények
+
+A követelmények egyedi azonosítót kapnak. Az MUST kötelező, a SHOULD erősen ajánlott, a MAY opcionális követelményt jelent.
+
+FR-01 — Hangbemenet és mérésvezérlés
+
+A rendszernek kötelezően biztosítania kell:
+
+* mikrofon kiválasztását a böngésző által elérhető eszközök közül;
+* mikrofonengedély és eszközállapot megjelenítését;
+* élő jelszintmérőt;
+* túlvezérlés és túl alacsony jelszint felismerését;
+* mérés indítását, szüneteltetését és leállítását;
+* a bemeneti mintavételi frekvencia és csatornaszám rögzítését;
+* a hangbemenet megszakadásának felismerését és kezelését.
+
+A mérés indításakor a rendszer ne kezdjen automatikusan megbízható mérési eredményeket közölni addig, amíg nem áll rendelkezésre elegendő és megfelelő minőségű jel.
+
+FR-02 — Ütésdetektálás
+
+A rendszernek képesnek kell lennie a hangmező megszólalásának felismerésére, valamint az egyes ütésekhez tartozó hangszakaszok elkülönítésére.
+
+A detektor bemenete a feldolgozott mikrofonjel, kimenete pedig egy ütésesemény, amely legalább az alábbiakat tartalmazza:
+
+* kezdő időbélyeg;
+* támadási szakasz becsült időtartama;
+* lokális csúcsamplitúdó;
+* eseményminőségi mutató;
+* az elemzéshez kiválasztott mintaszakasz.
+
+A rendszernek támogatnia kell az újabb ütést akkor is, amikor az előző hang még nem csengett le teljesen. Ha az események átfednek, a programnak jeleznie kell, hogy a mérések esetlegesen kölcsönösen befolyásolják egymást.
+
+FR-03 — Alapfrekvencia becslése
+
+A rendszernek meg kell becsülnie az alapfrekvenciát, ha az a felvételből megbízhatóan azonosítható.
+
+A becslés nem alapulhat kizárólag a legnagyobb amplitúdójú FFT-csúcs kiválasztásán. A programnak kezelnie kell azt az esetet is, amikor az alapfrekvencia gyengébb a felhangoknál, illetve amikor a spektrumban több egymáshoz közeli rezonancia jelenik meg.
+
+A kimenet tartalmazza:
+
+* a becsült frekvenciát Hz-ben;
+* a becsléshez tartozó időszakaszt;
+* az algoritmus által számított bizonyossági mutatót;
+* az esetleges alternatív frekvenciajelölteket;
+* a mérés elutasításának okát, ha a becslés nem megbízható.
+
+FR-04 — Rezonancia- és felhangelemzés
+
+A programnak képesnek kell lennie több releváns spektrális csúcs párhuzamos követésére.
+
+A hangmező minden egyes rezonanciájához külön kell tárolni:
+
+* a mért frekvenciát;
+* az amplitúdót;
+* a célfrekvenciát, ha rendelkezésre áll;
+* a centeltérést, ha a célfrekvencia meg van adva;
+* a rezonancia azonosításának módszerét;
+* a becslés bizonyosságát;
+* a mérés időablakát.
+
+A rendszernek nem szabad automatikusan harmonikusnak tekintenie minden rezonanciát. A rezonanciák kapcsolata lehet közelítőleg harmonikus, de az eltéréseknek is láthatóknak kell maradniuk.
+
+FR-05 — Célhangolási profilok
+
+A felhasználó létrehozhat, szerkeszthet és menthet egyedi handpanprofilokat.
+
+Egy profil tartalmazza:
+
+* a hangszer nevét vagy azonosítóját;
+* a hangmezők listáját;
+* az egyes hangmezők célfrekvenciáját;
+* a rezonanciák célfrekvenciáit;
+* a referencia-hangolási rendszert;
+* a toleranciaértékeket;
+* a profil verzióját és létrehozási idejét.
+
+A célértékek kézzel szerkeszthetők legyenek. A rendszer ne kényszerítse ki az egyenletes temperálást vagy az ideális egész számú felhangarányokat.
+
+FR-06 — Időbeli stabilitás
+
+A rendszernek egyetlen hang megszólalása alatt több időablakból is tudnia kell frekvenciabecslést készíteni.
+
+A kijelzésnek meg kell különböztetnie:
+
+* a kezdeti frekvenciát;
+* a korai lecsengési szakaszt;
+* a stabilabb lecsengési szakaszt, ha van ilyen;
+* a késői lecsengést;
+* a frekvencia időbeli változását;
+* az amplitúdó időbeli változását.
+
+A programnak lehetőséget kell biztosítania a frekvencia-idő és amplitúdó-idő grafikon megtekintésére. A mérési tartományok nem megfelelő jelminőség esetén legyenek kihagyhatók, ne pedig mesterségesen kitöltöttek.
+
+FR-07 — Ismételt ütések elemzése
+
+A felhasználó több ütéssel mérési sorozatot hozhat létre.
+
+A sorozatból a programnak ki kell számítania a kiválasztott paraméterekre:
+
+* átlagot vagy mediánt;
+* szórást;
+* minimumot és maximumot;
+* érvényes és elutasított mérések számát;
+* a mérési sorozat időbeli sorrendjét.
+
+A programnak jeleznie kell, ha az eredmények szórása túl nagy ahhoz, hogy a sorozat egyetlen reprezentatív értékkel leírható legyen.
+
+FR-08 — Eredmények mentése és exportálása
+
+A rendszernek lehetővé kell tennie a mérési eredmények helyi mentését és exportálását.
+
+Kötelező formátumok:
+
+* CSV a táblázatos mérésekhez;
+* JSON a teljes strukturált adatkészlethez.
+
+A CSV-exportnak tartalmaznia kell az egységeket és az egyértelmű oszlopneveket. A JSON-exportnak meg kell őriznie a profil, a mérési sorozat, az egyes ütések és a rezonanciák közötti kapcsolatokat.
+
+A nyers hangfelvételek mentése külön beállítás legyen, mert jelentősen növelheti a tárhelyigényt. A felhasználónak tudnia kell, ha csak az elemzési eredmények kerülnek tárolásra, és a nyers hang később már nem állítható elő.
+
+4. Moduláris szoftverarchitektúra
+
+A javasolt megoldás egy kliensoldali, moduláris webalkalmazás. A jelfeldolgozásnak és a megjelenítésnek külön végrehajtási rétegben kell futnia, hogy a spektrumelemzés ne akadályozza a felhasználói felület frissítését.
+
+4.1. Architektúra
+
+flowchart TB
+    UI["UI réteg<br/>Mérőnézet · Spektrum · Profilok"]
+    CTRL["Mérésvezérlő<br/>Állapotgép · Események"]
+    AUDIO["Audio Engine<br/>getUserMedia · Web Audio API"]
+    WORKER["AudioWorklet<br/>Mintapuffer · Szűrés · Jelszint"]
+    DET["Ütésdetektor<br/>Támadás · Eseményszakaszok"]
+    ANALYSIS["Elemzőmotor<br/>FFT · Csúcsfinomítás · Frekvenciabecslés"]
+    TRACK["Rezonanciakövető<br/>Alaprezgés · Felhangjelöltek"]
+    METRICS["Mérési metrikák<br/>Cent · Stabilitás · Bizonytalanság"]
+    STORE["Adatréteg<br/>IndexedDB · Export"]
+    UI <--> CTRL
+    CTRL <--> AUDIO
+    AUDIO --> WORKER
+    WORKER --> DET
+    DET --> ANALYSIS
+    ANALYSIS --> TRACK
+    TRACK --> METRICS
+    METRICS --> UI
+    METRICS --> STORE
+    CTRL <--> STORE
+
+4.2. Modulok felelőssége
+
+Modul	Felelősség
+AudioCapture	Mikrofonengedély, eszközválasztás, hangfolyam
+AudioWorkletProcessor	Folyamatos mintafeldolgozás, pufferezés, jelszint
+OnsetDetector	Ütések és hangindítások felismerése
+SpectrumAnalyzer	FFT, spektrum és csúcsjelöltek
+PitchEstimator	Alapfrekvencia becslése több módszerrel
+ResonanceTracker	Rezonanciák időbeli követése
+TuningEngine	Célfrekvencia, centeltérés és tolerancia
+StabilityAnalyzer	Frekvenciatrend, lecsengés, statisztika
+MeasurementStore	Mérések és profilok tartós tárolása
+ExportService	CSV- és JSON-export
+Visualization	Spektrum, mérőműszer, grafikonok
+Diagnostics	Jelminőség, hibák, teljesítmény és naplózás
+
+Minden elemzőmodul meghatározott bemeneti és kimeneti adatszerződéssel rendelkezzen. Az algoritmusok cserélhetők legyenek úgy, hogy a felhasználói felület és az adattárolás ne függjön közvetlenül egy konkrét jelfeldolgozási megoldástól.
+
+4.3. Javasolt technológiai alap
+
+* TypeScript: a felhasználói felület, az adatmodellek és a mérésvezérlés típusbiztos megvalósítása.
+* React: a kezelőfelület és az elemzési nézetek.
+* Web Audio API: a mikrofonhang fogadása és a hangfeldolgozási gráf.
+* AudioWorklet: valós idejű mintafeldolgozás külön feldolgozási környezetben.
+* Web Worker: számításigényes, de nem valós idejű elemzések és utófeldolgozás.
+* IndexedDB: helyi profilok, mérések és mérési sorozatok tárolása.
+* Canvas vagy WebGL: nagy frissítési frekvenciájú spektrum- és idősoros grafikonok megjelenítése.
+
+Az AudioWorklet és a Worker nem felcserélhető. Az AudioWorklet a hangfeldolgozási lánc valós idejű működésére szolgál; a Worker a nagyobb, késleltetést nem kritikus számításokat végzi.
+
+5. Jelfeldolgozási és elemzési algoritmusok
+
+5.1. Bemeneti jelfeldolgozás
+
+A mikrofonból érkező minták feldolgozása az alábbi sorrendet kövesse:
+
+* A bemeneti hangfolyam fogadása.
+* A mintavételezési frekvencia és csatornák ellenőrzése.
+* A jelszint és a túlvezérlés mérése.
+* A szükséges csatornakezelés és előfeldolgozás.
+* Folyamatos pufferezés és az elemzési ablakok kijelölése.
+* Az ütésdetektor futtatása.
+* Az eseményekhez tartozó hangszakaszok elemzése.
+
+A programnak kerülnie kell az indokolatlan automatikus zajszűrést. Egy zajcsökkentő algoritmus a gyenge rezonanciákat is elnyomhatja, és ezzel megváltoztathatja a mérési eredményt. Az előfeldolgozás legyen dokumentált és lehetőleg kikapcsolható.
+
+5.2. Spektrumelemzés
+
+Az alapmódszer az ablakolt FFT legyen.
+
+A rendszernek:
+
+* alkalmaznia kell egy megfelelő ablakfüggvényt, például Hann-ablakot;
+* meg kell határoznia a releváns frekvenciatartományt;
+* fel kell ismernie a lokális spektrális maximumokat;
+* interpolációval pontosíthatja a frekvenciacsúcsok helyét;
+* el kell különítenie a valódi csúcsokat a zajból és a spektrális szivárgásból eredő maximumoktól.
+
+Az FFT binfelbontása:
+
+\Delta f=\frac{f_s}{N}
+
+ahol a mintavételi frekvencia, pedig az FFT mérete.
+
+48 kHz-es mintavételnél és 8192 mintás FFT-nél a binfelbontás körülbelül 5,86 Hz. Ez önmagában nem elegendő precíz, alacsony frekvenciájú hangoláshoz. A nagyobb FFT, a hosszabb elemzési ablak és a csúcsinterpoláció javíthatja a becslést, de a felbontás nem azonos a tényleges mérési pontossággal.
+
+Követelmény: a program az elemzési ablakot a szükséges frekvenciafelbontáshoz és a hang időbeli változásához igazítsa. Ne alkalmazzon minden hangra azonos ablakméretet, ha az rontja az eredményt.
+
+5.3. Alapfrekvencia-becslés
+
+A javasolt megoldás több módszer kombinációja:
+
+* spektrális csúcsok és harmonikus jelöltek elemzése;
+* autokorreláció vagy más periodicitásbecslő módszer, ahol megfelelő;
+* több időablakból származó eredmények összevetése;
+* a korábbi becslés felhasználása a frekvencia követésére, de nem kizárólagos döntési alapként.
+
+A módszerek eredményeit egy becslésválasztó réteg egyesítse. Ha a módszerek jelentősen eltérő frekvenciát jeleznek, a rendszer bizonytalannak minősítse az eredményt.
+
+A handpan hangmezőinek összetett rezgése miatt nem garantálható, hogy minden esetben létezik egyetlen, minden szempontból megfelelő „alapfrekvencia”. A program ezért tegye lehetővé a domináns rezonancia és a feltételezett alapfrekvencia külön kijelzését.
+
+5.4. Rezonanciaazonosítás
+
+A rezonanciák azonosítása több lépésből álljon:
+
+* Spektrális csúcsjelöltek előállítása.
+* A csúcsok frekvenciájának és amplitúdójának meghatározása.
+* Az ismételt időablakokban megjelenő csúcsok összerendelése.
+* Lehetséges harmonikus kapcsolatok értékelése.
+* A felhasználói célprofilhoz illeszkedő rezonanciák kijelölése.
+* Az alternatív értelmezések és bizonytalanság megőrzése.
+
+A rendszer ne rendeljen automatikusan egy adott csúcsot az oktávhoz vagy kvinthez kizárólag a frekvenciaarány alapján. Az azonosítás eredményét a spektrális szerkezet, az időbeli viselkedés és az adott hangszerprofil együtt határozza meg.
+
+5.5. Centeltérés
+
+A célfrekvencia és a mért frekvencia közötti eltérés:
+
+c=1200\log_2\left(\frac{f_m}{f_t}\right)
+
+ahol a mért, pedig a célfrekvencia.
+
+A számítást a nem kerekített frekvenciákon kell elvégezni. A felhasználói felület kerekíthet, de a tárolt adat őrizze meg az eredeti pontosságot.
+
+Ha a célfrekvencia hiányzik, a program ne jelenítsen meg mesterségesen számított centeltérést.
+
+5.6. Időbeli stabilitás és lecsengés
+
+A programnak különböző elemzési ablakokból frekvencia- és amplitúdósorozatot kell létrehoznia.
+
+A mérhető mutatók:
+
+* frekvencia időbeli változása;
+* frekvencia szórása a kiválasztott szakaszban;
+* amplitúdócsökkenés;
+* becsült lecsengési idő;
+* érvényes elemzési ablakok aránya.
+
+A lecsengés becslésére exponenciális amplitúdóburkoló-modell alkalmazható, ha a jel és a mérési tartomány ezt lehetővé teszi. Ha a lecsengés nem illeszthető megfelelően ilyen modellhez, a program jelezze ezt, és ne közöljön félrevezető lecsengési időt.
+
+A frekvenciastabilitást nem szabad összekeverni a hangolás pontosságával. Egy hangmező stabilan szólhat a célértéktől eltérő frekvencián is.
+
+6. Nem funkcionális követelmények
+
+Azonosító	Követelmény
+NFR-01	A felhasználói felület a hangfeldolgozás közben is reagáljon a bevitelre.
+NFR-02	A mérési algoritmusok legyenek determinisztikusan tesztelhetők rögzített mintasorozatokkal.
+NFR-03	A mérési eredményekhez legyen visszakereshető az alkalmazott algoritmusverzió és mérési konfiguráció.
+NFR-04	A profilok és mérési sorozatok frissítés után se vesszenek el normál böngészőhasználat mellett, amennyiben a helyi tárhely rendelkezésre áll.
+NFR-05	A mikrofonhang feldolgozása alapértelmezetten maradjon a felhasználó eszközén.
+NFR-06	A mikrofonengedély visszavonása, az eszköz eltűnése és az audiofolyam hibája szabályosan kezelt állapot legyen.
+NFR-07	Az alkalmazás legyen használható billentyűzettel és képernyőolvasóval is a releváns funkciók esetén.
+NFR-08	A mérési nézetben minden frekvencia és eltérés mellett egyértelmű egység és célérték szerepeljen.
+NFR-09	Az exportált adatok legyenek géppel feldolgozhatók, verziózott sémával.
+NFR-10	A felhasználói felület és a jelfeldolgozás legyen külön tesztelhető.
+
+7. Adatmodell
+
+Az adatmodellnek a hangszer, a hangmező, a rezonancia, a mérési sorozat és az egyedi ütés kapcsolatát kell leírnia.
+
+7.1. Entitások és kapcsolatok
+
+erDiagram
+    INSTRUMENT ||--o{ TUNING_PROFILE : has
+    TUNING_PROFILE ||--|{ FIELD_PROFILE : defines
+    FIELD_PROFILE ||--o{ RESONANCE_TARGET : specifies
+    INSTRUMENT ||--o{ MEASUREMENT_SESSION : measured
+    MEASUREMENT_SESSION ||--o{ STRIKE : contains
+    STRIKE ||--o{ ANALYSIS_WINDOW : includes
+    ANALYSIS_WINDOW ||--o{ RESONANCE_ESTIMATE : produces
+    FIELD_PROFILE ||--o{ STRIKE : identifies
+
+7.2. Kötelező adatmezők
+
+Entitás	Kötelező mezők
+Instrument	id, name, createdAt
+TuningProfile	id, instrumentId, version, referenceHz, createdAt
+FieldProfile	id, profileId, label, targetHz
+ResonanceTarget	id, fieldId, role, targetHz
+MeasurementSession	id, instrumentId, startedAt, sampleRateHz, configVersion
+Strike	id, sessionId, onsetTime, peakLevel, qualityStatus
+AnalysisWindow	id, strikeId, startTime, durationMs, qualityStatus
+ResonanceEstimate	id, windowId, frequencyHz, amplitude, confidence, algorithmVersion
+
+A targetHz mezőknél meg kell különböztetni a hiányzó célértéket a nullától. A frekvenciák Hz-ben, az időtartamok ms-ban, az amplitúdó pedig dokumentált skálán tárolandó.
+
+A mérési idők egységes időalaphoz tartozzanak. A hangfolyam feldolgozásához a mintapozíció legyen az elsődleges időreferencia; a falióra szerinti időbélyeg kiegészítő metaadat.
+
+7.3. Példa egy rezonancia mérési rekordjára
+
+{
+  "id": "res-001",
+  "windowId": "win-001",
+  "frequencyHz": 293.42,
+  "targetHz": 293.00,
+  "deviationCents": 2.48,
+  "amplitude": 0.37,
+  "confidence": 0.94,
+  "qualityStatus": "valid",
+  "algorithmVersion": "1.0.0"
+}
+
+A fenti értékek szemléltető adatok, nem valódi mérésből származnak.
+
+A confidence érték csak akkor használható 0 és 1 közötti számmal, ha a jelentése dokumentált és kalibrált. Egy algoritmus belső pontszáma önmagában nem tekinthető a mérés statisztikai bizonyosságának.
+
+7.4. Adatmegőrzés és verziókezelés
+
+* Minden profil és mérési sorozat egyedi azonosítót kapjon.
+* A korábban mentett profil módosítása ne írja át észrevétlenül a korábbi mérések célértékeit.
+* A mérési eredmény tartalmazza az alkalmazott profil verzióját vagy annak változatlan pillanatfelvételét.
+* Az adatséma verziózott legyen, hogy egy későbbi alkalmazásverzió képes legyen migrálni a régi adatokat.
+* A nagyobb mérési sorozatok feldolgozása ne igényelje az összes spektrum egyidejű memóriában tartását.
+
+8. Teljesítménykövetelmények
+
+A teljesítményt nem pusztán a kijelzés frissítési frekvenciájával kell mérni. Külön kell vizsgálni a hangfeldolgozás késleltetését, a felhasználói felület reakcióidejét, a frekvenciabecslés időigényét és a memóriahasználatot.
+
+Az alábbiak a fejlesztés kezdeti elfogadási célértékei, amelyeket referenciakészülékeken kell mérni.
+
+Paraméter	Célérték
+Bemeneti mintavétel	44,1 vagy 48 kHz, az eszköz által biztosított érték szerint
+Spektrumfrissítés	15–30 alkalom/másodperc
+Mérési eredmény megjelenítése	Az ütéstől számítva legfeljebb 300 ms a kezdeti, gyors becsléshez
+Stabilabb frekvenciabecslés	Legfeljebb 1,5 s, ha ehhez hosszabb elemzési ablak szükséges
+UI interakciós késleltetés	95. percentilisben legfeljebb 100 ms a tesztelt referenciagépeken
+Folyamatos működés	Legalább 30 perc megszakítás nélküli mérés adatvesztés nélkül
+Memóriakezelés	Korlátos pufferek és fokozatos adatfeldolgozás
+Hibatűrés	Mikrofonmegszakadás után szabályos leállás és helyreállítható mérési állapot
+
+A 300 ms-os cél a gyors, előzetes becslésre vonatkozik, nem garantál minden rezonanciára végleges, nagy pontosságú eredményt. A hosszabb elemzési ablak javíthatja a frekvenciabecslést, de növeli a késleltetést.
+
+8.1. Teljesítményoptimalizálás
+
+* A hangfolyam mintáit ne küldjük minden feldolgozási ciklusban teljes egészükben a felhasználói felületre.
+* Az AudioWorklet csak a szükséges eseményeket, mintablokkokat vagy összesített adatokat továbbítsa.
+* A spektrumgrafikon kirajzolása legyen független a hangfeldolgozás ütemezésétől.
+* A számításigényes utóelemzés külön Workerben futhasson.
+* A régi mintapuffereket determinisztikusan fel kell szabadítani vagy újra kell használni.
+* A spektrális csúcsok követése csak a szükséges frekvenciatartományban történjen, ha ez a mérési feladat szempontjából megfelelő.
+
+9. Mérési pontosság és bizonytalanság
+
+A professzionális felhasználás egyik legfontosabb feltétele, hogy a program ne csak egy számot jelenítsen meg, hanem annak megbízhatóságát is jellemezze.
+
+9.1. A bizonytalanság forrásai
+
+* A mikrofon és az audioeszköz frekvenciamenete.
+* A böngészőben alkalmazott automatikus jelfeldolgozás.
+* A környezeti zaj és a helyiség visszaverődései.
+* Az ütések erőssége és pozíciója.
+* A hangmező több rezonanciájának átfedése.
+* A frekvencia időbeli változása.
+* A véges elemzési ablak és a becslőalgoritmus korlátai.
+
+9.2. Javasolt mérési minőségi osztályok
+
+Érvényes mérés
+
+A becslés teljesíti a validált minőségi feltételeket. A frekvencia és a célértékhez viszonyított eltérés megjeleníthető.
+
+Bizonytalan mérés
+
+A becslés használható tájékoztató jelleggel, de az eltérés, a frekvenciaváltozás vagy a jelminőség miatt további mérés szükséges.
+
+Érvénytelen mérés
+
+A program nem talál kellően megbízható rezonanciát, vagy a jel túl zajos, túl halk, túlvezérelt vagy más módon alkalmatlan.
+
+A minőségi osztályok feltételeit konkrét, tesztekkel validált szabályok alapján kell meghatározni. Nem elegendő kizárólag a jelszint vagy egy önkényesen választott algoritmuspontszám alapján dönteni.
+
+9.3. Centpontosság elfogadása
+
+A fejlesztési cél legyen a validált mérési tartományban legfeljebb ±1 cent hiba. Ezt nem szabad minden mikrofonra, minden frekvenciára és minden hangmezőre automatikusan garantálni.
+
+A validáció során referenciafrekvenciás jelekkel, ismert spektrális összetételű szintetikus tesztjelekkel, majd kontrollált körülmények között felvett valódi handpanhangokkal kell igazolni a teljes mérési lánc teljesítményét.
+
+A teljes rendszer hibáját külön kell vizsgálni a frekvenciabecslés, a célérték-kezelés, a centeltérés számítása és az időbeli stabilitás szempontjából.
+
+10. Tesztelési stratégia
+
+A tesztelésnek nemcsak azt kell igazolnia, hogy a program helyesen számol, hanem azt is, hogy valós handpanhangok esetén megfelelően viselkedik.
+
+10.1. Tesztszintek
+
+T1 — Egységtesztek
+
+Centképlet, frekvenciabecslés, ablakfüggvények, statisztika, adatséma-validáció és profilkezelés.
+
+T2 — Integrációs tesztek
+
+AudioWorklet, ütésdetektor, elemzőmotor, rezonanciakövetés és adatréteg együttműködése.
+
+T3 — Akusztikai validáció
+
+Szintetikus jelek, referenciahangok, rögzített handpanfelvételek és kontrollált mérések.
+
+T4 — Eszköz- és böngészőtesztek
+
+Mikrofonengedélyek, eszközváltás, mobilböngészők, háttérbe kerülés, hosszú mérés és teljesítmény.
+
+10.2. Kötelező tesztesetek
+
+ID	Teszt	Elvárt eredmény
+TC-001	Ismert szinuszjel	A frekvenciabecslés a meghatározott hibahatáron belül marad.
+TC-002	Alapfrekvenciánál erősebb felhang	Az algoritmus nem választja automatikusan a legerősebb csúcsot alapfrekvenciának.
+TC-003	Két közeli rezonancia	A csúcsok elkülönítése vagy a mérés bizonytalanná minősítése történik.
+TC-004	Zajos bemeneti jel	A minőségi jelzés megfelelően romlik; hamis pontosság nem jelenik meg.
+TC-005	Több egymást követő ütés	Az események és az eredmények külön-külön azonosíthatók.
+TC-006	Folyamatos lecsengés	A frekvencia időbeli változása megfigyelhető.
+TC-007	Hiányzó célfrekvencia	A rendszer nem számít centeltérést.
+TC-008	Profilverzió módosítása	A korábbi mérések eredeti célértékei visszaállíthatók.
+TC-009	Mikrofonengedély megtagadása	Érthető hibaüzenet jelenik meg; az alkalmazás nem omlik össze.
+TC-010	30 perces folyamatos működés	Nincs feldolgozási leállás, kontrollálatlan memória-növekedés vagy adatvesztés.
+TC-011	Export és visszaolvasás	A mentett mérési adatok lényegi információvesztés nélkül visszaolvashatók.
+TC-012	Referenciagépen végzett terheléses teszt	A rögzített késleltetési és UI-reakcióidő célértékek teljesülnek.
+
+10.3. Referenciaadatbázis
+
+A megbízható fejlesztéshez létre kell hozni egy saját, verziózott tesztadatbázist. Ez tartalmazzon:
+
+* ismert frekvenciájú szinuszjeleket;
+* ismert összetevőkből előállított többrezonanciás jeleket;
+* különböző jel-zaj viszonyú felvételeket;
+* különböző ütésintenzitású handpanfelvételeket;
+* eltérő lecsengési viselkedésű hangokat;
+* ismert hibás vagy bizonytalan mérési helyzeteket.
+
+A valódi hangfelvételek esetében a referenciafrekvenciákat független mérési módszerrel kell meghatározni. A tesztadatbázis minden felvételéhez tartozzon mérési konfiguráció, referenciaadat és az elvárt eredmény.
+
+11. Elfogadási kritériumok
+
+A szoftver akkor tekinthető az első professzionális kiadásra alkalmasnak, ha az alábbi feltételek mind teljesülnek.
+
+Átvételi ellenőrzőlista
+
+0/10 ellenőrizve
+
+A1 — Mikrofonkezelés
+
+Az engedélyezés, eszközváltás és hibakezelés működik.
+
+A2 — Frekvenciabecslés
+
+A validált frekvenciatartományban teljesül a dokumentált hibahatár.
+
+A3 — Rezonanciák
+
+A csúcsok azonosíthatók, követhetők és bizonytalan esetben elutasíthatók.
+
+A4 — Időbeli elemzés
+
+A frekvencia- és amplitúdótrendek reprodukálhatók.
+
+A5 — Mérési profilok
+
+Az egyedi célfrekvenciák és toleranciák helyesen működnek.
+
+A6 — Statisztika
+
+A sorozatok átlaga, mediánja, szórása és érvényessége ellenőrzött.
+
+A7 — Adatmegőrzés
+
+A profilok, mérések és exportok integritása igazolt.
+
+A8 — Teljesítmény
+
+A rögzített késleltetési és 30 perces stabilitási célok teljesülnek.
+
+A9 — Hibakezelés
+
+Nincs kritikus, reprodukálható összeomlás az elfogadási tesztekben.
+
+A10 — Dokumentáció
+
+Az algoritmusok, korlátok és mérési konfigurációk dokumentáltak.
+
+Ellenőrzőlista másolása
+
+A jelölőnégyzetek projektellenőrzésre szolgálnak; a feltételek teljesülését csak tényleges tesztelés igazolhatja.
+
+12. Biztonság, adatvédelem és megbízhatóság
+
+A programnak a mikrofonengedélyt kizárólag a felhasználó által kezdeményezett méréshez szabad felhasználnia. A hangrögzítés aktív állapotát egyértelműen jelezni kell.
+
+Kötelező elvek:
+
+* A mikrofonhang alapértelmezetten nem kerülhet szerverre.
+* A mérési adatokat a felhasználó eszközén kell tárolni, kivéve ha később külön, explicit felhőfunkció készül.
+* A nyers hang és a származtatott mérési adatok külön kezelendők.
+* A felhasználónak lehetőséget kell biztosítani a mérési adatok törlésére és exportjára.
+* A böngésző tárhelyének megtelése vagy a hozzáférés elvesztése esetén érthető hibajelzés szükséges.
+* A mérési eredmények mellé a program rögzítse a feldolgozási algoritmus és a konfiguráció verzióját.
+
+A helyi tárolás önmagában nem garantálja az adatok korlátlan megőrzését. Ezért a professzionális munkafolyamatban a rendszeres exportot is támogatni kell.
+
+13. Fejlesztési fázisok és prioritások
+
+P0
+
+Mérési alapmotor
+
+Kritikus
+
+Mikrofonkezelés, hangpufferezés, ütésdetektálás, spektrumelemzés, alapfrekvencia és centeltérés.
+
+P1
+
+Professzionális rezonanciaelemzés
+
+Több rezonancia követése, időbeli stabilitás, bizonytalanságjelzés, egyedi hangolási profilok.
+
+P2
+
+Mérési munkafolyamat
+
+Mérési sorozatok, statisztika, összehasonlítás, helyi adattárolás és export.
+
+P3
+
+Haladó diagnosztika
+
+Összetett lecsengéselemzés, mérési trendek, profil-összehasonlítás és validált szakmai értékelések.
+
+14. A fejlesztés legnagyobb műszaki kockázatai
+
+Kockázat	Kezelési stratégia
+A legerősebb csúcs téves alapfrekvenciaként jelenik meg	Több algoritmus, harmonikus jelöltek és bizonytalanságvizsgálat
+A mikrofon automatikus jelfeldolgozása módosítja a hangot	Bemeneti beállítások vizsgálata, dokumentált mérési korlátok
+Egymásba csengő hangmezők	Átfedésdetektálás és mérési minőségi jelzés
+A gyors kijelzés pontatlan eredményt ad	Gyors előzetes és későbbi stabilizált becslés elkülönítése
+A különböző hangmezők eltérő rezonanciaszerkezetűek	Egyedi rezonanciaprofilok és kézi célérték-megadás
+A pontosság nem reprodukálható különböző eszközökön	Referenciamérések és eszközönkénti validáció
+
+15. Végleges műszaki döntések a fejlesztés megkezdése előtt
+
+A specifikáció alapján a következő lépés a mérési algoritmusok és az adatfolyam részletes megtervezése. Ehhez három döntés különösen fontos.
+
+* Mérési referencia: a célfrekvenciákat egyedileg kell megadni, vagy a rendszernek kell automatikusan felismernie a hangmező és a rezonanciák szerepét?
+* Mérési folyamat: egy hangmezőt egyszeri ütésből kell elemezni, vagy több ütésből összeállított mérési sorozat lesz az alapértelmezett?
+* A pontosság bizonyítása: rendelkezésre áll-e már olyan referencia-handpan vagy mérőeszköz, amellyel a program eredményei összehasonlíthatók?
+
+Ezek a döntések meghatározzák a rezonanciakövető algoritmus, az adattárolás és a tesztelési rendszer részleteit. A fejlesztés során elsőként a mérési motor pontosságát és reprodukálhatóságát kell igazolni; a látványos felhasználói felület erre épülhet rá.

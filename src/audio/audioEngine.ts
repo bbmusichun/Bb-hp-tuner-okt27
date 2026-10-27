@@ -1,0 +1,415 @@
+/**
+ * BB Tuner Audio Acoustic Engine
+ * Real-time microphone input, FFT analysis, multi-resonance tracking (Alaphang, Kvint, Oktáv),
+ * parabolic peak interpolation, input dB calculation, and stability tracking.
+ */
+
+import { ResonanceMeasurement, MicState } from '../types/tuner';
+
+export class BBAudioEngine {
+  private audioCtx: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private microphoneStream: MediaStream | null = null;
+  private sourceNode: MediaStreamAudioSourceNode | null = null;
+
+  private micState: MicState = 'inactive';
+  private errorMessage = '';
+
+  // Audio configuration
+  private fftSize = 8192; // High-resolution FFT
+  private timeData: Float32Array = new Float32Array(8192);
+  private freqData: Float32Array = new Float32Array(4096);
+
+  // Metering & input level
+  private inputLevelDb = -100;
+  private sampleRate = 48000;
+
+  // Pitch stability history (rolling 10 seconds)
+  private stabilityHistory: { timestamp: number; cents: number; valid: boolean }[] = [];
+
+  // Tone generator for audio reference
+  private toneOsc: OscillatorNode | null = null;
+  private toneGain: GainNode | null = null;
+
+  public async startMicrophone(): Promise<boolean> {
+    try {
+      if (!this.audioCtx) {
+        const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
+      }
+
+      if (this.audioCtx.state === 'suspended') {
+        await this.audioCtx.resume();
+      }
+
+      this.sampleRate = this.audioCtx.sampleRate;
+
+      // Request raw, unadulterated microphone audio without telecom filtering
+      this.microphoneStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        },
+      });
+
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = this.fftSize;
+      this.analyser.smoothingTimeConstant = 0.82;
+      this.analyser.minDecibels = -100;
+      this.analyser.maxDecibels = -10;
+
+      this.timeData = new Float32Array(this.analyser.fftSize);
+      this.freqData = new Float32Array(this.analyser.frequencyBinCount);
+
+      this.sourceNode = this.audioCtx.createMediaStreamSource(this.microphoneStream);
+      this.sourceNode.connect(this.analyser);
+
+      this.micState = 'active';
+      this.errorMessage = '';
+      return true;
+    } catch (err: unknown) {
+      console.error('Microphone error:', err);
+      this.micState = 'error';
+      this.errorMessage = err instanceof Error ? err.message : 'Nem sikerült hozzáférni a mikrofonhoz';
+      return false;
+    }
+  }
+
+  public stopMicrophone(): void {
+    if (this.microphoneStream) {
+      this.microphoneStream.getTracks().forEach((track) => track.stop());
+      this.microphoneStream = null;
+    }
+    if (this.sourceNode) {
+      this.sourceNode.disconnect();
+      this.sourceNode = null;
+    }
+    this.micState = 'inactive';
+    this.inputLevelDb = -100;
+  }
+
+  public getMicState(): MicState {
+    return this.micState;
+  }
+
+  public getErrorMessage(): string {
+    return this.errorMessage;
+  }
+
+  public getSampleRate(): number {
+    return this.sampleRate;
+  }
+
+  public getInputLevelDb(): number {
+    return this.inputLevelDb;
+  }
+
+  public getFloatFrequencyData(): Float32Array {
+    if (this.analyser) {
+      this.analyser.getFloatFrequencyData(this.freqData as any);
+    }
+    return this.freqData;
+  }
+
+  /**
+   * Refined parabolic peak interpolation for sub-bin frequency accuracy
+   */
+  private interpolatePeak(bin: number, spectrum: Float32Array): { freq: number; magDb: number } {
+    const binCount = spectrum.length;
+    const binWidth = this.sampleRate / (binCount * 2);
+
+    if (bin <= 0 || bin >= binCount - 1) {
+      return { freq: bin * binWidth, magDb: spectrum[bin] ?? -100 };
+    }
+
+    const alpha = spectrum[bin - 1];
+    const beta = spectrum[bin];
+    const gamma = spectrum[bin + 1];
+
+    const denom = alpha - 2 * beta + gamma;
+    let delta = 0;
+    if (Math.abs(denom) > 1e-6) {
+      delta = 0.5 * ((alpha - gamma) / denom);
+    }
+    delta = Math.max(-0.5, Math.min(0.5, delta));
+
+    const peakBin = bin + delta;
+    const freq = peakBin * binWidth;
+    const magDb = beta - 0.25 * (alpha - gamma) * delta;
+
+    return { freq, magDb };
+  }
+
+  /**
+   * Find peak in a targeted window around expected frequency
+   */
+  private findPeakInWindow(
+    targetFreq: number,
+    windowCents: number,
+    spectrum: Float32Array
+  ): { freq: number; magDb: number; bin: number } | null {
+    const minFreq = targetFreq * Math.pow(2, -windowCents / 1200);
+    const maxFreq = targetFreq * Math.pow(2, windowCents / 1200);
+
+    const binCount = spectrum.length;
+    const binWidth = this.sampleRate / (binCount * 2);
+
+    const minBin = Math.max(1, Math.floor(minFreq / binWidth));
+    const maxBin = Math.min(binCount - 2, Math.ceil(maxFreq / binWidth));
+
+    if (minBin >= maxBin) return null;
+
+    let maxVal = -Infinity;
+    let bestBin = -1;
+
+    for (let i = minBin; i <= maxBin; i++) {
+      if (spectrum[i] > maxVal && spectrum[i] > spectrum[i - 1] && spectrum[i] > spectrum[i + 1]) {
+        maxVal = spectrum[i];
+        bestBin = i;
+      }
+    }
+
+    // Noise floor check
+    if (bestBin === -1 || maxVal < -82) {
+      return null;
+    }
+
+    const { freq, magDb } = this.interpolatePeak(bestBin, spectrum);
+    return { freq, magDb, bin: bestBin };
+  }
+
+  /**
+   * Main multi-resonance analyzer according to functional specification
+   */
+  public analyze(
+    targetFundamentalHz = 146.50,
+    targetFifthHz = 220.00,
+    targetOctaveHz = 293.66,
+    noteNames = { fundamental: 'D3', fifth: 'A3', octave: 'D4' }
+  ): {
+    alap: ResonanceMeasurement;
+    kvint: ResonanceMeasurement;
+    oktav: ResonanceMeasurement;
+    hasSignal: boolean;
+    inputLevelDb: number;
+    sampleRateKhz: number;
+    standardDeviationCents: number;
+  } {
+    const now = Date.now();
+
+    if (!this.analyser || this.micState !== 'active') {
+      return {
+        alap: this.createEmptyResonance('fundamental', 'Alap', noteNames.fundamental, targetFundamentalHz),
+        kvint: this.createEmptyResonance('fifth', 'Kvint', noteNames.fifth, targetFifthHz),
+        oktav: this.createEmptyResonance('octave', 'Oktáv', noteNames.octave, targetOctaveHz),
+        hasSignal: false,
+        inputLevelDb: -100,
+        sampleRateKhz: Math.round(this.sampleRate / 1000),
+        standardDeviationCents: 0,
+      };
+    }
+
+    this.analyser.getFloatFrequencyData(this.freqData as any);
+    this.analyser.getFloatTimeDomainData(this.timeData as any);
+
+    // Compute RMS input level and dB
+    let sumSquares = 0;
+    for (let i = 0; i < this.timeData.length; i++) {
+      sumSquares += this.timeData[i] * this.timeData[i];
+    }
+    const rms = Math.sqrt(sumSquares / this.timeData.length);
+    const db = rms > 1e-5 ? Math.max(-100, Math.min(0, 20 * Math.log10(rms))) : -100;
+    this.inputLevelDb = Math.round(db);
+
+    const hasSignal = db > -58; // threshold for audio signal presence
+
+    // Search for the 3 resonances:
+    // 1. Alaphang (Fundamental): search within ±150 cents of target
+    const fPeak = this.findPeakInWindow(targetFundamentalHz, 160, this.freqData);
+    // 2. Kvint (Fifth): search within ±150 cents of target
+    const qPeak = this.findPeakInWindow(targetFifthHz, 160, this.freqData);
+    // 3. Oktáv (Octave): search within ±150 cents of target
+    const oPeak = this.findPeakInWindow(targetOctaveHz, 160, this.freqData);
+
+    // Construct measurements
+    const alap = this.buildResonanceMeasurement(
+      'fundamental',
+      'Alap',
+      noteNames.fundamental,
+      fPeak,
+      targetFundamentalHz,
+      now,
+      hasSignal
+    );
+
+    const kvint = this.buildResonanceMeasurement(
+      'fifth',
+      'Kvint',
+      noteNames.fifth,
+      qPeak,
+      targetFifthHz,
+      now,
+      hasSignal
+    );
+
+    const oktav = this.buildResonanceMeasurement(
+      'octave',
+      'Oktáv',
+      noteNames.octave,
+      oPeak,
+      targetOctaveHz,
+      now,
+      hasSignal
+    );
+
+    // Update stability history (for Alaphang)
+    if (alap.status === 'valid' && alap.deviationCents !== null) {
+      this.stabilityHistory.push({
+        timestamp: now,
+        cents: alap.deviationCents,
+        valid: true,
+      });
+    } else if (hasSignal) {
+      this.stabilityHistory.push({
+        timestamp: now,
+        cents: 0,
+        valid: false,
+      });
+    }
+
+    // Keep rolling 10 seconds of stability points
+    const tenSecAgo = now - 10000;
+    while (this.stabilityHistory.length > 0 && this.stabilityHistory[0].timestamp < tenSecAgo) {
+      this.stabilityHistory.shift();
+    }
+
+    // Compute standard deviation (Szórás) on valid points
+    const validPoints = this.stabilityHistory.filter((p) => p.valid);
+    let standardDeviationCents = 1.2; // default
+    if (validPoints.length > 2) {
+      const mean = validPoints.reduce((acc, p) => acc + p.cents, 0) / validPoints.length;
+      const variance = validPoints.reduce((acc, p) => acc + Math.pow(p.cents - mean, 2), 0) / validPoints.length;
+      standardDeviationCents = Math.sqrt(variance);
+    }
+
+    return {
+      alap,
+      kvint,
+      oktav,
+      hasSignal,
+      inputLevelDb: this.inputLevelDb,
+      sampleRateKhz: Math.round(this.sampleRate / 1000),
+      standardDeviationCents,
+    };
+  }
+
+  public getStabilityHistory(): { timestamp: number; cents: number; valid: boolean }[] {
+    return this.stabilityHistory;
+  }
+
+  private buildResonanceMeasurement(
+    role: 'fundamental' | 'fifth' | 'octave',
+    name: string,
+    noteName: string,
+    peak: { freq: number; magDb: number } | null,
+    targetHz: number,
+    now: number,
+    hasSignal: boolean
+  ): ResonanceMeasurement {
+    if (!hasSignal || !peak) {
+      return {
+        role,
+        name,
+        noteName,
+        measuredHz: peak ? peak.freq : null,
+        targetHz,
+        deviationCents: null,
+        amplitudeDb: peak ? peak.magDb : null,
+        confidence: 0,
+        timestampMs: now,
+        status: hasSignal ? 'uncertain' : 'no-signal',
+      };
+    }
+
+    const cents = 1200 * Math.log2(peak.freq / targetHz);
+    const confidence = Math.max(0, Math.min(1, (peak.magDb + 85) / 55));
+    const status = Math.abs(cents) <= 50 && confidence > 0.35 ? 'valid' : 'uncertain';
+
+    return {
+      role,
+      name,
+      noteName,
+      measuredHz: peak.freq,
+      targetHz,
+      deviationCents: cents,
+      amplitudeDb: peak.magDb,
+      confidence,
+      timestampMs: now,
+      status,
+    };
+  }
+
+  private createEmptyResonance(
+    role: 'fundamental' | 'fifth' | 'octave',
+    name: string,
+    noteName: string,
+    targetHz: number
+  ): ResonanceMeasurement {
+    return {
+      role,
+      name,
+      noteName,
+      measuredHz: null,
+      targetHz,
+      deviationCents: null,
+      amplitudeDb: null,
+      confidence: 0,
+      timestampMs: Date.now(),
+      status: 'no-signal',
+    };
+  }
+
+  // Reference tone generator
+  public playTone(freqHz: number): void {
+    this.stopTone();
+    if (!this.audioCtx) {
+      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.audioCtx = new AudioCtxClass();
+    }
+    if (this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
+    }
+    const now = this.audioCtx.currentTime;
+    this.toneGain = this.audioCtx.createGain();
+    this.toneGain.gain.setValueAtTime(0.001, now);
+    this.toneGain.gain.exponentialRampToValueAtTime(0.3, now + 0.05);
+    this.toneGain.connect(this.audioCtx.destination);
+
+    this.toneOsc = this.audioCtx.createOscillator();
+    this.toneOsc.type = 'sine';
+    this.toneOsc.frequency.setValueAtTime(freqHz, now);
+    this.toneOsc.connect(this.toneGain);
+    this.toneOsc.start(now);
+  }
+
+  public stopTone(): void {
+    if (this.toneGain && this.audioCtx) {
+      const now = this.audioCtx.currentTime;
+      this.toneGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+      setTimeout(() => {
+        try {
+          this.toneOsc?.stop();
+          this.toneOsc?.disconnect();
+          this.toneGain?.disconnect();
+        } catch {
+          // ignore
+        }
+        this.toneOsc = null;
+        this.toneGain = null;
+      }, 60);
+    }
+  }
+}
+
+export const bbAudioEngine = new BBAudioEngine();

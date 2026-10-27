@@ -1,0 +1,218 @@
+import React, { useEffect, useRef } from 'react';
+import { ResonanceMeasurement } from '../types/tuner';
+
+interface Props {
+  alap: ResonanceMeasurement;
+  kvint: ResonanceMeasurement;
+  oktav: ResonanceMeasurement;
+  hasSignal: boolean;
+  selectedRole?: string;
+  onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
+}
+
+export const BBStrobeBands: React.FC<Props> = ({
+  alap,
+  kvint,
+  oktav,
+  hasSignal,
+  selectedRole,
+  onSelectRole,
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Time-integrated phases for each band
+  const phasesRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
+  const lastTimeRef = useRef<number>(performance.now());
+
+  // Smoothed deviation cents
+  const smoothCentsRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
+
+  useEffect(() => {
+    let animId = 0;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    function render(currentTime: number) {
+      if (!ctx || !canvas) return;
+
+      const dt = Math.min(0.1, (currentTime - lastTimeRef.current) / 1000); // in seconds
+      lastTimeRef.current = currentTime;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      const rowHeight = (h - 8) / 3; // 3 rows with 4px gap
+
+      // Smooth cents toward measured values
+      const targetCentsAlap = hasSignal && alap.deviationCents !== null ? alap.deviationCents : 0;
+      const targetCentsKvint = hasSignal && kvint.deviationCents !== null ? kvint.deviationCents : 0;
+      const targetCentsOktav = hasSignal && oktav.deviationCents !== null ? oktav.deviationCents : 0;
+
+      smoothCentsRef.current.alap += (targetCentsAlap - smoothCentsRef.current.alap) * 0.15;
+      smoothCentsRef.current.kvint += (targetCentsKvint - smoothCentsRef.current.kvint) * 0.15;
+      smoothCentsRef.current.oktav += (targetCentsOktav - smoothCentsRef.current.oktav) * 0.15;
+
+      // Integrate phase: speed proportional to cents
+      // When cents = 0, speed = 0 (perfect standstill)
+      // Positive cents = moves right, Negative cents = moves left
+      const kSpeed = 16.0; // pixels per second per cent
+      if (hasSignal && alap.status === 'valid') {
+        phasesRef.current.alap += smoothCentsRef.current.alap * kSpeed * dt;
+      }
+      if (hasSignal && kvint.status === 'valid') {
+        phasesRef.current.kvint += smoothCentsRef.current.kvint * kSpeed * dt;
+      }
+      if (hasSignal && oktav.status === 'valid') {
+        phasesRef.current.oktav += smoothCentsRef.current.oktav * kSpeed * dt;
+      }
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Colors matching screenshot: Lighter brick/ruby red vs near-black dark red
+      const redColor = '#a8323c';
+      const redLightColor = '#c44852';
+      const darkColor = '#120507';
+      const darkMidColor = '#1e080b';
+
+      const rows = [
+        {
+          key: 'alap',
+          role: 'fundamental' as const,
+          name: 'Alap',
+          note: alap.noteName || 'D3',
+          noteColor: '#f59e0b',
+          phase: phasesRef.current.alap,
+          stripeWidth: 20, // Fine stripes for Alaphang
+          cents: smoothCentsRef.current.alap,
+          isValid: hasSignal && alap.status === 'valid',
+        },
+        {
+          key: 'kvint',
+          role: 'fifth' as const,
+          name: 'Kvint',
+          note: kvint.noteName || 'A3',
+          noteColor: '#c084fc',
+          phase: phasesRef.current.kvint,
+          stripeWidth: 34, // Medium stripes for Kvint
+          cents: smoothCentsRef.current.kvint,
+          isValid: hasSignal && kvint.status === 'valid',
+        },
+        {
+          key: 'oktav',
+          role: 'octave' as const,
+          name: 'Oktáv',
+          note: oktav.noteName || 'D4',
+          noteColor: '#38bdf8',
+          phase: phasesRef.current.oktav,
+          stripeWidth: 54, // Wide block stripes for Oktáv
+          cents: smoothCentsRef.current.oktav,
+          isValid: hasSignal && oktav.status === 'valid',
+        },
+      ];
+
+      rows.forEach((row, idx) => {
+        const y = idx * (rowHeight + 4);
+        const stripeW = row.stripeWidth;
+        const period = stripeW * 2;
+        const offset = ((row.phase % period) + period) % period;
+
+        // Clip rounded rectangle for track
+        ctx.save();
+        ctx.beginPath();
+        const radius = 6;
+        ctx.moveTo(radius, y);
+        ctx.lineTo(w - radius, y);
+        ctx.quadraticCurveTo(w, y, w, y + radius);
+        ctx.lineTo(w, y + rowHeight - radius);
+        ctx.quadraticCurveTo(w, y + rowHeight, w - radius, y + rowHeight);
+        ctx.lineTo(radius, y + rowHeight);
+        ctx.quadraticCurveTo(0, y + rowHeight, 0, y + rowHeight - radius);
+        ctx.lineTo(0, y + radius);
+        ctx.quadraticCurveTo(0, y, radius, y);
+        ctx.closePath();
+        ctx.clip();
+
+        // 1. Dark base background
+        ctx.fillStyle = darkColor;
+        ctx.fillRect(0, y, w, rowHeight);
+
+        // 2. Alternating red stripes
+        const isNearZero = row.isValid && Math.abs(row.cents) <= 0.8;
+        ctx.fillStyle = isNearZero ? redLightColor : redColor;
+
+        for (let x = -period + offset; x < w + period; x += period) {
+          // Soft gradient across stripe
+          const grad = ctx.createLinearGradient(x, y, x + stripeW, y);
+          grad.addColorStop(0, darkMidColor);
+          grad.addColorStop(0.2, isNearZero ? '#c94a55' : redLightColor);
+          grad.addColorStop(0.8, isNearZero ? '#b83a45' : redColor);
+          grad.addColorStop(1, darkMidColor);
+          ctx.fillStyle = grad;
+          ctx.fillRect(x, y, stripeW, rowHeight);
+        }
+
+        // 3. Subtle inner shadow / border
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0, y, w, rowHeight);
+
+        // 4. Glowing Center Reference Line (White vertical hairline with amber/coral glow)
+        const centerX = w / 2;
+        // Outer glow
+        const glowGrad = ctx.createRadialGradient(centerX, y + rowHeight / 2, 0, centerX, y + rowHeight / 2, 16);
+        glowGrad.addColorStop(0, 'rgba(255, 230, 200, 0.45)');
+        glowGrad.addColorStop(1, 'rgba(255, 100, 100, 0)');
+        ctx.fillStyle = glowGrad;
+        ctx.fillRect(centerX - 16, y, 32, rowHeight);
+
+        // White hairline
+        ctx.fillStyle = isNearZero ? '#ffffff' : '#ffeedd';
+        ctx.fillRect(centerX - 1, y, 2, rowHeight);
+
+        ctx.restore();
+      });
+
+      animId = requestAnimationFrame(render);
+    }
+
+    animId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animId);
+  }, [alap, kvint, oktav, hasSignal]);
+
+  const rows = [
+    { role: 'fundamental' as const, name: 'Alap', note: alap.noteName || 'D3', color: '#f59e0b' },
+    { role: 'fifth' as const, name: 'Kvint', note: kvint.noteName || 'A3', color: '#c084fc' },
+    { role: 'octave' as const, name: 'Oktáv', note: oktav.noteName || 'D4', color: '#38bdf8' },
+  ];
+
+  return (
+    <div className="w-full flex items-stretch gap-2.5 my-1">
+      {/* Left Labels Column */}
+      <div className="flex flex-col justify-between py-1 shrink-0 w-12 text-left select-none">
+        {rows.map((r) => (
+          <button
+            key={r.role}
+            onClick={() => onSelectRole?.(r.role)}
+            className="flex flex-col items-start leading-tight hover:opacity-80 transition cursor-pointer"
+          >
+            <span className="text-xs font-semibold text-white/90">{r.name}</span>
+            <span className="text-[11px] font-mono font-medium" style={{ color: r.color }}>
+              {r.note}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Main Canvas containing the 3 Stroboscope bands */}
+      <div className="flex-1 relative">
+        <canvas
+          ref={canvasRef}
+          width={320}
+          height={116}
+          className="w-full h-[116px] block rounded-lg overflow-hidden border border-white/5 shadow-inner"
+        />
+      </div>
+    </div>
+  );
+};
