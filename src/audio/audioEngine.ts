@@ -8,6 +8,7 @@ import { ResonanceMeasurement, MicState } from '../types/tuner';
 import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 import { isTransientHoldoffActive } from './transientGuard';
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
+import { estimatePitchYin } from './yinPitch';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -251,6 +252,9 @@ export class BBAudioEngine {
     standardDeviationCents: number;
     transientHoldoff: boolean;
     highInputLevel: boolean;
+    yinFrequencyHz: number | null;
+    yinClarity: number;
+    yinAgreementCents: number | null;
   } {
     const now = Date.now();
 
@@ -265,11 +269,18 @@ export class BBAudioEngine {
         standardDeviationCents: 0,
         transientHoldoff: false,
         highInputLevel: false,
+        yinFrequencyHz: null,
+        yinClarity: 0,
+        yinAgreementCents: null,
       };
     }
 
     this.analyser.getFloatFrequencyData(this.freqData as any);
     this.analyser.getFloatTimeDomainData(this.timeData as any);
+    // Independent time-domain pitch estimate for diagnostic comparison with the FFT tracker.
+    // Use a recent 8192-sample window to keep the work bounded on mobile devices.
+    const yinWindow = this.timeData.subarray(Math.max(0, this.timeData.length - 8192));
+    const yinEstimate = estimatePitchYin(yinWindow, this.sampleRate, { minHz: 60, maxHz: 1000, downsampleFactor: 4 });
 
     // Compute RMS input level and dB
     let sumSquares = 0;
@@ -369,6 +380,11 @@ export class BBAudioEngine {
       standardDeviationCents,
       transientHoldoff,
       highInputLevel,
+      yinFrequencyHz: yinEstimate.frequencyHz,
+      yinClarity: yinEstimate.clarity,
+      yinAgreementCents: yinEstimate.frequencyHz !== null && alap.measuredHz !== null
+        ? 1200 * Math.log2(yinEstimate.frequencyHz / alap.measuredHz)
+        : null,
     };
   }
 
