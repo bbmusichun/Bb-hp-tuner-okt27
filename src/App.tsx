@@ -143,6 +143,9 @@ export default function App() {
   const [highInputLevel, setHighInputLevel] = useState(false);
   const [sampleRateKhz, setSampleRateKhz] = useState<number | null>(null);
   const [standardDeviationCents, setStandardDeviationCents] = useState(0);
+  const [yinFrequencyHz, setYinFrequencyHz] = useState<number | null>(null);
+  const [yinClarity, setYinClarity] = useState(0);
+  const [yinAgreementCents, setYinAgreementCents] = useState<number | null>(null);
 
   // The 3 resonance measurements
   const [alap, setAlap] = useState<ResonanceMeasurement>({
@@ -251,6 +254,9 @@ export default function App() {
           setHighInputLevel(result.highInputLevel);
           setSampleRateKhz(result.sampleRateKhz);
           setStandardDeviationCents(result.standardDeviationCents);
+          setYinFrequencyHz(result.yinFrequencyHz);
+          setYinClarity(result.yinClarity);
+          setYinAgreementCents(result.yinAgreementCents);
 
           // Always propagate all three channels, including NO_SIGNAL/UNCERTAIN.
           // Never leave stale or demo values on screen after the sound disappears.
@@ -537,7 +543,7 @@ export default function App() {
               hasSignal={hasSignal}
               onSelectPeak={setSelectedRole}
             />
-            <BBSpectrogram active={isListening} alap={alap} oktav={oktav} kvint={kvint} />
+            <BBSpectrogram active={isListening} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
             <BBStabilityGraph
               roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
               hasSignal={hasSignal}
