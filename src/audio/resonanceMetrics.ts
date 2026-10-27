@@ -1,7 +1,7 @@
 export interface FrequencyPeak {
   freq: number;
   magDb: number;
-  bin: number;
+  bin?: number;
 }
 
 export interface FinalizedPeakReading {
