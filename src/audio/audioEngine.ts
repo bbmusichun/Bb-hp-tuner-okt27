@@ -213,17 +213,26 @@ export class BBAudioEngine {
       const fundamental = peakNear(candidate.frequency, 65);
       const octave = peakNear(candidate.frequency * 2, 55);
       const third = peakNear(candidate.frequency * 3, 55);
-      if (!fundamental) return { ...candidate, score: -Infinity, confidence: 0 };
-      // Fundamental dominates; partials corroborate the candidate without requiring all to be loud.
-      const score = fundamental.db + (octave ? Math.max(-18, octave.db - fundamental.db) * 0.28 : -5) + (third ? Math.max(-18, third.db - fundamental.db) * 0.22 : -5);
-      const confidence = Math.max(0, Math.min(1, (fundamental.db + 90) / 45));
-      return { ...candidate, score, confidence };
+      // A weak/missing fundamental is common in struck metal. Allow partials to contribute,
+      // but penalize missing evidence so a loud upper note is not automatically called its subharmonic.
+      const baseDb = fundamental?.db ?? -96;
+      const octaveEvidence = octave ? Math.max(-24, octave.db - baseDb) * 0.22 : -5;
+      const thirdEvidence = third ? Math.max(-24, third.db - baseDb) * 0.18 : -5;
+      const fundamentalEvidence = fundamental ? fundamental.db : -13;
+      const score = fundamentalEvidence + octaveEvidence + thirdEvidence;
+      const confidence = Math.max(0, Math.min(1,
+        (fundamental ? (fundamental.db + 90) / 45 : 0) +
+        (octave ? 0.12 : 0) + (third ? 0.12 : 0)
+      ));
+      return { ...candidate, score, confidence, hasFundamental: Boolean(fundamental), partialCount: Number(Boolean(octave)) + Number(Boolean(third)) };
     }).sort((a, b) => b.score - a.score);
     const best = ranked[0];
     const runnerUp = ranked[1];
-    if (!best || !Number.isFinite(best.score) || best.confidence < 0.18) return null;
-    // Avoid jumping between near-identical scale candidates when evidence is ambiguous.
-    if (runnerUp && Number.isFinite(runnerUp.score) && best.score - runnerUp.score < 2.5) return null;
+    if (!best || best.confidence < 0.18) return null;
+    // Without a detected fundamental, require both partials and a larger margin.
+    if (!best.hasFundamental && best.partialCount < 2) return null;
+    const margin = best.hasFundamental ? 2.5 : 5;
+    if (runnerUp && best.score - runnerUp.score < margin) return null;
     return { id: best.id, noteName: best.noteName, frequency: best.frequency, confidence: best.confidence };
   }
 
