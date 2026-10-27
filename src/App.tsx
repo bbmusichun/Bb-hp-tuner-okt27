@@ -79,6 +79,12 @@ export default function App() {
     };
   }, [selectedNote]);
 
+  // The stability graph and dispersion readout use the same selected resonance.
+  useEffect(() => {
+    bbAudioEngine.setStabilityRole(selectedRole);
+    setStandardDeviationCents(0);
+  }, [selectedRole]);
+
   // Stability samples belong to a single selected note; don't mix different targets.
   const previousNoteIdRef = useRef(selectedNote.id);
   useEffect(() => {
