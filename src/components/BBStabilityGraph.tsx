@@ -15,6 +15,8 @@ export const BBStabilityGraph: React.FC<Props> = ({
   standardDeviationCents,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const latestPropsRef = useRef({ hasSignal, currentCents });
+  latestPropsRef.current = { hasSignal, currentCents };
 
   useEffect(() => {
     let animId = 0;
@@ -25,6 +27,7 @@ export const BBStabilityGraph: React.FC<Props> = ({
 
     function render() {
       if (!ctx || !canvas) return;
+      const latest = latestPropsRef.current;
       const w = canvas.width;
       const h = canvas.height;
 
@@ -113,12 +116,12 @@ export const BBStabilityGraph: React.FC<Props> = ({
           started = true;
           previousX = x;
         }
-        ctx.strokeStyle = hasSignal ? '#00e5ff' : '#0284c7';
+        ctx.strokeStyle = latest.hasSignal ? '#00e5ff' : '#0284c7';
         ctx.lineWidth = 1.6;
         ctx.stroke();
         const last = recentHistory[recentHistory.length - 1];
         const lastAge = now - last.timestamp;
-        if (hasSignal && lastAge < 2500) {
+        if (latest.hasSignal && lastAge < 2500) {
           const lastClamped = Math.max(-5, Math.min(5, last.cents));
           const lastY = centerY - (lastClamped / 5) * (plotH / 2);
           const lastX = padL + (1 - lastAge / tenSec) * plotW;
@@ -134,7 +137,7 @@ export const BBStabilityGraph: React.FC<Props> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [hasSignal, currentCents]);
+  }, []);
 
   return (
     <div className="w-full bg-[#0b0f14] rounded-xl border border-white/5 overflow-hidden shadow-lg p-2.5 my-1">
