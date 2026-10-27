@@ -528,6 +528,7 @@ export default function App() {
               logs={logs}
               onClearLogs={() => setLogs([])}
               onCapture={handleCaptureSnapshot}
+              canCapture={[alap, kvint, oktav].every((m) => m.status === 'valid' && m.measuredHz !== null && m.deviationCents !== null)}
               hasSignal={hasSignal}
             />
           </div>
