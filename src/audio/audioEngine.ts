@@ -35,7 +35,7 @@ export class BBAudioEngine {
   // Pitch stability history (rolling 10 seconds)
   private stabilityHistory: { timestamp: number; cents: number; valid: boolean }[] = [];
   private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
-  private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
+  private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; targetHz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
   private pitchHistory: Record<'fundamental' | 'fifth' | 'octave', PitchSample[]> = { fundamental: [], fifth: [], octave: [] };
 
   // Tone generator for audio reference
@@ -431,6 +431,7 @@ export class BBAudioEngine {
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
         hz: currentPeak.freq,
+        targetHz,
         cents,
         amplitudeDb: currentPeak.magDb,
         confidence,
@@ -438,7 +439,11 @@ export class BBAudioEngine {
       };
     }
     const cached = this.lastValidResonances[role];
-    const cachedIsFresh = cached !== undefined && now - cached.timestampMs <= 2500;
+    // A held reading is only reusable for the exact same target. When AUTO changes
+    // notes, never show the previous note's frequency/cents against the new target.
+    const sameTarget = cached !== undefined && Number.isFinite(targetHz) && targetHz > 0 &&
+      Math.abs(1200 * Math.log2(cached.targetHz / targetHz)) <= 0.5;
+    const cachedIsFresh = sameTarget && cached !== undefined && now - cached.timestampMs <= 2500;
 
     return {
       role,
