@@ -31,8 +31,8 @@ export const BBMeresekView: React.FC<Props> = ({
       l.overallInTune ? 'TRUE' : 'FALSE',
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = [headers.join(','), ...rows.map((row) => row.map((value) => '"' + String(value).replace(/"/g, '""') + '"').join(','))].join('\n');
+    const encodedUri = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     link.setAttribute('download', `BB_Tuner_Measurements_${Date.now()}.csv`);
