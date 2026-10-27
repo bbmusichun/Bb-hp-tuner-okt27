@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { analyzeWavRecording, downmixChannels, WavFrameAnalysis } from '../audio/wavAnalysis';
 
 const TARGETS = [
@@ -29,6 +29,7 @@ export default function ReferenceWavBench() {
   const [frames, setFrames] = useState<WavFrameAnalysis[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const audioDataRef = useRef<{ samples: Float32Array; sampleRate: number } | null>(null);
 
   const target = TARGETS[targetIndex];
   const summary = [1, 2, 3].map((multiplier) => {
@@ -42,6 +43,7 @@ export default function ReferenceWavBench() {
     setError('');
     setBusy(true);
     setFrames([]);
+    audioDataRef.current = null;
     setFileName(file.name);
     try {
       if (!/\.wav$/i.test(file.name) && !file.type.includes('wav') && !file.type.includes('wave')) {
@@ -52,6 +54,7 @@ export default function ReferenceWavBench() {
         const decoded = await context.decodeAudioData(await file.arrayBuffer());
         const channels = Array.from({ length: decoded.numberOfChannels }, (_, i) => decoded.getChannelData(i));
         const mono = downmixChannels(channels);
+        audioDataRef.current = { samples: mono, sampleRate: decoded.sampleRate };
         const result = analyzeWavRecording(mono, decoded.sampleRate, {
           fftSize: 16384,
           hopSize: 8192,
@@ -67,6 +70,7 @@ export default function ReferenceWavBench() {
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'A WAV fájl feldolgozása sikertelen.');
+      audioDataRef.current = null;
       setDuration(null);
       setSampleRate(null);
       setFrames([]);
@@ -109,7 +113,7 @@ export default function ReferenceWavBench() {
         <h2 className="font-semibold">1. Referenciafelvétel betöltése</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm text-slate-300">Alaphang célértéke
-            <select value={targetIndex} onChange={(event) => setTargetIndex(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
+            <select value={targetIndex} disabled={busy} onChange={(event) => { const nextIndex = Number(event.target.value); setTargetIndex(nextIndex); const audio = audioDataRef.current; if (audio) setFrames(analyzeWavRecording(audio.samples, audio.sampleRate, { fftSize: 16384, hopSize: 8192, targetHz: TARGETS[nextIndex].hz, peakFloorDb: -82 })); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
               {TARGETS.map((item, index) => <option key={item.label} value={index}>{item.label} · {item.hz.toFixed(6)} Hz</option>)}
             </select>
           </label>
