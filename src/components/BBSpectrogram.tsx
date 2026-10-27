@@ -99,8 +99,8 @@ export const BBSpectrogram: React.FC<Props> = ({ active, alap, oktav, kvint }) =
             ctx.textAlign = 'right';
             ctx.fillText(cents === 0 ? '0 c' : `${cents > 0 ? '+' : ''}${Math.round(cents)}`, left - 8, y);
           }
-          for (let sec = 0; sec <= WINDOW_SECONDS; sec++) {
-            const x = left + (sec / WINDOW_SECONDS) * plotW;
+          for (let sec = 0; sec <= windowSeconds; sec++) {
+            const x = left + (sec / windowSeconds) * plotW;
             ctx.strokeStyle = '#1a2a40';
             ctx.setLineDash([3, 4]);
             ctx.beginPath(); ctx.moveTo(x, rowTop); ctx.lineTo(x, rowTop + rowH); ctx.stroke();
