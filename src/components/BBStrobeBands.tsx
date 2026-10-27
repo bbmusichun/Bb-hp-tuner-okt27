@@ -23,6 +23,7 @@ export const BBStrobeBands: React.FC<Props> = ({
   // Time-integrated phases for each band
   const phasesRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
   const lastTimeRef = useRef<number>(performance.now());
+  const lastMeasurementTimeRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
 
   // Smoothed deviation cents
   const smoothCentsRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
@@ -47,30 +48,36 @@ export const BBStrobeBands: React.FC<Props> = ({
       const rowHeight = (h - 8) / 3; // 3 rows with 4px gap
 
       // Smooth cents toward measured values
-      const targetCentsAlap = hasSignal && alap.deviationCents !== null ? alap.deviationCents : 0;
-      const targetCentsKvint = hasSignal && kvint.deviationCents !== null ? kvint.deviationCents : 0;
-      const targetCentsOktav = hasSignal && oktav.deviationCents !== null ? oktav.deviationCents : 0;
+      const targetCentsAlap = hasSignal && alap.status === 'valid' && alap.deviationCents !== null ? alap.deviationCents : 0;
+      const targetCentsKvint = hasSignal && kvint.status === 'valid' && kvint.deviationCents !== null ? kvint.deviationCents : 0;
+      const targetCentsOktav = hasSignal && oktav.status === 'valid' && oktav.deviationCents !== null ? oktav.deviationCents : 0;
 
       smoothCentsRef.current.alap += (targetCentsAlap - smoothCentsRef.current.alap) * 0.15;
       smoothCentsRef.current.kvint += (targetCentsKvint - smoothCentsRef.current.kvint) * 0.15;
       smoothCentsRef.current.oktav += (targetCentsOktav - smoothCentsRef.current.oktav) * 0.15;
 
-      // Integrate phase: speed proportional to cents
+      // Integrate phase from the latest valid measurement, with one consistent display scale.
+      // Speed sign follows detuning: sharp right, flat left; the scale is visual, not a physical beat simulation.
       // When cents = 0, speed = 0 (perfect standstill)
       // Positive cents = moves right, Negative cents = moves left
       // Strobe drift follows the physical frequency difference (beat rate), not a
       // cents-only linear scale: Δf = f_target * (2^(cents/1200) - 1).
-      const beatDeltaHz = (targetHz: number, cents: number) =>
-        targetHz * (Math.pow(2, cents / 1200) - 1);
-      if (hasSignal && alap.status === 'valid' && alap.deviationCents !== null) {
-        phasesRef.current.alap += beatDeltaHz(alap.targetHz ?? 146.83, smoothCentsRef.current.alap) * 40 * dt;
-      }
-      if (hasSignal && kvint.status === 'valid' && kvint.deviationCents !== null) {
-        phasesRef.current.kvint += beatDeltaHz(kvint.targetHz ?? 220.25, smoothCentsRef.current.kvint) * 68 * dt;
-      }
-      if (hasSignal && oktav.status === 'valid' && oktav.deviationCents !== null) {
-        phasesRef.current.oktav += beatDeltaHz(oktav.targetHz ?? 293.66, smoothCentsRef.current.oktav) * 108 * dt;
-      }
+      const validAlap = hasSignal && alap.status === 'valid' && alap.deviationCents !== null && Number.isFinite(alap.deviationCents);
+      const validKvint = hasSignal && kvint.status === 'valid' && kvint.deviationCents !== null && Number.isFinite(kvint.deviationCents);
+      const validOktav = hasSignal && oktav.status === 'valid' && oktav.deviationCents !== null && Number.isFinite(oktav.deviationCents);
+      if (validAlap) lastMeasurementTimeRef.current.alap = currentTime;
+      if (validKvint) lastMeasurementTimeRef.current.kvint = currentTime;
+      if (validOktav) lastMeasurementTimeRef.current.oktav = currentTime;
+      const integrate = (valid: boolean, lastTime: number, cents: number, key: 'alap' | 'kvint' | 'oktav') => {
+        const stale = !valid && currentTime - lastTime > 250;
+        if (stale) return;
+        // Same cents-to-pixel-speed scale for all three tracks keeps their motion comparable.
+        const speed = Math.max(-180, Math.min(180, cents * 5.5));
+        phasesRef.current[key] += speed * dt;
+      };
+      integrate(validAlap, lastMeasurementTimeRef.current.alap, smoothCentsRef.current.alap, 'alap');
+      integrate(validKvint, lastMeasurementTimeRef.current.kvint, smoothCentsRef.current.kvint, 'kvint');
+      integrate(validOktav, lastMeasurementTimeRef.current.oktav, smoothCentsRef.current.oktav, 'oktav');
 
       ctx.clearRect(0, 0, w, h);
 
@@ -158,8 +165,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         ctx.fillRect(0, y, w, rowHeight);
 
         // 2. Alternating red stripes
-        const isNearZero = isConfirmedGreen;
-        const stripeBase = isConfirmedGreen ? '#147a48' : isNearButUnconfirmed ? '#a36b16' : redColor;
+          const stripeBase = isConfirmedGreen ? '#147a48' : isNearButUnconfirmed ? '#a36b16' : redColor;
         const stripeLight = isConfirmedGreen ? '#31d889' : isNearButUnconfirmed ? '#e4ad43' : redLightColor;
         ctx.fillStyle = stripeBase;
 
