@@ -1,6 +1,21 @@
 import React, { useRef, useState } from 'react';
 import { analyzeWavRecording, downmixChannels, WavFrameAnalysis } from '../audio/wavAnalysis';
 
+type ChannelMode = 'strongest' | 'average' | 'left' | 'right';
+
+function selectAnalysisChannel(channels: Float32Array[], mode: ChannelMode): Float32Array {
+  if (mode === 'average' || channels.length === 1) return downmixChannels(channels);
+  if (mode === 'left') return channels[0];
+  if (mode === 'right') return channels[1] ?? channels[0];
+  const rms = channels.map((channel) => {
+    let sum = 0;
+    for (let i = 0; i < channel.length; i++) sum += channel[i] * channel[i];
+    return sum / Math.max(1, channel.length);
+  });
+  const strongestIndex = rms.indexOf(Math.max(...rms));
+  return channels[strongestIndex] ?? downmixChannels(channels);
+}
+
 const TARGETS = [
   { label: 'D3', hz: 146.832384 },
   { label: 'A3', hz: 220 },
@@ -23,13 +38,23 @@ function median(values: number[]): number | null {
 
 export default function ReferenceWavBench() {
   const [targetIndex, setTargetIndex] = useState(0);
+  const [channelMode, setChannelMode] = useState<ChannelMode>('strongest');
   const [fileName, setFileName] = useState('');
   const [duration, setDuration] = useState<number | null>(null);
   const [sampleRate, setSampleRate] = useState<number | null>(null);
   const [frames, setFrames] = useState<WavFrameAnalysis[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const audioDataRef = useRef<{ samples: Float32Array; sampleRate: number } | null>(null);
+  const audioDataRef = useRef<{ channels: Float32Array[]; sampleRate: number } | null>(null);
+
+  const analyzeLoadedAudio = (targetHz: number, mode: ChannelMode) => {
+    const audio = audioDataRef.current;
+    if (!audio) return;
+    const samples = selectAnalysisChannel(audio.channels, mode);
+    setFrames(analyzeWavRecording(samples, audio.sampleRate, {
+      fftSize: 16384, hopSize: 8192, targetHz, peakFloorDb: -82,
+    }));
+  };
 
   const target = TARGETS[targetIndex];
   const summary = [1, 2, 3].map((multiplier) => {
@@ -53,8 +78,8 @@ export default function ReferenceWavBench() {
       try {
         const decoded = await context.decodeAudioData(await file.arrayBuffer());
         const channels = Array.from({ length: decoded.numberOfChannels }, (_, i) => decoded.getChannelData(i));
-        const mono = downmixChannels(channels);
-        audioDataRef.current = { samples: mono, sampleRate: decoded.sampleRate };
+        audioDataRef.current = { channels, sampleRate: decoded.sampleRate };
+        const mono = selectAnalysisChannel(channels, channelMode);
         const result = analyzeWavRecording(mono, decoded.sampleRate, {
           fftSize: 16384,
           hopSize: 8192,
@@ -115,6 +140,14 @@ export default function ReferenceWavBench() {
           <label className="text-sm text-slate-300">Alaphang célértéke
             <select value={targetIndex} disabled={busy} onChange={(event) => { const nextIndex = Number(event.target.value); setTargetIndex(nextIndex); const audio = audioDataRef.current; if (audio) setFrames(analyzeWavRecording(audio.samples, audio.sampleRate, { fftSize: 16384, hopSize: 8192, targetHz: TARGETS[nextIndex].hz, peakFloorDb: -82 })); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
               {TARGETS.map((item, index) => <option key={item.label} value={index}>{item.label} · {item.hz.toFixed(6)} Hz</option>)}
+            </select>
+          </label>
+          <label className="text-sm text-slate-300">Csatornakezelés
+            <select value={channelMode} disabled={busy} onChange={(event) => { const nextMode = event.target.value as ChannelMode; setChannelMode(nextMode); analyzeLoadedAudio(target.hz, nextMode); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
+              <option value="strongest">Erősebb csatorna (alapértelmezett)</option>
+              <option value="average">Bal + jobb átlaga</option>
+              <option value="left">Bal csatorna</option>
+              <option value="right">Jobb csatorna</option>
             </select>
           </label>
           <label className="text-sm text-slate-300">WAV-fájl
