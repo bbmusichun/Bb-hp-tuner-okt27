@@ -75,8 +75,18 @@ export class BBAudioEngine {
       return true;
     } catch (err: unknown) {
       console.error('Microphone error:', err);
+      this.microphoneStream?.getTracks().forEach((track) => track.stop());
+      this.microphoneStream = null;
+      this.sourceNode?.disconnect();
+      this.sourceNode = null;
+      this.analyser = null;
       this.micState = 'error';
-      this.errorMessage = err instanceof Error ? err.message : 'Nem sikerült hozzáférni a mikrofonhoz';
+      const name = err instanceof DOMException ? err.name : '';
+      this.errorMessage = name === 'NotAllowedError' || name === 'SecurityError'
+        ? 'A mikrofonhoz nincs engedély. Engedélyezd a mikrofont a böngésző beállításaiban, és HTTPS-kapcsolaton nyisd meg az alkalmazást.'
+        : name === 'NotFoundError'
+        ? 'Nem található mikrofon ezen az eszközön.'
+        : err instanceof Error ? err.message : 'Nem sikerült hozzáférni a mikrofonhoz';
       return false;
     }
   }
