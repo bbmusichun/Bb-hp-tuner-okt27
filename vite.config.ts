@@ -6,6 +6,7 @@ import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   return {
+    base: '/Bb-hp-tuner-okt27/',
     plugins: [
       react(),
       tailwindcss(),
@@ -13,30 +14,30 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
-          id: '/',
+          id: '/Bb-hp-tuner-okt27/',
           name: 'Resonix Handpan Tuner & Acoustic Lab',
           short_name: 'Resonix',
           description: 'Precision multi-partial Handpan Tuner & Acoustic Spectral Analyzer',
           theme_color: '#0d1117',
           background_color: '#090d16',
           display: 'standalone',
-          start_url: '/',
-          scope: '/',
+          start_url: '/Bb-hp-tuner-okt27/',
+          scope: '/Bb-hp-tuner-okt27/',
           icons: [
             {
-              src: '/pwa-192x192.png',
+              src: '/Bb-hp-tuner-okt27/pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-512x512.png',
+              src: '/Bb-hp-tuner-okt27/pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: '/pwa-maskable-512x512.png',
+              src: '/Bb-hp-tuner-okt27/pwa-maskable-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
