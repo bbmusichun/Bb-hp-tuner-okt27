@@ -9,6 +9,7 @@ import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 import { isTransientHoldoffActive } from './transientGuard';
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
+import { isSameMeasurementTarget } from './measurementCache';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -441,8 +442,7 @@ export class BBAudioEngine {
     const cached = this.lastValidResonances[role];
     // A held reading is only reusable for the exact same target. When AUTO changes
     // notes, never show the previous note's frequency/cents against the new target.
-    const sameTarget = cached !== undefined && Number.isFinite(targetHz) && targetHz > 0 &&
-      Math.abs(1200 * Math.log2(cached.targetHz / targetHz)) <= 0.5;
+    const sameTarget = cached !== undefined && isSameMeasurementTarget(cached.targetHz, targetHz);
     const cachedIsFresh = sameTarget && cached !== undefined && now - cached.timestampMs <= 2500;
 
     return {
