@@ -50,6 +50,40 @@ describe('offline WAV resonance analysis', () => {
     ));
   });
 
+  it('identifies a synthetic tone field as rooted at the analysed fundamental', () => {
+    const samples = new Float32Array(FFT_SIZE);
+    for (let i = 0; i < samples.length; i++) {
+      const t = i / RATE;
+      samples[i] = 0.5 * Math.sin(2 * Math.PI * D3 * t)
+        + 0.25 * Math.sin(2 * Math.PI * D3 * 2 * t)
+        + 0.15 * Math.sin(2 * Math.PI * D3 * 3 * t);
+    }
+    const result = analyzeWavWindow(samples, RATE);
+    assert.ok(result?.identifiability);
+    assert.equal(result.identifiability.status, 'identified');
+    assert.deepEqual(result.identifiability.reasons, []);
+  });
+
+  it('does not identify a bare sine as a handpan fundamental and flags the octave error', () => {
+    const lone = analyzeWavWindow(sine(D3, FFT_SIZE), RATE);
+    assert.ok(lone?.identifiability);
+    assert.equal(lone.identifiability.status, 'unidentified');
+    assert.ok(lone.identifiability.reasons.includes('missing-octave'));
+
+    // Analysed one octave too high: the true D3 sits at candidate / 2 with more energy.
+    const samples = new Float32Array(FFT_SIZE);
+    for (let i = 0; i < samples.length; i++) {
+      const t = i / RATE;
+      samples[i] = 0.5 * Math.sin(2 * Math.PI * D3 * t)
+        + 0.25 * Math.sin(2 * Math.PI * D3 * 2 * t)
+        + 0.15 * Math.sin(2 * Math.PI * D3 * 3 * t);
+    }
+    const octaveLock = analyzeWavWindow(samples, RATE, { targetHz: D3 * 2 });
+    assert.ok(octaveLock?.identifiability);
+    assert.notEqual(octaveLock.identifiability.status, 'identified');
+    assert.ok(octaveLock.identifiability.reasons.includes('strong-subharmonic'));
+  });
+
   it('rejects invalid FFT sizes and sample rates', () => {
     assert.equal(analyzeWavWindow(sine(D3, FFT_SIZE), RATE, { fftSize: 1000 }), null);
     assert.equal(analyzeWavWindow(sine(D3, FFT_SIZE), 0), null);

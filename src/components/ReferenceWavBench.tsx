@@ -5,6 +5,11 @@ import {
   MeasurementQualityStatus,
   summarizeWavPartial,
 } from '../audio/measurementQuality';
+import {
+  IdentifiabilityReason,
+  IdentifiabilityStatus,
+  summarizeFundamentalIdentifiability,
+} from '../audio/fundamentalIdentifiability';
 
 type ChannelMode = 'strongest' | 'average' | 'left' | 'right';
 
@@ -55,6 +60,26 @@ const QUALITY_REASON_LABEL: Record<MeasurementQualityReason, string> = {
   'low-prominence': 'alacsony helyi kiemelkedés',
 };
 
+const IDENTIFIABILITY_LABEL: Record<IdentifiabilityStatus, string> = {
+  identified: 'alaphang azonosítva',
+  ambiguous: 'bizonytalan alaphang',
+  unidentified: 'alaphang nem azonosítható',
+};
+
+const IDENTIFIABILITY_CLASS: Record<IdentifiabilityStatus, string> = {
+  identified: 'text-emerald-300',
+  ambiguous: 'text-amber-300',
+  unidentified: 'text-rose-300',
+};
+
+const IDENTIFIABILITY_REASON_LABEL: Record<IdentifiabilityReason, string> = {
+  'no-fundamental': 'nincs alaphang-csúcs',
+  'strong-subharmonic': 'a céllal összemérhető mélyebb gyökér (oktávhiba)',
+  'missing-octave': 'hiányzó oktáv részfelhang',
+  'missing-twelfth': 'hiányzó tizenketted részfelhang',
+  'inconsistent-octave': 'az oktáv nem a mért alaphang 2×-án van',
+};
+
 export default function ReferenceWavBench() {
   const [targetIndex, setTargetIndex] = useState(0);
   const [channelMode, setChannelMode] = useState<ChannelMode>('strongest');
@@ -80,6 +105,7 @@ export default function ReferenceWavBench() {
     const partial = summarizeWavPartial(frames, multiplier);
     return { ...partial, targetHz: partial.targetHz || target.hz * multiplier };
   });
+  const identifiability = summarizeFundamentalIdentifiability(frames);
 
   const loadFile = async (file?: File) => {
     if (!file) return;
@@ -123,9 +149,9 @@ export default function ReferenceWavBench() {
   };
 
   const exportCsv = () => {
-    const header = 'channelMode,timeSeconds,rmsDb,target1Hz,measured1Hz,cents1,quality1,peak1Db,prominence1Db,target2Hz,measured2Hz,cents2,quality2,peak2Db,prominence2Db,target3Hz,measured3Hz,cents3,quality3,peak3Db,prominence3Db';
+    const header = 'channelMode,timeSeconds,rmsDb,identifiability,target1Hz,measured1Hz,cents1,quality1,peak1Db,prominence1Db,target2Hz,measured2Hz,cents2,quality2,peak2Db,prominence2Db,target3Hz,measured3Hz,cents3,quality3,peak3Db,prominence3Db';
     const rows = frames.map((frame) => [
-      channelMode, frame.timeSeconds, frame.rmsDb,
+      channelMode, frame.timeSeconds, frame.rmsDb, frame.identifiability?.status ?? '',
       ...frame.resonances.flatMap((r, index) => [
         r.targetHz, r.measuredHz ?? '', r.cents ?? '',
         summary[index].quality.status,
@@ -196,6 +222,15 @@ export default function ReferenceWavBench() {
               <p className="mt-1 text-xs text-slate-500">{item.measuredWindows} érvényes ablak / {frames.length}</p>
             </article>)}
           </div>
+          <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="font-semibold">Alaphang azonosíthatósága (harmonikus szerkezet)</h3>
+              <p className={'text-sm font-semibold ' + IDENTIFIABILITY_CLASS[identifiability.status]}>{IDENTIFIABILITY_LABEL[identifiability.status]}</p>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{identifiability.identifiedWindows} azonosított / {identifiability.windows} ablak · {identifiability.ambiguousWindows} bizonytalan · {identifiability.unidentifiedWindows} nem azonosítható</p>
+            {identifiability.reasons.length > 0 && <p className="mt-1 text-xs text-slate-500">Korlát: {identifiability.reasons.map((reason) => IDENTIFIABILITY_REASON_LABEL[reason]).join(', ')}</p>}
+            <p className="mt-2 text-sm leading-6 text-slate-400">Az ellenőrzés azt vizsgálja, hogy az elemzett cél valóban egy felhangsort megalapozó alaphang-e: megvan-e az oktáv (2×) és a tizenketted (3×), és nincs-e a célnál összemérhető erősségű mélyebb gyökér (a klasszikus oktávhiba). Egyetlen csúcs önmagában nem alaphang.</p>
+          </article>
           <p className="rounded-xl border border-amber-500/20 bg-amber-950/10 p-3 text-sm leading-6 text-amber-100">A mérésminőség a csúcs szintjét, a helyi kiemelkedést, az érvényes ablakok arányát és a szóródást együtt értékeli; a küszöbök mérnöki kritériumok, nem hitelesített bizonytalanság. A MAD a centeltérések ablakok közötti robusztus szóródását jelzi; nem műszeres mérési bizonytalanság. A medián a felvétel spektrumcsúcsainak diagnosztikai összegzése, nem hitelesített hangolási eredmény. A harmadik részfelhang célértéke 3× alaphang; nem azonos automatikusan az egyenletes temperálású A4 = 440 Hz céllal.</p>
         </section>
 
