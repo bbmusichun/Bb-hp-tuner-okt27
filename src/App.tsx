@@ -79,6 +79,16 @@ export default function App() {
     };
   }, [selectedNote]);
 
+  // Stability samples belong to a single selected note; don't mix different targets.
+  const previousNoteIdRef = useRef(selectedNote.id);
+  useEffect(() => {
+    if (previousNoteIdRef.current !== selectedNote.id) {
+      bbAudioEngine.resetStabilityHistory();
+      setStandardDeviationCents(0);
+      previousNoteIdRef.current = selectedNote.id;
+    }
+  }, [selectedNote.id]);
+
   // Live Audio Analysis State
   const [isListening, setIsListening] = useState(false);
   const [hasSignal, setHasSignal] = useState(false);
@@ -86,7 +96,7 @@ export default function App() {
   const [transientHoldoff, setTransientHoldoff] = useState(false);
   const [highInputLevel, setHighInputLevel] = useState(false);
   const [sampleRateKhz, setSampleRateKhz] = useState(48);
-  const [standardDeviationCents, setStandardDeviationCents] = useState(1.2);
+  const [standardDeviationCents, setStandardDeviationCents] = useState(0);
 
   // The 3 resonance measurements
   const [alap, setAlap] = useState<ResonanceMeasurement>({
