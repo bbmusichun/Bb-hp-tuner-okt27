@@ -403,7 +403,7 @@ export default function App() {
             <BBStabilityGraph
               roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint' : 'Oktáv'}
               hasSignal={hasSignal}
-              currentCents={activeCents}
+              currentCents={activeCents ?? 0}
               standardDeviationCents={standardDeviationCents}
             />
           </div>
@@ -422,7 +422,7 @@ export default function App() {
             <BBStabilityGraph
               roleName="Alaphang"
               hasSignal={hasSignal}
-              currentCents={activeCents}
+              currentCents={activeCents ?? 0}
               standardDeviationCents={standardDeviationCents}
             />
             <div className="p-3 rounded-xl bg-[#0b0f14] border border-white/5 text-xs text-slate-300">
