@@ -171,13 +171,16 @@ export class BBAudioEngine {
     windowCents: number,
     spectrum: Float32Array
   ): { freq: number; magDb: number; bin: number } | null {
-    return findReliablePeakInSpectrum(
+    const peak = findReliablePeakInSpectrum(
       spectrum,
       this.sampleRate,
       targetFreq,
       windowCents,
       { minDb: -82, minProminenceDb: 6, exclusionBins: 2 },
     );
+    return peak
+      ? { freq: peak.frequencyHz, magDb: peak.magnitudeDb, bin: peak.bin }
+      : null;
   }
 
   /**
