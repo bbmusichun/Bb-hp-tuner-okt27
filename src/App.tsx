@@ -88,39 +88,39 @@ export default function App() {
     role: 'fundamental',
     name: 'Alap',
     noteName: 'D3',
-    measuredHz: 146.83,
+    measuredHz: null,
     targetHz: 146.50,
-    deviationCents: 2.3,
-    amplitudeDb: -28,
-    confidence: 0.95,
+    deviationCents: null,
+    amplitudeDb: null,
+    confidence: 0,
     timestampMs: Date.now(),
-    status: 'valid',
+    status: 'no-signal',
   });
 
   const [kvint, setKvint] = useState<ResonanceMeasurement>({
     role: 'fifth',
     name: 'Kvint',
     noteName: 'A3',
-    measuredHz: 220.21,
+    measuredHz: null,
     targetHz: 220.00,
-    deviationCents: 1.6,
-    amplitudeDb: -42,
-    confidence: 0.9,
+    deviationCents: null,
+    amplitudeDb: null,
+    confidence: 0,
     timestampMs: Date.now(),
-    status: 'valid',
+    status: 'no-signal',
   });
 
   const [oktav, setOktav] = useState<ResonanceMeasurement>({
     role: 'octave',
     name: 'Oktáv',
     noteName: 'D4',
-    measuredHz: 293.66,
+    measuredHz: null,
     targetHz: 293.66,
-    deviationCents: -0.1,
-    amplitudeDb: -36,
-    confidence: 0.92,
+    deviationCents: null,
+    amplitudeDb: null,
+    confidence: 0,
     timestampMs: Date.now(),
-    status: 'valid',
+    status: 'no-signal',
   });
 
   // Measurements Log
@@ -148,11 +148,11 @@ export default function App() {
           setSampleRateKhz(result.sampleRateKhz);
           setStandardDeviationCents(result.standardDeviationCents);
 
-          if (result.hasSignal) {
-            setAlap(result.alap);
-            setKvint(result.kvint);
-            setOktav(result.oktav);
-          }
+          // Always propagate all three channels, including NO_SIGNAL/UNCERTAIN.
+          // Never leave stale or demo values on screen after the sound disappears.
+          setAlap(result.alap);
+          setKvint(result.kvint);
+          setOktav(result.oktav);
         }
       }
 
@@ -185,32 +185,35 @@ export default function App() {
 
   // Capture measurement to logbook
   const handleCaptureSnapshot = () => {
+    if (![alap, kvint, oktav].every((m) => m.status === 'valid' && m.measuredHz !== null && m.deviationCents !== null)) return;
     const newEntry: TuningLogEntry = {
       id: `log_${Date.now()}`,
       timestamp: Date.now(),
       noteName: selectedNote.noteName,
-      fundamentalHz: alap.measuredHz || selectedNote.frequency,
-      fundamentalCents: alap.deviationCents || 0,
-      fifthHz: kvint.measuredHz || selectedNote.fifthFreq,
-      fifthCents: kvint.deviationCents || 0,
-      octaveHz: oktav.measuredHz || selectedNote.octaveFreq,
-      octaveCents: oktav.deviationCents || 0,
+      fundamentalHz: alap.measuredHz!,
+      fundamentalCents: alap.deviationCents!,
+      fifthHz: kvint.measuredHz!,
+      fifthCents: kvint.deviationCents!,
+      octaveHz: oktav.measuredHz!,
+      octaveCents: oktav.deviationCents!,
       overallInTune:
-        Math.abs(alap.deviationCents || 0) <= 3 &&
-        Math.abs(kvint.deviationCents || 0) <= 3 &&
-        Math.abs(oktav.deviationCents || 0) <= 3,
+        Math.abs(alap.deviationCents!) <= 3 &&
+        Math.abs(kvint.deviationCents!) <= 3 &&
+        Math.abs(oktav.deviationCents!) <= 3,
     };
     setLogs((prev) => [newEntry, ...prev]);
   };
 
   // Determine active resonance details for Section B header
   const activeResonance = selectedRole === 'fundamental' ? alap : selectedRole === 'fifth' ? kvint : oktav;
-  const activeCents = activeResonance.deviationCents !== null ? activeResonance.deviationCents : 0;
-  const isNearTune = Math.abs(activeCents) <= 3.0;
+  const activeCents = activeResonance.deviationCents;
+  const isNearTune = activeResonance.status === 'valid' && activeCents !== null && Math.abs(activeCents) <= 3.0;
 
   // Textual assessment (e.g. "(kissé magas)", "(kissé mély)", "(pontos)")
   const assessmentText = !hasSignal
     ? ''
+    : activeResonance.status !== 'valid' || activeCents === null
+    ? '(nem mérhető biztosan)'
     : isNearTune
     ? '(pontos)'
     : activeCents > 0
@@ -325,7 +328,7 @@ export default function App() {
                       isNearTune ? 'text-[#10b981]' : Math.abs(activeCents) > 10 ? 'text-[#f43f5e]' : 'text-[#f59e0b]'
                     }`}
                   >
-                    {hasSignal ? `${activeCents > 0 ? '+' : ''}${activeCents.toFixed(1)} cent` : '0.0 cent'}
+                    {activeCents !== null && activeResonance.status === 'valid' ? `${activeCents > 0 ? '+' : ''}${activeCents.toFixed(1)} cent` : '— cent'}
                   </div>
                   <div className="text-[11px] text-slate-400 font-medium">
                     {assessmentText}
