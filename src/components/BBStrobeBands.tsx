@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
+import { tuningToleranceCents } from '../audio/tuningTolerance';
 
 interface Props {
   alap: ResonanceMeasurement;
@@ -127,8 +128,8 @@ export const BBStrobeBands: React.FC<Props> = ({
       rows.forEach((row, idx) => {
         const now = currentTime;
         const key = row.key as 'alap' | 'kvint' | 'oktav';
-        // Practical psychoacoustic display bands (not a claim that JND equals this value).
-        const toleranceCents = row.targetHz < 180 ? 1.5 : row.targetHz < 260 ? 2.0 : 3.0;
+        // Smooth frequency-dependent product threshold; not presented as a proven JND model.
+        const toleranceCents = tuningToleranceCents(row.targetHz);
         const inTolerance = row.isValid && Number.isFinite(row.cents) && Math.abs(row.cents) <= toleranceCents;
         if (inTolerance) {
           if (greenSinceRef.current[key] === null) greenSinceRef.current[key] = now;
