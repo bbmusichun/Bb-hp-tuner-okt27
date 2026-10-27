@@ -368,6 +368,10 @@ export class BBAudioEngine {
     };
   }
 
+  public resetStabilityHistory(): void {
+    this.stabilityHistory = [];
+  }
+
   public getStabilityHistory(): { timestamp: number; cents: number; valid: boolean }[] {
     return this.stabilityHistory;
   }
