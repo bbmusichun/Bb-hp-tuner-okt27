@@ -5,7 +5,7 @@
 
 export type ResonanceRole = 'fundamental' | 'fifth' | 'octave';
 
-export type MeasurementStatus = 'valid' | 'uncertain' | 'no-signal';
+export type MeasurementStatus = 'valid' | 'uncertain' | 'held' | 'no-signal';
 
 export interface ResonanceMeasurement {
   role: ResonanceRole;

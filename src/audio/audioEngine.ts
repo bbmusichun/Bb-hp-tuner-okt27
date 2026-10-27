@@ -7,6 +7,8 @@
 import { ResonanceMeasurement, MicState } from '../types/tuner';
 import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 import { isTransientHoldoffActive } from './transientGuard';
+import { PitchSample, smoothPitchSample } from './pitchSmoothing';
+import { estimatePitchYin } from './yinPitch';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -34,6 +36,7 @@ export class BBAudioEngine {
   private stabilityHistory: { timestamp: number; cents: number; valid: boolean }[] = [];
   private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
   private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
+  private pitchHistory: Record<'fundamental' | 'fifth' | 'octave', PitchSample[]> = { fundamental: [], fifth: [], octave: [] };
 
   // Tone generator for audio reference
   private toneOsc: OscillatorNode | null = null;
@@ -116,6 +119,8 @@ export class BBAudioEngine {
     this.transientDetected = false;
     this.transientHoldoff = false;
     this.stabilityHistory = [];
+    this.lastValidResonances = {};
+    this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
   }
 
   public getMicState(): MicState {
@@ -247,6 +252,9 @@ export class BBAudioEngine {
     standardDeviationCents: number;
     transientHoldoff: boolean;
     highInputLevel: boolean;
+    yinFrequencyHz: number | null;
+    yinClarity: number;
+    yinAgreementCents: number | null;
   } {
     const now = Date.now();
 
@@ -261,11 +269,18 @@ export class BBAudioEngine {
         standardDeviationCents: 0,
         transientHoldoff: false,
         highInputLevel: false,
+        yinFrequencyHz: null,
+        yinClarity: 0,
+        yinAgreementCents: null,
       };
     }
 
     this.analyser.getFloatFrequencyData(this.freqData as any);
     this.analyser.getFloatTimeDomainData(this.timeData as any);
+    // Independent time-domain pitch estimate for diagnostic comparison with the FFT tracker.
+    // Use a recent 8192-sample window to keep the work bounded on mobile devices.
+    const yinWindow = this.timeData.subarray(Math.max(0, this.timeData.length - 8192));
+    const yinEstimate = estimatePitchYin(yinWindow, this.sampleRate, { minHz: 60, maxHz: 1000, downsampleFactor: 4 });
 
     // Compute RMS input level and dB
     let sumSquares = 0;
@@ -298,10 +313,10 @@ export class BBAudioEngine {
 
     // Search for the 3 resonances:
     // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const fPeak = transientHoldoff ? null : this.findPeakInWindow(targetFundamentalHz, 240, this.freqData);
+    const fPeak = transientHoldoff ? null : this.findPeakInWindow(targetFundamentalHz, 150, this.freqData);
     // Search each resonance independently to reduce masking by a dominant fundamental.
-    const qPeak = transientHoldoff ? null : this.findPeakInWindow(targetFifthHz, 240, this.freqData);
-    const oPeak = transientHoldoff ? null : this.findPeakInWindow(targetOctaveHz, 240, this.freqData);
+    const qPeak = transientHoldoff ? null : this.findPeakInWindow(targetFifthHz, 150, this.freqData);
+    const oPeak = transientHoldoff ? null : this.findPeakInWindow(targetOctaveHz, 150, this.freqData);
 
     // Construct measurements
     const alap = this.buildResonanceMeasurement(
@@ -365,6 +380,11 @@ export class BBAudioEngine {
       standardDeviationCents,
       transientHoldoff,
       highInputLevel,
+      yinFrequencyHz: yinEstimate.frequencyHz,
+      yinClarity: yinEstimate.clarity,
+      yinAgreementCents: yinEstimate.frequencyHz !== null && alap.measuredHz !== null
+        ? 1200 * Math.log2(yinEstimate.frequencyHz / alap.measuredHz)
+        : null,
     };
   }
 
@@ -380,7 +400,7 @@ export class BBAudioEngine {
   }
 
   public getStabilityHistory(): { timestamp: number; cents: number; valid: boolean }[] {
-    return this.stabilityHistory;
+    return this.stabilityHistory.map((point) => ({ ...point }));
   }
 
   private buildResonanceMeasurement(
@@ -392,36 +412,45 @@ export class BBAudioEngine {
     now: number,
     hasSignal: boolean
   ): ResonanceMeasurement {
-    const cents = peak ? 1200 * Math.log2(peak.freq / targetHz) : null;
-    const confidence = peak ? Math.max(0, Math.min(1, (peak.magDb + 100) / 65)) : 0;
-    // A missing frame can briefly occur between FFT updates. Preserve the last good
-    // numerical reading for up to 250 ms to prevent UI flicker, but keep status no-signal
-    // so the interface never claims a stale reading is currently live.
-    const status = !hasSignal || !peak ? 'no-signal'
-      : confidence > 0.25 && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain';
-    if (status === 'valid' && peak && cents !== null) {
+    // Never accept a spectral peak when the time-domain gate says there is no usable signal.
+    const rawPeak = hasSignal ? peak : null;
+    let currentPeak = rawPeak;
+    if (rawPeak) {
+      const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now);
+      this.pitchHistory[role] = smoothed.history;
+      currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
+    }
+    const cents = currentPeak ? 1200 * Math.log2(currentPeak.freq / targetHz) : null;
+    const confidence = currentPeak ? Math.max(0, Math.min(1, (currentPeak.magDb + 100) / 65)) : 0;
+    // Handpan resonances can decay at different rates. Keep each last valid reading
+    // visible for 2.5 s, explicitly marked as held rather than live, so the player can
+    // read the value after the strike without confusing it with a current measurement.
+    const status = currentPeak && hasSignal
+      ? confidence > 0.25 && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      : 'no-signal';
+    if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
-        hz: peak.freq,
+        hz: currentPeak.freq,
         cents,
-        amplitudeDb: peak.magDb,
+        amplitudeDb: currentPeak.magDb,
         confidence,
         timestampMs: now,
       };
     }
     const cached = this.lastValidResonances[role];
-    const cachedIsFresh = cached !== undefined && now - cached.timestampMs <= 250;
+    const cachedIsFresh = cached !== undefined && now - cached.timestampMs <= 2500;
 
     return {
       role,
       name,
       noteName,
-      measuredHz: peak ? peak.freq : cachedIsFresh ? cached!.hz : null,
+      measuredHz: currentPeak ? currentPeak.freq : cachedIsFresh ? cached!.hz : null,
       targetHz,
       deviationCents: cents !== null ? cents : cachedIsFresh ? cached!.cents : null,
-      amplitudeDb: peak ? peak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
-      confidence: peak ? confidence : cachedIsFresh ? cached!.confidence : 0,
-      timestampMs: peak ? now : cachedIsFresh ? cached!.timestampMs : now,
-      status,
+      amplitudeDb: currentPeak ? currentPeak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
+      confidence: currentPeak ? confidence : cachedIsFresh ? cached!.confidence : 0,
+      timestampMs: currentPeak ? now : cachedIsFresh ? cached!.timestampMs : now,
+      status: !currentPeak && cachedIsFresh ? 'held' : status,
     };
   }
 

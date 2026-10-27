@@ -52,9 +52,11 @@ export const BBStrobeBands: React.FC<Props> = ({
       const rowHeight = (h - 8) / 3; // 3 rows with 4px gap
 
       // Smooth cents toward measured values
-      const targetCentsAlap = measurement.hasSignal && measurement.alap.status === 'valid' && measurement.alap.deviationCents !== null ? measurement.alap.deviationCents : 0;
-      const targetCentsKvint = measurement.hasSignal && measurement.kvint.status === 'valid' && measurement.kvint.deviationCents !== null ? measurement.kvint.deviationCents : 0;
-      const targetCentsOktav = measurement.hasSignal && measurement.oktav.status === 'valid' && measurement.oktav.deviationCents !== null ? measurement.oktav.deviationCents : 0;
+      // Keep the last deviation during the short held-reading period. Only live
+      // valid measurements update the value; held values must not drift toward zero.
+      const targetCentsAlap = measurement.hasSignal && measurement.alap.status === 'valid' && measurement.alap.deviationCents !== null ? measurement.alap.deviationCents : smoothCentsRef.current.alap;
+      const targetCentsKvint = measurement.hasSignal && measurement.kvint.status === 'valid' && measurement.kvint.deviationCents !== null ? measurement.kvint.deviationCents : smoothCentsRef.current.kvint;
+      const targetCentsOktav = measurement.hasSignal && measurement.oktav.status === 'valid' && measurement.oktav.deviationCents !== null ? measurement.oktav.deviationCents : smoothCentsRef.current.oktav;
 
       smoothCentsRef.current.alap += (targetCentsAlap - smoothCentsRef.current.alap) * 0.15;
       smoothCentsRef.current.kvint += (targetCentsKvint - smoothCentsRef.current.kvint) * 0.15;
