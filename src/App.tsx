@@ -175,6 +175,13 @@ export default function App() {
       setIsListening(false);
       setHasSignal(false);
       setInputLevelDb(-100);
+      const clearMeasurement = (m: ResonanceMeasurement, targetHz: number): ResonanceMeasurement => ({
+        ...m, measuredHz: null, targetHz, deviationCents: null, amplitudeDb: null,
+        confidence: 0, timestampMs: Date.now(), status: 'no-signal',
+      });
+      setAlap(clearMeasurement(alap, selectedNote.frequency));
+      setKvint(clearMeasurement(kvint, selectedNote.fifthFreq));
+      setOktav(clearMeasurement(oktav, selectedNote.octaveFreq));
     } else {
       const ok = await bbAudioEngine.startMicrophone();
       if (ok) {
@@ -216,7 +223,7 @@ export default function App() {
     ? '(nem mérhető biztosan)'
     : isNearTune
     ? '(pontos)'
-    : activeCents > 0
+    : activeCents !== null && activeCents > 0
     ? '(kissé magas)'
     : '(kissé mély)';
 
@@ -325,7 +332,7 @@ export default function App() {
                 <div className="flex flex-col items-center justify-center pt-0.5">
                   <div
                     className={`text-xl sm:text-2xl font-mono font-bold tracking-tight ${
-                      isNearTune ? 'text-[#10b981]' : Math.abs(activeCents) > 10 ? 'text-[#f43f5e]' : 'text-[#f59e0b]'
+                      activeCents !== null && isNearTune ? 'text-[#10b981]' : activeCents !== null && Math.abs(activeCents) > 10 ? 'text-[#f43f5e]' : 'text-[#f59e0b]'
                     }`}
                   >
                     {activeCents !== null && activeResonance.status === 'valid' ? `${activeCents > 0 ? '+' : ''}${activeCents.toFixed(1)} cent` : '— cent'}
