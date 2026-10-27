@@ -30,7 +30,7 @@ export default function PitchBenchmark() {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState('');
   const [level, setLevel] = useState(-100);
-  const [fftSize, setFftSize] = useState(32768);
+  const [fftSize, setFftSize] = useState(16384);
   const [holdMs, setHoldMs] = useState(8000);
   const [current, setCurrent] = useState<{ parts: Reading[]; yinHz: number | null; yinCents: number | null; yinClarity: number; snacHz: number | null; snacCents: number | null; snacClarity: number; time: number } | null>(null);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
@@ -41,7 +41,7 @@ export default function PitchBenchmark() {
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef(0);
   const lastPeakRef = useRef<{ parts: Reading[]; yinHz: number | null; yinCents: number | null; yinClarity: number; snacHz: number | null; snacCents: number | null; snacClarity: number; time: number } | null>(null);
-  const targetRef = useRef(targetHz);
+  const targetRef = useRef(targetHz);\n  const lastAlgorithmRunRef = useRef(0);
   targetRef.current = targetHz;
 
   useEffect(() => () => { cancelAnimationFrame(rafRef.current); streamRef.current?.getTracks().forEach(t => t.stop()); void ctxRef.current?.close(); }, []);
@@ -87,8 +87,8 @@ export default function PitchBenchmark() {
         const target = targetRef.current;
         if (db > -58) {
           const parts = PARTS.map(p => peakInBand(freq, c.sampleRate, a.fftSize, target * p.multiplier));
-          const yin = estimatePitchYin(time, c.sampleRate, { minHz: Math.max(45, target * 0.65), maxHz: Math.min(1000, target * 1.8), downsampleFactor: 2 });
-          const snac = estimatePitchSnac(time, c.sampleRate, { minHz: Math.max(45, target * 0.65), maxHz: Math.min(1000, target * 1.8) });
+          const yin = estimatePitchYin(pitchWindow, c.sampleRate, { minHz: Math.max(45, target * 0.65), maxHz: Math.min(1000, target * 1.8), downsampleFactor: 2 });
+          const snac = estimatePitchSnac(pitchWindow, c.sampleRate, { minHz: Math.max(45, target * 0.65), maxHz: Math.min(1000, target * 1.8) });
           const next = { parts, yinHz: yin.frequencyHz, yinCents: cents(yin.frequencyHz, target), yinClarity: yin.clarity, snacHz: snac.frequencyHz, snacCents: cents(snac.frequencyHz, target), snacClarity: snac.clarity, time: now };
           lastPeakRef.current = next;
           setCurrent(next);
