@@ -209,7 +209,7 @@ export const BBStrobeBands: React.FC<Props> = ({
 
   const rows = [
     { role: 'fundamental' as const, name: 'Alap', note: alap.noteName || 'D3', color: '#f59e0b' },
-    { role: 'fifth' as const, name: '3× parciális', note: kvint.noteName || 'A3', color: '#c084fc' },
+    { role: 'fifth' as const, name: '3× parciális', note: kvint.noteName || 'A4', color: '#c084fc' },
     { role: 'octave' as const, name: 'Oktáv', note: oktav.noteName || 'D4', color: '#38bdf8' },
   ];
 
