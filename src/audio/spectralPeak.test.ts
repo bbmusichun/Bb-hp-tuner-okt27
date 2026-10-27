@@ -71,27 +71,48 @@ function sineReferenceSpectrum(
 }
 
 describe('sine-reference validation of the live spectral peak algorithm', () => {
-  for (const reference of REFERENCES) {
-    for (const detuningCents of DETUNING_CENTS) {
-      it(`measures ${reference.name} at ${detuningCents > 0 ? '+' : ''}${detuningCents} cents within 1 cent`, () => {
-        const actualHz = reference.hz * Math.pow(2, detuningCents / 1200);
-        const spectrum = sineReferenceSpectrum(actualHz, reference.hz);
-        const measured = findSpectralPeakInWindow(reference.hz, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+  const sampleRates = [44100, 48000];
+  const fftSizes = [8192, 16384, 32768];
 
-        assert.ok(measured, 'expected a measurable peak from the known sine reference');
-        const errorCents = centsError(measured.freq, actualHz);
-        assert.ok(
-          Math.abs(errorCents) < 1,
-          `known sine was ${actualHz.toFixed(6)} Hz; measured ${measured.freq.toFixed(6)} Hz; error ${errorCents.toFixed(3)} cents`,
-        );
-      });
+  for (const reference of REFERENCES) {
+    for (const sampleRate of sampleRates) {
+      for (const fftSize of fftSizes) {
+        for (const detuningCents of DETUNING_CENTS) {
+          it(`measures ${reference.name} at ${detuningCents > 0 ? '+' : ''}${detuningCents} cents within 1 cent (${sampleRate} Hz / FFT ${fftSize})`, () => {
+            const actualHz = reference.hz * Math.pow(2, detuningCents / 1200);
+            const spectrum = sineReferenceSpectrum(actualHz, reference.hz, sampleRate, fftSize);
+            const measured = findSpectralPeakInWindow(reference.hz, WINDOW_CENTS, spectrum, sampleRate);
+
+            assert.ok(measured, 'expected a measurable peak from the known sine reference');
+            const errorCents = centsError(measured.freq, actualHz);
+            assert.ok(
+              Math.abs(errorCents) < 1,
+              `known sine was ${actualHz.toFixed(6)} Hz; measured ${measured.freq.toFixed(6)} Hz; error ${errorCents.toFixed(3)} cents; sampleRate=${sampleRate}; fftSize=${fftSize}`,
+            );
+          });
+        }
+      }
     }
   }
+
+  it('retains sub-cent peak accuracy for a low-level sine above the noise floor', () => {
+    const actualHz = 146.832384 * Math.pow(2, 10 / 1200);
+    const spectrum = sineReferenceSpectrum(actualHz, 146.832384, SAMPLE_RATE, FFT_SIZE, 0.0001);
+    const measured = findSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+
+    assert.ok(measured, 'the -80 dB sine should remain measurable above the -82 dB peak gate');
+    assert.ok(Math.abs(centsError(measured.freq, actualHz)) < 1);
+  });
 
   it('returns no measurement for silence/noise-floor-only spectra', () => {
     const silence = new Float32Array(FFT_SIZE / 2);
     silence.fill(-100);
     assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, silence, SAMPLE_RATE), null);
+  });
+
+  it('rejects a sine below the configured peak floor', () => {
+    const spectrum = sineReferenceSpectrum(146.832384, 146.832384, SAMPLE_RATE, FFT_SIZE, 0.00001);
+    assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE), null);
   });
 
   it('rejects invalid targets and invalid analysis parameters', () => {
