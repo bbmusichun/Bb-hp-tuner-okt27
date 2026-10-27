@@ -5,6 +5,7 @@
  */
 
 import { ResonanceMeasurement, MicState } from '../types/tuner';
+import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -206,7 +207,7 @@ export class BBAudioEngine {
    */
   /** Detect the most likely struck note from the complete configured scale. Harmonic evidence is
    * combined across f0, 2*f0 and 3*f0; low-confidence/ambiguous frames are rejected. */
-  public detectNote(candidates: { id: string; noteName: string; frequency: number }[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
+  public detectNote(candidates: NoteCandidate[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
     if (!this.analyser || this.micState !== 'active' || candidates.length === 0 || this.transientHoldoff) return null;
     this.analyser.getFloatFrequencyData(this.freqData as any);
     const binWidth = this.sampleRate / (this.freqData.length * 2);
@@ -222,31 +223,7 @@ export class BBAudioEngine {
       if (best < 0 || this.freqData[best] < -78) return null;
       return { db: this.freqData[best], hz: this.interpolatePeak(best, this.freqData).freq };
     };
-    const ranked = candidates.map((candidate) => {
-      const fundamental = peakNear(candidate.frequency, 65);
-      const octave = peakNear(candidate.frequency * 2, 55);
-      const third = peakNear(candidate.frequency * 3, 55);
-      // A weak/missing fundamental is common in struck metal. Allow partials to contribute,
-      // but penalize missing evidence so a loud upper note is not automatically called its subharmonic.
-      const baseDb = fundamental?.db ?? -96;
-      const octaveEvidence = octave ? Math.max(-24, octave.db - baseDb) * 0.22 : -5;
-      const thirdEvidence = third ? Math.max(-24, third.db - baseDb) * 0.18 : -5;
-      const fundamentalEvidence = fundamental ? fundamental.db : -13;
-      const score = fundamentalEvidence + octaveEvidence + thirdEvidence;
-      const confidence = Math.max(0, Math.min(1,
-        (fundamental ? (fundamental.db + 90) / 45 : 0) +
-        (octave ? 0.12 : 0) + (third ? 0.12 : 0)
-      ));
-      return { ...candidate, score, confidence, hasFundamental: Boolean(fundamental), partialCount: Number(Boolean(octave)) + Number(Boolean(third)) };
-    }).sort((a, b) => b.score - a.score);
-    const best = ranked[0];
-    const runnerUp = ranked[1];
-    if (!best || best.confidence < 0.18) return null;
-    // Without a detected fundamental, require both partials and a larger margin.
-    if (!best.hasFundamental && best.partialCount < 2) return null;
-    const margin = best.hasFundamental ? 2.5 : 5;
-    if (runnerUp && best.score - runnerUp.score < margin) return null;
-    return { id: best.id, noteName: best.noteName, frequency: best.frequency, confidence: best.confidence };
+    return chooseNoteCandidate(candidates, peakNear);
   }
 
   public analyze(
