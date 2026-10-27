@@ -20,7 +20,7 @@ type Props = {
 
 type Sample = { time: number; cents: number | null };
 
-const MAX_ZOOM_CENTS = 300;
+const MAX_ZOOM_CENTS = 200;
 const MIN_ZOOM_CENTS = 100;
 const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 
@@ -110,11 +110,14 @@ export const BBSpectrogram: React.FC<Props> = ({ active, alap, oktav, kvint, yin
           for (let cents = -zoomCents; cents <= zoomCents; cents += zoomCents / 2) {
             const y = centerY - (cents / zoomCents) * (rowH * 0.42);
             ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(w - right, y); ctx.stroke();
-            ctx.fillStyle = '#9aacc5';
-            ctx.textAlign = 'right';
-            const noteLabel = cents === -zoomCents ? shiftNoteName(m.noteName, -1) : cents === 0 ? (m.noteName || '--') : cents === zoomCents ? shiftNoteName(m.noteName, 1) : `${cents > 0 ? '+' : ''}${Math.round(cents)} c`;
-            ctx.fillText(noteLabel, left - 8, y);
           }
+          ctx.fillStyle = '#9aacc5';
+          ctx.textAlign = 'right';
+          [-100, 0, 100].forEach((noteOffset) => {
+            const y = centerY - (noteOffset / zoomCents) * (rowH * 0.42);
+            const label = noteOffset === 0 ? (m.noteName || '--') : shiftNoteName(m.noteName, noteOffset / 100);
+            ctx.fillText(label, left - 8, y);
+          });
           for (let sec = 0; sec <= windowSeconds; sec++) {
             const x = left + (sec / windowSeconds) * plotW;
             ctx.strokeStyle = '#1a2a40';
