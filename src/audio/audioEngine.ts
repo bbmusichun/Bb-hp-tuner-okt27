@@ -33,6 +33,7 @@ export class BBAudioEngine {
   // Pitch stability history (rolling 10 seconds)
   private stabilityHistory: { timestamp: number; cents: number; valid: boolean }[] = [];
   private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
+  private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
 
   // Tone generator for audio reference
   private toneOsc: OscillatorNode | null = null;
@@ -391,37 +392,35 @@ export class BBAudioEngine {
     now: number,
     hasSignal: boolean
   ): ResonanceMeasurement {
-    if (!hasSignal || !peak) {
-      return {
-        role,
-        name,
-        noteName,
-        measuredHz: peak ? peak.freq : null,
-        targetHz,
-        deviationCents: null,
-        amplitudeDb: peak ? peak.magDb : null,
-        confidence: 0,
+    const cents = peak ? 1200 * Math.log2(peak.freq / targetHz) : null;
+    const confidence = peak ? Math.max(0, Math.min(1, (peak.magDb + 100) / 65)) : 0;
+    // A missing frame can briefly occur between FFT updates. Preserve the last good
+    // numerical reading for up to 250 ms to prevent UI flicker, but keep status no-signal
+    // so the interface never claims a stale reading is currently live.
+    const status = !hasSignal || !peak ? 'no-signal'
+      : confidence > 0.25 && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain';
+    if (status === 'valid' && peak && cents !== null) {
+      this.lastValidResonances[role] = {
+        hz: peak.freq,
+        cents,
+        amplitudeDb: peak.magDb,
+        confidence,
         timestampMs: now,
-        status: hasSignal ? 'uncertain' : 'no-signal',
       };
     }
-
-    const cents = 1200 * Math.log2(peak.freq / targetHz);
-    const confidence = Math.max(0, Math.min(1, (peak.magDb + 100) / 65));
-    // Measurement validity is independent of tuning quality: an out-of-tune peak must
-    // remain measurable so the strobe can show the direction and magnitude of error.
-    const status = confidence > 0.25 && Number.isFinite(cents) ? 'valid' : 'uncertain';
+    const cached = this.lastValidResonances[role];
+    const cachedIsFresh = cached !== undefined && now - cached.timestampMs <= 250;
 
     return {
       role,
       name,
       noteName,
-      measuredHz: peak.freq,
+      measuredHz: peak ? peak.freq : cachedIsFresh ? cached!.hz : null,
       targetHz,
-      deviationCents: cents,
-      amplitudeDb: peak.magDb,
-      confidence,
-      timestampMs: now,
+      deviationCents: cents !== null ? cents : cachedIsFresh ? cached!.cents : null,
+      amplitudeDb: peak ? peak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
+      confidence: peak ? confidence : cachedIsFresh ? cached!.confidence : 0,
+      timestampMs: peak ? now : cachedIsFresh ? cached!.timestampMs : now,
       status,
     };
   }
