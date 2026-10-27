@@ -327,7 +327,10 @@ export default function App() {
   const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz);
 
   // Textual assessment (e.g. "(kissé magas)", "(kissé mély)", "(pontos)")
-  const assessmentText = !hasSignal
+  const isHeldReading = activeResonance.status === 'held' && activeCents !== null;
+  const assessmentText = isHeldReading
+    ? `(utolsó ütés · ${Math.max(0, (Date.now() - activeResonance.timestampMs) / 1000).toFixed(1)} s)`
+    : !hasSignal
     ? ''
     : activeResonance.status !== 'valid' || activeCents === null
     ? '(nem mérhető biztosan)'
@@ -462,7 +465,7 @@ export default function App() {
                       activeCents !== null && isNearTune ? 'text-[#10b981]' : activeCents !== null && Math.abs(activeCents) > 10 ? 'text-[#f43f5e]' : 'text-[#f59e0b]'
                     }`}
                   >
-                    {activeCents !== null && activeResonance.status === 'valid' ? `${activeCents > 0 ? '+' : ''}${activeCents.toFixed(1)} cent` : '— cent'}
+                    {activeCents !== null && (activeResonance.status === 'valid' || isHeldReading) ? `${activeCents > 0 ? '+' : ''}${activeCents.toFixed(1)} cent` : '— cent'}
                   </div>
                   <div className="text-[11px] text-slate-400 font-medium">
                     {assessmentText}
