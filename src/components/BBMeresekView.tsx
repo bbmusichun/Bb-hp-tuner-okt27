@@ -120,7 +120,7 @@ export const BBMeresekView: React.FC<Props> = ({
                 </div>
                 {log.overallInTune ? (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-[#10b981] bg-[#10b981]/15 px-2 py-0.5 rounded-full">
-                    <CheckCircle className="w-3 h-3" /> Célértéken (±3¢)
+                    <CheckCircle className="w-3 h-3" /> Célértéken (dinamikus tolerancia)
                   </span>
                 ) : (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-[#f59e0b] bg-[#f59e0b]/15 px-2 py-0.5 rounded-full">
