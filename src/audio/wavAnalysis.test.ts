@@ -53,7 +53,10 @@ describe('offline WAV resonance analysis', () => {
   it('downmixes stereo channels without changing their average amplitude', () => {
     const left = new Float32Array([0.4, -0.2, 0.1]);
     const right = new Float32Array([0.2, 0.2, -0.1]);
-    assert.deepEqual(Array.from(downmixChannels([left, right])), [0.3, 0, 0]);
+    const mono = Array.from(downmixChannels([left, right]));
+    assert.ok(Math.abs(mono[0] - 0.3) < 1e-6);
+    assert.equal(mono[1], 0);
+    assert.equal(mono[2], 0);
     assert.equal(downmixChannels([]).length, 0);
   });
 });
