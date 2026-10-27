@@ -88,8 +88,8 @@ export default function PitchBenchmark() {
         const target = targetRef.current;
         if (db > -58) {
           const parts = PARTS.map(p => peakInBand(freq, c.sampleRate, a.fftSize, target * p.multiplier));
-          const yin = estimatePitchYin(pitchWindow, c.sampleRate, { minHz: Math.max(45, target * 0.65), maxHz: Math.min(1000, target * 1.8), downsampleFactor: 2 });
-          const snac = estimatePitchSnac(pitchWindow, c.sampleRate, { minHz: Math.max(45, target * 0.65), maxHz: Math.min(1000, target * 1.8) });
+          const yin = estimatePitchYin(time, c.sampleRate, { minHz: Math.max(45, target * 0.65), maxHz: Math.min(1000, target * 1.8), downsampleFactor: 2 });
+          const snac = estimatePitchSnac(time, c.sampleRate, { minHz: Math.max(45, target * 0.65), maxHz: Math.min(1000, target * 1.8) });
           const next = { parts, yinHz: yin.frequencyHz, yinCents: cents(yin.frequencyHz, target), yinClarity: yin.clarity, snacHz: snac.frequencyHz, snacCents: cents(snac.frequencyHz, target), snacClarity: snac.clarity, time: now };
           lastPeakRef.current = next;
           setCurrent(next);
