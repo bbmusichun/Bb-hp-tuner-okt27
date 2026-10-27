@@ -18,6 +18,8 @@ export const BBSpectrum: React.FC<Props> = ({
   onSelectPeak,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const latestMeasurementsRef = useRef({ alap, kvint, oktav, hasSignal });
+  latestMeasurementsRef.current = { alap, kvint, oktav, hasSignal };
 
   useEffect(() => {
     let animId = 0;
@@ -28,6 +30,7 @@ export const BBSpectrum: React.FC<Props> = ({
 
     function render() {
       if (!ctx || !canvas) return;
+      const measurement = latestMeasurementsRef.current;
       const w = canvas.width;
       const h = canvas.height;
 
@@ -131,7 +134,7 @@ export const BBSpectrum: React.FC<Props> = ({
       ctx.closePath();
 
       const fillGrad = ctx.createLinearGradient(0, padT, 0, bottomY);
-      fillGrad.addColorStop(0, hasSignal ? 'rgba(0, 192, 240, 0.28)' : 'rgba(56, 189, 248, 0.08)');
+      fillGrad.addColorStop(0, measurement.hasSignal ? 'rgba(0, 192, 240, 0.28)' : 'rgba(56, 189, 248, 0.08)');
       fillGrad.addColorStop(1, 'rgba(0, 192, 240, 0.0)');
       ctx.fillStyle = fillGrad;
       ctx.fill();
@@ -153,7 +156,7 @@ export const BBSpectrum: React.FC<Props> = ({
           ctx.lineTo(x, y);
         }
       }
-      ctx.strokeStyle = hasSignal ? '#00e5ff' : '#0284c7';
+      ctx.strokeStyle = measurement.hasSignal ? '#00e5ff' : '#0284c7';
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
@@ -162,22 +165,22 @@ export const BBSpectrum: React.FC<Props> = ({
         {
           role: 'fundamental' as const,
           color: '#f59e0b', // Amber/gold
-          hz: alap.measuredHz || alap.targetHz || 146.83,
-          note: alap.noteName || 'D3',
+          hz: measurement.alap.measuredHz || measurement.alap.targetHz || 146.83,
+          note: measurement.alap.noteName || 'D3',
           visible: true,
         },
         {
           role: 'fifth' as const,
           color: '#c084fc', // Purple
-          hz: kvint.measuredHz || kvint.targetHz || 440.50,
-          note: kvint.noteName || 'A4',
+          hz: measurement.kvint.measuredHz || measurement.kvint.targetHz || 440.50,
+          note: measurement.kvint.noteName || 'A4',
           visible: true,
         },
         {
           role: 'octave' as const,
           color: '#38bdf8', // Cyan
-          hz: oktav.measuredHz || oktav.targetHz || 293.66,
-          note: oktav.noteName || 'D4',
+          hz: measurement.oktav.measuredHz || measurement.oktav.targetHz || 293.66,
+          note: measurement.oktav.noteName || 'D4',
           visible: true,
         },
       ];
@@ -190,7 +193,7 @@ export const BBSpectrum: React.FC<Props> = ({
         const bin = Math.round(p.hz / binWidth);
         const peakDb = freqData[bin] ? Math.max(-85, Math.min(-20, freqData[bin])) : -45;
         const normY = (peakDb - maxDb) / (minDb - maxDb);
-        const peakY = hasSignal ? padT + normY * plotH : padT + 0.35 * plotH;
+        const peakY = measurement.hasSignal ? padT + normY * plotH : padT + 0.35 * plotH;
 
         // Vertical dashed pin line
         ctx.beginPath();
@@ -226,7 +229,7 @@ export const BBSpectrum: React.FC<Props> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [alap, kvint, oktav, hasSignal]);
+  }, []);
 
   return (
     <div className="w-full bg-[#0b0f14] rounded-xl border border-white/5 overflow-hidden shadow-lg p-1.5 my-1">
