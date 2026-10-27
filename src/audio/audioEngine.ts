@@ -9,6 +9,8 @@ import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 import { isTransientHoldoffActive } from './transientGuard';
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
+import { isSameMeasurementTarget } from './measurementCache';
+import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -35,7 +37,7 @@ export class BBAudioEngine {
   // Pitch stability history (rolling 10 seconds)
   private stabilityHistory: { timestamp: number; cents: number; valid: boolean }[] = [];
   private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
-  private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
+  private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; targetHz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
   private pitchHistory: Record<'fundamental' | 'fifth' | 'octave', PitchSample[]> = { fundamental: [], fifth: [], octave: [] };
 
   // Tone generator for audio reference
@@ -421,16 +423,17 @@ export class BBAudioEngine {
       currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
     }
     const cents = currentPeak ? 1200 * Math.log2(currentPeak.freq / targetHz) : null;
-    const confidence = currentPeak ? Math.max(0, Math.min(1, (currentPeak.magDb + 100) / 65)) : 0;
+    const confidence = currentPeak ? resonanceConfidenceFromDb(currentPeak.magDb) : 0;
     // Handpan resonances can decay at different rates. Keep each last valid reading
     // visible for 2.5 s, explicitly marked as held rather than live, so the player can
     // read the value after the strike without confusing it with a current measurement.
     const status = currentPeak && hasSignal
-      ? confidence > 0.25 && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      ? isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
       : 'no-signal';
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
         hz: currentPeak.freq,
+        targetHz,
         cents,
         amplitudeDb: currentPeak.magDb,
         confidence,
@@ -438,7 +441,10 @@ export class BBAudioEngine {
       };
     }
     const cached = this.lastValidResonances[role];
-    const cachedIsFresh = cached !== undefined && now - cached.timestampMs <= 2500;
+    // A held reading is only reusable for the exact same target. When AUTO changes
+    // notes, never show the previous note's frequency/cents against the new target.
+    const sameTarget = cached !== undefined && isSameMeasurementTarget(cached.targetHz, targetHz);
+    const cachedIsFresh = sameTarget && cached !== undefined && now - cached.timestampMs <= 2500;
 
     return {
       role,
