@@ -133,7 +133,7 @@ export default function PitchBenchmark() {
     <div className="mx-auto max-w-3xl space-y-5">
       <header className="flex items-start justify-between gap-3">
         <div><p className="text-xs font-bold uppercase tracking-[.2em] text-amber-400">BB Tuner · Lab</p><h1 className="mt-1 text-2xl font-bold">Algoritmus-összehasonlító mérés</h1><p className="mt-2 text-sm text-slate-400">Valós handpan · FFT-csúcs / YIN / SNAC</p></div>
-        <a href="/" className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-300">Vissza</a>
+        <div className="flex flex-wrap gap-2"><a href="/?benchmark=sine" className="rounded-xl border border-amber-500/40 px-3 py-2 text-sm text-amber-200">Szinuszreferencia teszt</a><a href="/?benchmark=wav" className="rounded-xl border border-cyan-500/40 px-3 py-2 text-sm text-cyan-200">WAV-elemzés</a><a href="/" className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-300">Vissza</a></div>
       </header>
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-4">
         <h2 className="font-semibold">1. Mérési beállítások</h2>
