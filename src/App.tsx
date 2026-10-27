@@ -16,7 +16,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { bbAudioEngine } from './audio/audioEngine';
-import { PRESET_SCALES, midiToFreq } from './audio/scales';
+import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
 import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
@@ -74,10 +74,10 @@ export default function App() {
     // Otherwise calculate octave and fifth names
     return {
       fundamental: selectedNote.noteName,
-      fifth: `${selectedNote.noteName} ×3`,
-      octave: `${selectedNote.noteName} (oktáv)`,
+      fifth: freqToNoteAndCents(selectedNote.fifthFreq, a4Ref).note,
+      octave: freqToNoteAndCents(selectedNote.octaveFreq, a4Ref).note,
     };
-  }, [selectedNote]);
+  }, [selectedNote, a4Ref]);
 
   // The stability graph and dispersion readout use the same selected resonance.
   useEffect(() => {
@@ -423,7 +423,7 @@ export default function App() {
                   }}
                   className="px-2.5 py-1.5 rounded-full border border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#f59e0b] text-xs font-medium flex items-center gap-1 hover:bg-[#f59e0b]/20 transition"
                 >
-                  <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint' : 'Oktáv'}</span>
+                  <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}</span>
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -460,7 +460,7 @@ export default function App() {
 
             {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
             <BBStabilityGraph
-              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint' : 'Oktáv'}
+              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
               hasSignal={hasSignal}
               currentCents={activeCents ?? 0}
               standardDeviationCents={standardDeviationCents}
