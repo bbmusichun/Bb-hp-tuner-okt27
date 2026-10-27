@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { bbAudioEngine } from './audio/audioEngine';
 import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
+import { isWithinTuningTolerance } from './audio/tuningTolerance';
 import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
@@ -313,9 +314,9 @@ export default function App() {
       octaveHz: oktav.measuredHz!,
       octaveCents: oktav.deviationCents!,
       overallInTune:
-        Math.abs(alap.deviationCents!) <= 3 &&
-        Math.abs(kvint.deviationCents!) <= 3 &&
-        Math.abs(oktav.deviationCents!) <= 3,
+        isWithinTuningTolerance(alap.deviationCents, alap.targetHz) &&
+        isWithinTuningTolerance(kvint.deviationCents, kvint.targetHz) &&
+        isWithinTuningTolerance(oktav.deviationCents, oktav.targetHz),
     };
     setLogs((prev) => [newEntry, ...prev]);
   };
@@ -323,7 +324,7 @@ export default function App() {
   // Determine active resonance details for Section B header
   const activeResonance = selectedRole === 'fundamental' ? alap : selectedRole === 'fifth' ? kvint : oktav;
   const activeCents = activeResonance.deviationCents;
-  const isNearTune = activeResonance.status === 'valid' && activeCents !== null && Math.abs(activeCents) <= 3.0;
+  const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz);
 
   // Textual assessment (e.g. "(kissé magas)", "(kissé mély)", "(pontos)")
   const assessmentText = !hasSignal
