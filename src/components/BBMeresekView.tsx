@@ -1,6 +1,6 @@
 import React from 'react';
 import { TuningLogEntry } from '../types/tuner';
-import { Download, Trash2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Download, Trash2, CheckCircle, AlertTriangle, FileJson } from 'lucide-react';
 
 interface Props {
   logs: TuningLogEntry[];
@@ -74,6 +74,14 @@ export const BBMeresekView: React.FC<Props> = ({
             title="Export CSV"
           >
             <Download className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={handleExportJSON}
+            disabled={logs.length === 0}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 disabled:opacity-40"
+            title="Export JSON"
+          >
+            <FileJson className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={onClearLogs}
