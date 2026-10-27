@@ -218,8 +218,8 @@ export const BBSpectrogram: React.FC<Props> = ({ active, alap, oktav, kvint, yin
     <section className="w-full rounded-xl border border-white/10 bg-[#080e18] p-2.5">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-bold text-white">Hangmagasság-követés</h3>
-          <p className="text-[10px] text-slate-400">Élő mérés · 1× alaphang · 2× oktáv · 3× kvint</p>
+          <h3 className="text-sm font-bold text-white">Spektrum · hangmagasság-térkép</h3>
+          <p className="text-[10px] text-slate-400">Valós idejű hangkövetés · 1× alaphang · 2× oktáv · 3× kvint</p>
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => changeZoom(1.25)} aria-label="Nagyítás" className="h-8 w-8 rounded-lg border border-slate-700 text-lg text-slate-200">+</button>
@@ -234,7 +234,7 @@ export const BBSpectrogram: React.FC<Props> = ({ active, alap, oktav, kvint, yin
         onPointerCancel={handlePointerEnd}
         onWheel={(event) => { if (event.ctrlKey || event.metaKey) { event.preventDefault(); changeZoom(event.deltaY < 0 ? 0.9 : 1.1); } }}
       >
-        <canvas ref={canvasRef} width={720} height={390} className="block h-[330px] w-full" />
+        <canvas ref={canvasRef} width={720} height={600} className="block h-[500px] sm:h-[600px] w-full" />
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400">
         <div className="flex items-center gap-1" aria-label="Időablak">
