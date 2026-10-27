@@ -22,8 +22,8 @@ export class BBAudioEngine {
   private errorMessage = '';
 
   // Audio configuration
-  private fftSize = 32768; // Longer analysis window for finer low-frequency resolution
-  private timeData: Float32Array = new Float32Array(32768);
+  private fftSize = 16384; // Balance low-frequency resolution with the short sustain of struck handpan notes
+  private timeData: Float32Array = new Float32Array(16384);
   private freqData: Float32Array = new Float32Array(4096);
 
   // Metering & input level
@@ -74,7 +74,7 @@ export class BBAudioEngine {
 
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.fftSize;
-      this.analyser.smoothingTimeConstant = 0.15; // Avoid excessive temporal smearing in tuner measurements
+      this.analyser.smoothingTimeConstant = 0.05; // Keep attack/sustain changes responsive; pitch smoothing is handled separately
       this.analyser.minDecibels = -100;
       this.analyser.maxDecibels = -10;
 
