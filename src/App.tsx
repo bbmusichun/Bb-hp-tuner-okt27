@@ -159,7 +159,7 @@ export default function App() {
 
   const [kvint, setKvint] = useState<ResonanceMeasurement>({
     role: 'fifth',
-    name: 'Kvint',
+    name: '3. parciális',
     noteName: resonanceNoteNames.fifth,
     measuredHz: null,
     targetHz: toneNotes[0].fifthFreq,
