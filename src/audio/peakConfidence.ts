@@ -8,5 +8,6 @@ export function resonanceConfidenceFromDb(amplitudeDb: number): number {
 }
 
 export function isReliableResonanceConfidence(confidence: number): boolean {
-  return Number.isFinite(confidence) && confidence >= 0.28;
+  // -80 dB is measurable but too weak to qualify as a reliable tuning reading.
+  return Number.isFinite(confidence) && confidence >= 0.32;
 }

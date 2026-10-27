@@ -33,7 +33,10 @@ export function chooseNoteCandidate(candidates: NoteCandidate[], peakNear: PeakL
         Math.min(6, centsDistance(f, candidate.frequency) * 0.045) +
         Math.min(3, centsDistance(o, candidate.frequency * 2) * 0.018) +
         Math.min(3, centsDistance(t, candidate.frequency * 3) * 0.018);
-      const score = fundamentalEvidence + octaveEvidence + thirdEvidence - frequencyPenalty;
+      // Reward a candidate when both partials corroborate the same fundamental.
+      // This helps distinguish a true lower note from a stronger overlapping octave.
+      const corroborationBonus = f && o && t ? 2.5 : 0;
+      const score = fundamentalEvidence + octaveEvidence + thirdEvidence - frequencyPenalty + corroborationBonus;
       const confidence = Math.max(0, Math.min(1,
         (f ? (f.db + 90) / 45 : 0) + (o ? 0.12 : 0) + (t ? 0.12 : 0)
       ));

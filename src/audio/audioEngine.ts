@@ -6,7 +6,7 @@
 
 import { ResonanceMeasurement, MicState } from '../types/tuner';
 import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
-import { isTransientHoldoffActive } from './transientGuard';
+import { isTransientHoldoffActive, StablePitchTracker } from './transientGuard';
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
 import { isSameMeasurementTarget } from './measurementCache';
@@ -39,6 +39,11 @@ export class BBAudioEngine {
   private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
   private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; targetHz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
   private pitchHistory: Record<'fundamental' | 'fifth' | 'octave', PitchSample[]> = { fundamental: [], fifth: [], octave: [] };
+  private stablePitchTrackers: Record<'fundamental' | 'fifth' | 'octave', StablePitchTracker> = {
+    fundamental: new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 5, minConfidence: 0.32 }),
+    fifth: new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 7, minConfidence: 0.32 }),
+    octave: new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 7, minConfidence: 0.32 }),
+  };
 
   // Tone generator for audio reference
   private toneOsc: OscillatorNode | null = null;
@@ -123,6 +128,7 @@ export class BBAudioEngine {
     this.stabilityHistory = [];
     this.lastValidResonances = {};
     this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
+    Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
   }
 
   public getMicState(): MicState {
@@ -424,12 +430,18 @@ export class BBAudioEngine {
     }
     const cents = currentPeak ? 1200 * Math.log2(currentPeak.freq / targetHz) : null;
     const confidence = currentPeak ? resonanceConfidenceFromDb(currentPeak.magDb) : 0;
+    const stability = rawPeak
+      ? this.stablePitchTrackers[role].observe({ frequencyHz: rawPeak.freq, confidence, timestampMs: now })
+      : (this.stablePitchTrackers[role].reset(), { stable: false, frequencyHz: null, count: 0 });
+    if (currentPeak && stability.stable && stability.frequencyHz !== null) {
+      currentPeak = { ...currentPeak, freq: stability.frequencyHz };
+    }
     // Handpan resonances can decay at different rates. Keep the last valid reading
     // visible for 8 s after the live peak disappears, explicitly marked as held rather
     // than live. This gives the player time to read the value after a strike while
     // preserving a clear distinction between a live measurement and a retained result.
     const status = currentPeak && hasSignal
-      ? isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      ? stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
       : 'no-signal';
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {

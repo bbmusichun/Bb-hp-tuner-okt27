@@ -22,3 +22,83 @@ export function isTransientHoldoffActive(
       !Number.isFinite(nowMs) || nowMs < lastTransientAtMs) return false;
   return nowMs - lastTransientAtMs < requiredTransientHoldoffMs(fftSize, sampleRate, guardMs);
 }
+
+ 
+export interface StablePitchReading {
+  frequencyHz: number;
+  confidence?: number;
+  timestampMs: number;
+}
+
+export interface StablePitchOptions {
+  /** Number of consecutive compatible readings required before accepting pitch. */
+  requiredReadings?: number;
+  /** Maximum allowed spread from the rolling median, in cents. */
+  maxDeviationCents?: number;
+  /** Ignore readings below this optional confidence threshold. */
+  minConfidence?: number;
+}
+
+/**
+ * Confirms a pitch only after consecutive readings agree in cents.
+ * This is intentionally separate from display smoothing: invalid or unstable
+ * readings never become an accepted tuning value.
+ */
+export class StablePitchTracker {
+  private readings: StablePitchReading[] = [];
+  private readonly requiredReadings: number;
+  private readonly maxDeviationCents: number;
+  private readonly minConfidence: number;
+
+  constructor(options: StablePitchOptions = {}) {
+    this.requiredReadings = Math.max(2, Math.floor(options.requiredReadings ?? 4));
+    this.maxDeviationCents = Math.max(0.1, options.maxDeviationCents ?? 5);
+    this.minConfidence = options.minConfidence ?? 0;
+  }
+
+  reset(): void {
+    this.readings = [];
+  }
+
+  observe(reading: StablePitchReading): { stable: boolean; frequencyHz: number | null; count: number } {
+    const valid = Number.isFinite(reading.frequencyHz) && reading.frequencyHz > 0 &&
+      Number.isFinite(reading.timestampMs) &&
+      (reading.confidence === undefined ||
+        (Number.isFinite(reading.confidence) && reading.confidence >= this.minConfidence));
+    if (!valid) {
+      this.reset();
+      return { stable: false, frequencyHz: null, count: 0 };
+    }
+
+    const previous = this.readings[this.readings.length - 1];
+    if (previous && reading.timestampMs < previous.timestampMs) {
+      this.reset();
+    }
+
+    const center = this.median(this.readings.map((item) => item.frequencyHz));
+    const deviation = Number.isFinite(center)
+      ? Math.abs(1200 * Math.log2(reading.frequencyHz / center))
+      : 0;
+
+    // A sudden pitch jump starts a fresh run rather than contaminating history.
+    if (this.readings.length && deviation > this.maxDeviationCents) this.readings = [];
+    this.readings.push(reading);
+    if (this.readings.length > this.requiredReadings) this.readings.shift();
+
+    const frequencyHz = this.median(this.readings.map((item) => item.frequencyHz));
+    const stable = this.readings.length >= this.requiredReadings &&
+      this.readings.every((item) =>
+        Math.abs(1200 * Math.log2(item.frequencyHz / frequencyHz)) <= this.maxDeviationCents
+      );
+    return { stable, frequencyHz: stable ? frequencyHz : null, count: this.readings.length };
+  }
+
+  private median(values: number[]): number {
+    if (!values.length) return Number.NaN;
+    const sorted = [...values].sort((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2
+      ? sorted[middle]
+      : (sorted[middle - 1] + sorted[middle]) / 2;
+  }
+}
