@@ -27,6 +27,21 @@ import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
 import { BBSpectrogram } from './components/BBSpectrogram';
 
+function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
+  if (!value || typeof value !== 'object') return false;
+  const entry = value as Partial<TuningLogEntry>;
+  return typeof entry.id === 'string' &&
+    typeof entry.noteName === 'string' &&
+    typeof entry.timestamp === 'number' && Number.isFinite(entry.timestamp) &&
+    typeof entry.fundamentalHz === 'number' && Number.isFinite(entry.fundamentalHz) && entry.fundamentalHz > 0 &&
+    typeof entry.fundamentalCents === 'number' && Number.isFinite(entry.fundamentalCents) &&
+    typeof entry.fifthHz === 'number' && Number.isFinite(entry.fifthHz) && entry.fifthHz > 0 &&
+    typeof entry.fifthCents === 'number' && Number.isFinite(entry.fifthCents) &&
+    typeof entry.octaveHz === 'number' && Number.isFinite(entry.octaveHz) && entry.octaveHz > 0 &&
+    typeof entry.octaveCents === 'number' && Number.isFinite(entry.octaveCents) &&
+    typeof entry.overallInTune === 'boolean';
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -147,8 +162,12 @@ export default function App() {
 
   // Measurements Log
   const [logs, setLogs] = useState<TuningLogEntry[]>(() => {
-    try { return JSON.parse(localStorage.getItem('bb-tuner-measurements-v1') || '[]') as TuningLogEntry[]; }
-    catch { return []; }
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem('bb-tuner-measurements-v1') || '[]');
+      return Array.isArray(parsed) ? parsed.filter(isValidTuningLogEntry) : [];
+    } catch {
+      return [];
+    }
   });
 
   useEffect(() => {
