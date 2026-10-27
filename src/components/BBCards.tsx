@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
+import { isWithinTuningTolerance } from '../audio/tuningTolerance';
 
 interface Props {
   alap: ResonanceMeasurement;
@@ -56,7 +57,7 @@ export const BBCards: React.FC<Props> = ({
         const targetStr = `Cél: ${c.data.targetHz ? c.data.targetHz.toFixed(2) : '--'} Hz`;
         const cents = c.data.deviationCents;
         const centsStr = cents !== null && c.data.status === 'valid' ? `${cents > 0 ? '+' : ''}${cents.toFixed(1)} cent` : '— cent';
-        const inTune = c.data.status === 'valid' && cents !== null && Math.abs(cents) <= 3.0;
+        const inTune = c.data.status === 'valid' && isWithinTuningTolerance(cents, c.data.targetHz);
 
         return (
           <button
