@@ -105,3 +105,25 @@ test('a single steady tone does not create a false beat estimate', () => {
   });
   assert.equal(result.beatFrequencyHz, null);
 });
+
+
+test('beat estimate survives low-level deterministic broadband noise', () => {
+  const samples = makeTwoToneBeat(146.5, 147.0, 8);
+  // Deterministic pseudo-noise keeps this regression fixture reproducible.
+  let state = 0x12345678;
+  for (let i = 0; i < samples.length; i++) {
+    state = (1664525 * state + 1013904223) >>> 0;
+    const noise = (state / 0xffffffff) * 2 - 1;
+    samples[i] += 0.02 * noise;
+  }
+  const result = analyzeBeatEnvelope(samples, {
+    sampleRate: SAMPLE_RATE,
+    windowMs: 10,
+    hopMs: 5,
+    minBeatHz: 0.2,
+    maxBeatHz: 2,
+  });
+  assert.ok(result.beatFrequencyHz !== null, 'noisy beat frequency was not detected');
+  assert.ok(Math.abs(result.beatFrequencyHz! - 0.5) < 0.08,
+    `expected noisy 0.5 Hz beat, got ${result.beatFrequencyHz}`);
+});
