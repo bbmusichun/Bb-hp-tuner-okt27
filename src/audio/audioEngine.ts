@@ -424,9 +424,10 @@ export class BBAudioEngine {
     }
     const cents = currentPeak ? 1200 * Math.log2(currentPeak.freq / targetHz) : null;
     const confidence = currentPeak ? resonanceConfidenceFromDb(currentPeak.magDb) : 0;
-    // Handpan resonances can decay at different rates. Keep each last valid reading
-    // visible for 2.5 s, explicitly marked as held rather than live, so the player can
-    // read the value after the strike without confusing it with a current measurement.
+    // Handpan resonances can decay at different rates. Keep the last valid reading
+    // visible for 8 s after the live peak disappears, explicitly marked as held rather
+    // than live. This gives the player time to read the value after a strike while
+    // preserving a clear distinction between a live measurement and a retained result.
     const status = currentPeak && hasSignal
       ? isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
       : 'no-signal';
@@ -444,7 +445,7 @@ export class BBAudioEngine {
     // A held reading is only reusable for the exact same target. When AUTO changes
     // notes, never show the previous note's frequency/cents against the new target.
     const sameTarget = cached !== undefined && isSameMeasurementTarget(cached.targetHz, targetHz);
-    const cachedIsFresh = sameTarget && cached !== undefined && now - cached.timestampMs <= 2500;
+    const cachedIsFresh = sameTarget && cached !== undefined && now - cached.timestampMs <= 8000;
 
     return {
       role,
