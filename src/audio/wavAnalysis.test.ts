@@ -31,6 +31,8 @@ describe('offline WAV resonance analysis', () => {
       assert.ok(resonance.measuredHz !== null, 'expected all three synthetic partials to be found');
       assert.ok(Math.abs(cents(resonance.measuredHz!, resonance.targetHz)) < 1,
         'expected ' + resonance.targetHz + ' Hz, measured ' + resonance.measuredHz + ' Hz');
+      assert.ok(resonance.prominenceDb !== null && resonance.prominenceDb > 3,
+        'expected a visible local peak above its surrounding spectrum');
     }
   });
 
