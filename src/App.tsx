@@ -28,7 +28,7 @@ import { BBSettingsModal } from './components/BBSettingsModal';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);\n  const [autoDetect, setAutoDetect] = useState(true);
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(440);
@@ -49,7 +49,7 @@ export default function App() {
         id: `note_${idx}_${n.name}`,
         noteName: n.name,
         frequency: f0,
-        fifthFreq: f0 * 1.5,
+        fifthFreq: f0 * 3.0,
         octaveFreq: f0 * 2.0,
         positionIndex: idx,
       };
@@ -67,7 +67,7 @@ export default function App() {
 
   // Note names for the 3 resonances of the selected note
   const resonanceNoteNames = useMemo(() => {
-    // If D3 is selected: Alap = D3, Kvint = A3, Oktáv = D4
+    // If D3 is selected: Alap = D3, oktáv = D4, 3. parciális = A4
     // Otherwise calculate octave and fifth names
     return {
       fundamental: selectedNote.noteName,
@@ -126,7 +126,7 @@ export default function App() {
   });
 
   // Measurements Log
-  const [logs, setLogs] = useState<TuningLogEntry[]>([]);
+  const [logs, setLogs] = useState<TuningLogEntry[]>(() => {\n    try { return JSON.parse(localStorage.getItem('bb-tuner-measurements-v1') || '[]') as TuningLogEntry[]; }\n    catch { return []; }\n  });\n\n  useEffect(() => {\n    try { localStorage.setItem('bb-tuner-measurements-v1', JSON.stringify(logs)); } catch (error) { console.warn('Nem sikerült menteni a mérési naplót:', error); }\n  }, [logs]);
 
   // Audio Analysis Loop (~30 Hz)
   useEffect(() => {
@@ -170,7 +170,7 @@ export default function App() {
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isListening, selectedNote, resonanceNoteNames]);
+  }, [isListening, selectedNote, resonanceNoteNames, autoDetect, toneNotes]);
 
   // Toggle microphone
   const handleToggleMic = async () => {
@@ -434,7 +434,7 @@ export default function App() {
                   <div className="text-slate-400">Amp: {alap.amplitudeDb ? `${alap.amplitudeDb.toFixed(1)} dB` : '--'}</div>
                 </div>
                 <div className="p-2 rounded bg-slate-900/60 border border-white/5">
-                  <div className="text-[#c084fc] font-sans font-semibold">1.5× Kvint</div>
+                  <div className="text-[#c084fc] font-sans font-semibold">3× Parciális</div>
                   <div>{kvint.measuredHz ? `${kvint.measuredHz.toFixed(2)} Hz` : '--'}</div>
                   <div className="text-slate-400">Amp: {kvint.amplitudeDb ? `${kvint.amplitudeDb.toFixed(1)} dB` : '--'}</div>
                 </div>
