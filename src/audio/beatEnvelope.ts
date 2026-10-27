@@ -95,8 +95,16 @@ export function estimateBeatFrequencyFromEnvelope(
 
   const signal = removeMeanAndTrend(envelope);
   let totalEnergy = 0;
+  let envelopeMean = 0;
+  for (const value of envelope) envelopeMean += value;
+  envelopeMean /= envelope.length;
   for (const value of signal) totalEnergy += value * value;
-  if (totalEnergy <= 1e-12) return { beatFrequencyHz: null, confidence: 0 };
+  // Reject tiny residual modulation: detrending can turn a very slow, almost
+  // constant beat into a misleading high-frequency estimate from windowing noise.
+  const residualRms = Math.sqrt(totalEnergy / signal.length);
+  if (totalEnergy <= 1e-12 || envelopeMean <= 0 || residualRms / envelopeMean < 0.01) {
+    return { beatFrequencyHz: null, confidence: 0 };
+  }
 
   const minLag = Math.max(1, Math.floor(envelopeSampleRate / maxBeatHz));
   const maxLag = Math.min(
