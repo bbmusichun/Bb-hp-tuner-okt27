@@ -138,7 +138,7 @@ export default function ReferenceWavBench() {
         <h2 className="font-semibold">1. Referenciafelvétel betöltése</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm text-slate-300">Alaphang célértéke
-            <select value={targetIndex} disabled={busy} onChange={(event) => { const nextIndex = Number(event.target.value); setTargetIndex(nextIndex); const audio = audioDataRef.current; if (audio) setFrames(analyzeWavRecording(audio.samples, audio.sampleRate, { fftSize: 16384, hopSize: 8192, targetHz: TARGETS[nextIndex].hz, peakFloorDb: -82 })); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
+            <select value={targetIndex} disabled={busy} onChange={(event) => { const nextIndex = Number(event.target.value); setTargetIndex(nextIndex); if (audioDataRef.current) analyzeLoadedAudio(TARGETS[nextIndex].hz, channelMode); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
               {TARGETS.map((item, index) => <option key={item.label} value={index}>{item.label} · {item.hz.toFixed(6)} Hz</option>)}
             </select>
           </label>
