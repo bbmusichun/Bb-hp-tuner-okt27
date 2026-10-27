@@ -280,13 +280,18 @@ export default function App() {
               </div>
             </div>
 
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-1 text-slate-300 hover:text-white transition"
-              title="Beállítások"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setAutoDetect((value) => !value)}
+                className={`px-2 py-1 rounded-full border text-[10px] font-semibold ${autoDetect ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 text-slate-400'}`}
+                title="Automatikus hangfelismerés kapcsolása"
+              >
+                AUTO {autoDetect ? 'BE' : 'KI'}
+              </button>
+              <button onClick={() => setIsSettingsOpen(true)} className="p-1 text-slate-300 hover:text-white transition" title="Beállítások">
+                <Settings className="w-5 h-5" />
+              </button>
+            </div>
           </header>
 
           {/* Microphone Status Bar */}
