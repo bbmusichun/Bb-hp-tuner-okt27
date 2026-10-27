@@ -1,6 +1,6 @@
 /**
  * BB Tuner Audio Acoustic Engine
- * Real-time microphone input, FFT analysis, multi-resonance tracking (Alaphang, Kvint, Oktáv),
+ * Real-time microphone input, FFT analysis, multi-resonance tracking (Alaphang, 3. parciális, Oktáv),
  * parabolic peak interpolation, input dB calculation, and stability tracking.
  */
 
@@ -251,7 +251,7 @@ export class BBAudioEngine {
     targetFundamentalHz = 146.50,
     targetFifthHz = 220.00,
     targetOctaveHz = 293.66,
-    noteNames = { fundamental: 'D3', fifth: 'A3', octave: 'D4' }
+    noteNames = { fundamental: 'D3', fifth: 'A4', octave: 'D4' }
   ): {
     alap: ResonanceMeasurement;
     kvint: ResonanceMeasurement;
@@ -268,7 +268,7 @@ export class BBAudioEngine {
     if (!this.analyser || this.micState !== 'active') {
       return {
         alap: this.createEmptyResonance('fundamental', 'Alap', noteNames.fundamental, targetFundamentalHz),
-        kvint: this.createEmptyResonance('fifth', 'Kvint', noteNames.fifth, targetFifthHz),
+        kvint: this.createEmptyResonance('fifth', '3. parciális', noteNames.fifth, targetFifthHz),
         oktav: this.createEmptyResonance('octave', 'Oktáv', noteNames.octave, targetOctaveHz),
         hasSignal: false,
         inputLevelDb: -100,
@@ -331,7 +331,7 @@ export class BBAudioEngine {
 
     const kvint = this.buildResonanceMeasurement(
       'fifth',
-      'Kvint',
+      '3. parciális',
       noteNames.fifth,
       qPeak,
       targetFifthHz,
