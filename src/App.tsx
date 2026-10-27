@@ -537,7 +537,7 @@ export default function App() {
               hasSignal={hasSignal}
               onSelectPeak={setSelectedRole}
             />
-            <BBSpectrogram active={isListening} />
+            <BBSpectrogram active={isListening} alap={alap} oktav={oktav} kvint={kvint} />
             <BBStabilityGraph
               roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
               hasSignal={hasSignal}
