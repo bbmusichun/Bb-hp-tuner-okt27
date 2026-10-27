@@ -30,6 +30,7 @@ export class BBAudioEngine {
 
   // Pitch stability history (rolling 10 seconds)
   private stabilityHistory: { timestamp: number; cents: number; valid: boolean }[] = [];
+  private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
 
   // Tone generator for audio reference
   private toneOsc: OscillatorNode | null = null;
@@ -338,29 +339,24 @@ export class BBAudioEngine {
       hasSignal
     );
 
-    // Update stability history (for Alaphang)
-    if (alap.status === 'valid' && alap.deviationCents !== null) {
-      this.stabilityHistory.push({
-        timestamp: now,
-        cents: alap.deviationCents,
-        valid: true,
-      });
-    } else if (hasSignal) {
-      // Do not inject synthetic zero-cent points for invalid measurements.
+    // Stability history follows the currently displayed resonance. Exclude transient and
+    // invalid frames; never synthesize zero-cent samples for missing measurements.
+    const stabilityMeasurement = this.stabilityRole === 'fundamental'
+      ? alap
+      : this.stabilityRole === 'fifth' ? kvint : oktav;
+    if (!transientHoldoff && stabilityMeasurement.status === 'valid' && stabilityMeasurement.deviationCents !== null) {
+      this.stabilityHistory.push({ timestamp: now, cents: stabilityMeasurement.deviationCents, valid: true });
     }
 
-    // Keep rolling 10 seconds of stability points
     const tenSecAgo = now - 10000;
     while (this.stabilityHistory.length > 0 && this.stabilityHistory[0].timestamp < tenSecAgo) {
       this.stabilityHistory.shift();
     }
-
-    // Compute standard deviation (Szórás) on valid points
-    const validPoints = this.stabilityHistory.filter((p) => p.valid);
+    const validPoints = this.stabilityHistory.filter((point) => point.valid && Number.isFinite(point.cents));
     let standardDeviationCents = 0;
     if (validPoints.length > 2) {
-      const mean = validPoints.reduce((acc, p) => acc + p.cents, 0) / validPoints.length;
-      const variance = validPoints.reduce((acc, p) => acc + Math.pow(p.cents - mean, 2), 0) / validPoints.length;
+      const mean = validPoints.reduce((acc, point) => acc + point.cents, 0) / validPoints.length;
+      const variance = validPoints.reduce((acc, point) => acc + Math.pow(point.cents - mean, 2), 0) / validPoints.length;
       standardDeviationCents = Math.sqrt(variance);
     }
 
@@ -375,6 +371,13 @@ export class BBAudioEngine {
       transientHoldoff,
       highInputLevel,
     };
+  }
+
+  public setStabilityRole(role: 'fundamental' | 'fifth' | 'octave'): void {
+    if (this.stabilityRole !== role) {
+      this.stabilityRole = role;
+      this.stabilityHistory = [];
+    }
   }
 
   public resetStabilityHistory(): void {
