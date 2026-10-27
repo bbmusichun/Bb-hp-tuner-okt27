@@ -20,8 +20,20 @@ type Props = {
 
 type Sample = { time: number; cents: number | null };
 
-const MAX_ZOOM_CENTS = 600;
-const MIN_ZOOM_CENTS = 50;
+const MAX_ZOOM_CENTS = 300;
+const MIN_ZOOM_CENTS = 100;
+const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+
+function shiftNoteName(noteName: string, semitones: number): string {
+  const match = /^([A-G])([#b]?)(-?\\d+)$/.exec(noteName);
+  if (!match) return noteName;
+  const pitchClass = match[1] + match[2];
+  const pitchIndex = ({ C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 } as Record<string, number>)[pitchClass];
+  if (pitchIndex === undefined) return noteName;
+  const midi = (Number(match[3]) + 1) * 12 + pitchIndex + semitones;
+  const octave = Math.floor(midi / 12) - 1;
+  return NOTE_NAMES[((midi % 12) + 12) % 12] + octave;
+}
 
 /**
  * Live pitch-history diagram. Each harmonic gets its own synchronized lane,
@@ -98,9 +110,10 @@ export const BBSpectrogram: React.FC<Props> = ({ active, alap, oktav, kvint, yin
           for (let cents = -zoomCents; cents <= zoomCents; cents += zoomCents / 2) {
             const y = centerY - (cents / zoomCents) * (rowH * 0.42);
             ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(w - right, y); ctx.stroke();
-            ctx.fillStyle = '#8093ad';
+            ctx.fillStyle = '#9aacc5';
             ctx.textAlign = 'right';
-            ctx.fillText(cents === 0 ? '0 c' : `${cents > 0 ? '+' : ''}${Math.round(cents)}`, left - 8, y);
+            const noteLabel = cents === -zoomCents ? shiftNoteName(m.noteName, -1) : cents === 0 ? (m.noteName || '--') : cents === zoomCents ? shiftNoteName(m.noteName, 1) : `${cents > 0 ? '+' : ''}${Math.round(cents)} c`;
+            ctx.fillText(noteLabel, left - 8, y);
           }
           for (let sec = 0; sec <= windowSeconds; sec++) {
             const x = left + (sec / windowSeconds) * plotW;
@@ -141,6 +154,15 @@ export const BBSpectrogram: React.FC<Props> = ({ active, alap, oktav, kvint, yin
             const x = left + (1 - Math.max(0, Math.min(windowSeconds * 1000, now - sample.time)) / (windowSeconds * 1000)) * plotW;
             const y = centerY - Math.max(-zoomCents, Math.min(zoomCents, sample.cents)) / zoomCents * (rowH * 0.42);
             if (!drawing) { ctx.moveTo(x, y); drawing = true; } else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+          samples.forEach((sample) => {
+            if (sample.cents === null) return;
+            const age = now - sample.time;
+            if (age < 0 || age > windowSeconds * 1000) return;
+            const x = left + (1 - age / (windowSeconds * 1000)) * plotW;
+            const y = centerY - Math.max(-zoomCents, Math.min(zoomCents, sample.cents)) / zoomCents * (rowH * 0.42);
+            ctx.beginPath(); ctx.arc(x, y, 2.1, 0, Math.PI * 2); ctx.fillStyle = track.color; ctx.fill();
           });
           ctx.stroke();
           ctx.shadowBlur = 0;
