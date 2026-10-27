@@ -40,6 +40,12 @@ export class BBAudioEngine {
 
   public async startMicrophone(): Promise<boolean> {
     try {
+      if (this.micState === 'active' && this.microphoneStream) return true;
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        this.micState = 'error';
+        this.errorMessage = 'Ez a böngésző nem biztosít mikrofon-hozzáférést. Nyisd meg az alkalmazást támogatott, HTTPS-kapcsolaton.';
+        return false;
+      }
       if (!this.audioCtx) {
         const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
@@ -444,6 +450,7 @@ export class BBAudioEngine {
 
   // Reference tone generator
   public playTone(freqHz: number): void {
+    if (!Number.isFinite(freqHz) || freqHz <= 0) return;
     this.stopTone();
     if (!this.audioCtx) {
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
