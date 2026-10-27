@@ -125,7 +125,11 @@ const SparklineCanvas: React.FC<{ lineColor: string; hasSignal: boolean; cents: 
 
   // Store one sample per incoming React measurement update, not once per animation frame.
   useEffect(() => {
-    if (!hasSignal || !Number.isFinite(cents)) return;
+    if (!hasSignal) {
+      historyRef.current = [];
+      return;
+    }
+    if (!Number.isFinite(cents)) return;
     const history = historyRef.current;
     history.push(Math.max(-10, Math.min(10, cents)));
     if (history.length > 30) history.shift();
