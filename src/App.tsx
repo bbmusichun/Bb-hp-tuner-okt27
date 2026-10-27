@@ -667,6 +667,7 @@ export default function App() {
           selectedScaleId={currentScale.id}
           onSelectScale={setCurrentScale}
           sampleRateKhz={sampleRateKhz}
+          isListening={isListening}
         />
       </div>
     </div>
