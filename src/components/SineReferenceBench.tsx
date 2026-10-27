@@ -55,6 +55,8 @@ export default function SineReferenceBench() {
   const [detuningCents, setDetuningCents] = useState<number>(0);
   const [fftSize, setFftSize] = useState<number>(DEFAULT_FFT_SIZE);
   const [listening, setListening] = useState(false);
+  const [activeMode, setActiveMode] = useState<'digital' | 'acoustic' | null>(null);
+  const [tonePlaying, setTonePlaying] = useState(false);
   const [error, setError] = useState('');
   const [measurement, setMeasurement] = useState<Measurement | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -62,6 +64,11 @@ export default function SineReferenceBench() {
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const signalGainRef = useRef<GainNode | null>(null);
   const silentOutputRef = useRef<GainNode | null>(null);
+  const microphoneStreamRef = useRef<MediaStream | null>(null);
+  const microphoneSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const toneStopTimerRef = useRef<number | null>(null);
+  const tonePlayingRef = useRef(false);
+  const lastTonePeakAtRef = useRef(0);
   const rafRef = useRef(0);
   const targetHzRef = useRef<number>(DEFAULT_TARGET.hz);
   const generatedHzRef = useRef<number>(DEFAULT_TARGET.hz);
@@ -76,6 +83,16 @@ export default function SineReferenceBench() {
   const stop = () => {
     cancelAnimationFrame(rafRef.current);
     rafRef.current = 0;
+
+    if (toneStopTimerRef.current !== null) window.clearTimeout(toneStopTimerRef.current);
+    toneStopTimerRef.current = null;
+    tonePlayingRef.current = false;
+    setTonePlaying(false);
+
+    microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
+    microphoneStreamRef.current = null;
+    microphoneSourceRef.current?.disconnect();
+    microphoneSourceRef.current = null;
 
     const oscillator = oscillatorRef.current;
     oscillatorRef.current = null;
@@ -93,11 +110,15 @@ export default function SineReferenceBench() {
     if (context && context.state !== 'closed') void context.close();
 
     setListening(false);
+    setActiveMode(null);
     setMeasurement(null);
   };
 
   useEffect(() => () => {
     cancelAnimationFrame(rafRef.current);
+    if (toneStopTimerRef.current !== null) window.clearTimeout(toneStopTimerRef.current);
+    microphoneStreamRef.current?.getTracks().forEach((track) => track.stop());
+    microphoneSourceRef.current?.disconnect();
     try { oscillatorRef.current?.stop(); } catch { /* already stopped */ }
     oscillatorRef.current?.disconnect();
     signalGainRef.current?.disconnect();
@@ -122,57 +143,105 @@ export default function SineReferenceBench() {
     setMeasurement(null);
   }, [selectedTarget.hz, generatedHz, detuningCents, fftSize]);
 
-  const start = async () => {
+  const start = async (mode: 'digital' | 'acoustic') => {
     setError('');
     setMeasurement(null);
 
     try {
-      const AudioContextClass = window.AudioContext;
-      const context = new AudioContextClass({ latencyHint: 'interactive' });
+      if (
+        mode === 'acoustic' &&
+        (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function')
+      ) {
+        throw new Error('A mikrofonos akusztikus teszt nem érhető el ebben a böngészőben. Használj HTTPS-kapcsolatot és engedélyezett mikrofont.');
+      }
+
+      const context = new window.AudioContext({ latencyHint: 'interactive' });
+      contextRef.current = context;
       await context.resume();
 
       const analyser = context.createAnalyser();
+      analyserRef.current = analyser;
       analyser.fftSize = fftSize;
       analyser.smoothingTimeConstant = 0.05;
       analyser.minDecibels = -100;
       analyser.maxDecibels = -10;
 
+      if (mode === 'acoustic') {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        });
+        microphoneStreamRef.current = stream;
+        const microphoneSource = context.createMediaStreamSource(stream);
+        microphoneSourceRef.current = microphoneSource;
+        microphoneSource.connect(analyser);
+      }
+
       const oscillator = context.createOscillator();
+      oscillatorRef.current = oscillator;
       oscillator.type = 'sine';
 
-      // Keep the signal beneath AnalyserNode.maxDecibels so the FFT peak does not clip.
       const signalGain = context.createGain();
-      signalGain.gain.setValueAtTime(0.1, context.currentTime);
+      signalGainRef.current = signalGain;
+      // Acoustic mode uses a deliberately low output level. Actual loudness is still
+      // controlled by the device's hardware volume; start quietly.
+      signalGain.gain.setValueAtTime(mode === 'acoustic' ? 0.035 : 0.1, context.currentTime);
 
-      // Keep the graph pulled by the audio destination without making the test tone audible.
       const silentOutput = context.createGain();
+      silentOutputRef.current = silentOutput;
       silentOutput.gain.setValueAtTime(0, context.currentTime);
 
       oscillator.frequency.setValueAtTime(generatedHz, context.currentTime);
       oscillator.connect(signalGain);
-      signalGain.connect(analyser);
+      if (mode === 'digital') {
+        signalGain.connect(analyser);
+      } else {
+        signalGain.connect(context.destination);
+      }
+      // Analyser output is muted but connected to a destination so the graph is evaluated.
       analyser.connect(silentOutput);
       silentOutput.connect(context.destination);
       oscillator.start();
 
-      contextRef.current = context;
-      analyserRef.current = analyser;
-      oscillatorRef.current = oscillator;
-      signalGainRef.current = signalGain;
-      silentOutputRef.current = silentOutput;
       targetHzRef.current = selectedTarget.hz;
       generatedHzRef.current = generatedHz;
       detuningRef.current = detuningCents;
       fftSizeRef.current = fftSize;
       settledAfterRef.current = performance.now() + (fftSize / context.sampleRate) * 1000 + 50;
       lastUiUpdateRef.current = 0;
+      lastTonePeakAtRef.current = 0;
       setListening(true);
+      setActiveMode(mode);
+      const isAcoustic = mode === 'acoustic';
+      tonePlayingRef.current = isAcoustic;
+      setTonePlaying(isAcoustic);
+
+      // The external tone runs for only four seconds to limit exposure. Keep the last
+      // valid measurement visible afterwards, while leaving the session active until stopped.
+      if (isAcoustic) {
+        toneStopTimerRef.current = window.setTimeout(() => {
+          try { oscillatorRef.current?.stop(); } catch { /* already stopped */ }
+          oscillatorRef.current?.disconnect();
+          oscillatorRef.current = null;
+          signalGainRef.current?.disconnect();
+          signalGainRef.current = null;
+          tonePlayingRef.current = false;
+          toneStopTimerRef.current = null;
+          setTonePlaying(false);
+        }, 4000);
+      }
 
       const frequencyData = new Float32Array(analyser.frequencyBinCount);
       const loop = () => {
         const activeAnalyser = analyserRef.current;
         const activeContext = contextRef.current;
         if (!activeAnalyser || !activeContext || activeContext.state === 'closed') return;
+
+        // When the acoustic tone ends, freeze the last reading instead of replacing it
+        // with room noise or a stale spectral maximum.
+        if (mode === 'acoustic' && !tonePlayingRef.current) {
+          rafRef.current = requestAnimationFrame(loop);
+          return;
+        }
 
         activeAnalyser.getFloatFrequencyData(frequencyData);
         const expectedToneHz = generatedHzRef.current;
@@ -201,6 +270,7 @@ export default function SineReferenceBench() {
           fftSize: fftSizeRef.current,
         };
 
+        if (mode === 'acoustic' && measuredHz !== null) lastTonePeakAtRef.current = now;
         // Avoid rerendering at the audio callback rate; measurement still updates 10x/s.
         if (now - lastUiUpdateRef.current >= 100) {
           lastUiUpdateRef.current = now;
@@ -211,7 +281,7 @@ export default function SineReferenceBench() {
 
       rafRef.current = requestAnimationFrame(loop);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Nem sikerült elindítani a digitális referenciajelet.');
+      setError(cause instanceof Error ? cause.message : 'Nem sikerült elindítani a referenciajelet.');
       stop();
     }
   };
@@ -229,8 +299,8 @@ export default function SineReferenceBench() {
             <p className="text-xs font-bold uppercase tracking-[.2em] text-amber-400">BB Tuner · Digitális labor</p>
             <h1 className="mt-1 text-2xl font-bold">Szinuszreferencia önellenőrzés</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-400">
-              Ismert frekvenciájú digitális szinuszjelekkel ellenőrzi az élő spektrumcsúcs-mérő algoritmust.
-              Nem kell hozzá handpan-felvétel vagy mikrofon.
+              Két külön teszt: hangtalan digitális önellenőrzés és halk, hangszórón lejátszott szinusz mikrofonos visszamérése.
+              Az első az algoritmust, a második az eszköz akusztikus bemeneti útját is vizsgálja.
             </p>
           </div>
           <div className="flex gap-2">
@@ -282,9 +352,14 @@ export default function SineReferenceBench() {
           </div>
           <div className="flex flex-wrap gap-2">
             {!listening ? (
-              <button onClick={start} className="rounded-xl bg-amber-400 px-4 py-2.5 font-bold text-slate-950">
-                Referenciamérés indítása
-              </button>
+              <>
+                <button onClick={() => void start('digital')} className="rounded-xl bg-amber-400 px-4 py-2.5 font-bold text-slate-950">
+                  Digitális önellenőrzés (hangtalan)
+                </button>
+                <button onClick={() => void start('acoustic')} className="rounded-xl border border-cyan-500/50 px-4 py-2.5 font-semibold text-cyan-200">
+                  Mikrofonos akusztikus teszt
+                </button>
+              </>
             ) : (
               <button onClick={stop} className="rounded-xl border border-rose-500/60 px-4 py-2.5 font-semibold text-rose-300">
                 Teszt leállítása
@@ -292,6 +367,17 @@ export default function SineReferenceBench() {
             )}
             <span className="self-center text-xs text-slate-500">Mintavétel: {measurement?.sampleRate ? `${(measurement.sampleRate / 1000).toFixed(1)} kHz` : '—'}</span>
           </div>
+          {activeMode === 'acoustic' && (
+            <p className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-3 text-sm text-cyan-100">
+              A készülék halk szinuszt játszik le legfeljebb 4 másodpercig, és a mikrofont méri. Kezdd alacsony készülék-hangerővel,
+              tartsd a mikrofont a hangszórótól távolabb, és állítsd le, ha túl hangos vagy gerjed.
+            </p>
+          )}
+          {activeMode === 'digital' && (
+            <p className="rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm text-slate-400">
+              Digitális mód: nincs mikrofon és nincs hallható hang. A mért jel közvetlenül a program által generált referencia.
+            </p>
+          )}
           {error && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-950/30 p-3 text-sm text-rose-200">{error}</p>}
         </section>
 
@@ -331,9 +417,10 @@ export default function SineReferenceBench() {
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="font-semibold">Digitális mérőlánc állapota</h3>
+                <h3 className="font-semibold">{activeMode === 'acoustic' ? 'Akusztikus mérőlánc állapota' : 'Digitális mérőlánc állapota'}</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  FFT: {measurement?.fftSize ?? fftSize} · a vizsgálat csak a teljes FFT-ablak feltöltése után minősít.
+                  FFT: {measurement?.fftSize ?? fftSize} · mintavétel: {measurement?.sampleRate ? `${(measurement.sampleRate / 1000).toFixed(1)} kHz` : '—'}.
+                  {activeMode === 'acoustic' ? ' A referencia 4 másodperc után leáll, az utolsó mérés látható marad.' : ' A teszt csak a teljes FFT-ablak feltöltése után minősít.'}
                 </p>
               </div>
               <div className={`rounded-xl px-3 py-2 text-sm font-bold ${!listening ? 'bg-slate-800 text-slate-300' : !measurement?.settled ? 'bg-amber-500/15 text-amber-300' : passed ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
@@ -342,7 +429,9 @@ export default function SineReferenceBench() {
             </div>
             {listening && measurement?.settled && !passed && (
               <p className="mt-3 text-sm text-rose-200">
-                A digitális referencia mérése túllépi az 1 centes hibahatárt. Ezt a módot a mikrofonos hangolás kalibrálása előtt javítani kell.
+                {activeMode === 'acoustic'
+                  ? 'Az akusztikus visszamérés hibája 1 cent fölött van vagy nem talált megbízható csúcsot. Ellenőrizd a hangerőt, a mikrofon engedélyét, a távolságot és a környezeti zajt.'
+                  : 'A digitális referencia mérése túllépi az 1 centes hibahatárt. Ezt a módot a mikrofonos hangolás kalibrálása előtt javítani kell.'}
               </p>
             )}
           </div>
@@ -362,9 +451,10 @@ export default function SineReferenceBench() {
             referenciaértéket és a temperált hangjegy célfrekvenciáját.
           </p>
           <p className="mt-2 text-sm leading-6 text-slate-400">
-            Ez önmagában nem bizonyítja a teljes akusztikus mérőlánc pontosságát. A hangszóró, a helyiség,
-            a mikrofon, az eszköz mintavételi órája és a külső zaj külön validációt igényelnek.
-            A tesztjel nem hallható, és nem szól a hangszórón keresztül.
+            A digitális mód a szoftveres frekvenciamérést vizsgálja. Az akusztikus mód ezen felül a digitális szinuszkimenetet,
+            a hangszórót, a szobát, a mikrofont és az eszköz bemeneti láncát is teszteli, ezért az eredmény zaj- és pozíciófüggő.
+            Professzionális abszolút kalibrációhoz továbbra is hitelesített külső frekvenciareferencia szükséges; a böngésző által
+            kért frekvencia önmagában nem hitelesített mérőszabvány.
           </p>
         </section>
       </div>
