@@ -539,6 +539,7 @@ export default function App() {
               roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
               hasSignal={hasSignal}
               currentCents={activeCents ?? 0}
+              targetHz={activeResonance.targetHz}
               standardDeviationCents={standardDeviationCents}
             />
             <div className="p-3 rounded-xl bg-[#0b0f14] border border-white/5 text-xs text-slate-300">
