@@ -34,7 +34,11 @@ test('note selection uses fundamental and partial corroboration and rejects ambi
   const detected = chooseNoteCandidate(candidates, peakNear);
   assert.equal(detected?.id, 'D3');
 
-  const ambiguous = chooseNoteCandidate(candidates, () => ({ hz: 150, db: -40 }));
+  const duplicateTargets: NoteCandidate[] = [
+    { id: 'D3-a', noteName: 'D3-a', frequency: 146.83 },
+    { id: 'D3-b', noteName: 'D3-b', frequency: 146.83 },
+  ];
+  const ambiguous = chooseNoteCandidate(duplicateTargets, peakNear);
   assert.equal(ambiguous, null);
 });
 
