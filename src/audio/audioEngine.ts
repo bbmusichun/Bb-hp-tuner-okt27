@@ -238,8 +238,8 @@ export class BBAudioEngine {
 
     // Detect a sharp attack from the RMS envelope. Wait one FFT-window length after
     // an attack so the transient is no longer dominant in the analyser's rolling frame.
-    const transientDetected = hasSignal && this.previousRms > 0 &&
-      rms > this.previousRms * 2.5 && rms > 0.003;
+    const transientDetected = hasSignal && rms > 0.003 &&
+      (this.previousRms < 0.001 || rms > this.previousRms * 2.5);
     if (transientDetected) this.lastTransientAt = now;
     this.previousRms = rms;
     const transientHoldoff = this.lastTransientAt > 0 &&
