@@ -53,20 +53,23 @@ export function chooseNoteCandidate(
         (validOctave ? 0.12 : 0) + (validThird ? 0.12 : 0)
       ));
 
+      const partialCount = Number(Boolean(validOctave)) + Number(Boolean(validThird));
+      const eligible = confidence >= 0.18 && (Boolean(validFundamental) || partialCount === 2);
       return {
         ...candidate,
         score,
         confidence,
         hasFundamental: Boolean(validFundamental),
-        partialCount: Number(Boolean(validOctave)) + Number(Boolean(validThird)),
+        partialCount,
+        eligible,
       };
     })
+    .filter((candidate) => candidate.eligible && Number.isFinite(candidate.score))
     .sort((a, b) => b.score - a.score);
 
   const best = ranked[0];
   const runnerUp = ranked[1];
-  if (!best || best.confidence < 0.18) return null;
-  if (!best.hasFundamental && best.partialCount < 2) return null;
+  if (!best) return null;
 
   const requiredMargin = best.hasFundamental ? 2.5 : 5;
   if (runnerUp && best.score - runnerUp.score < requiredMargin) return null;
