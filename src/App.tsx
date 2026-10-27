@@ -80,6 +80,8 @@ export default function App() {
   const [isListening, setIsListening] = useState(false);
   const [hasSignal, setHasSignal] = useState(false);
   const [inputLevelDb, setInputLevelDb] = useState(-100);
+  const [transientHoldoff, setTransientHoldoff] = useState(false);
+  const [highInputLevel, setHighInputLevel] = useState(false);
   const [sampleRateKhz, setSampleRateKhz] = useState(48);
   const [standardDeviationCents, setStandardDeviationCents] = useState(1.2);
 
@@ -145,6 +147,8 @@ export default function App() {
         if (result) {
           setHasSignal(result.hasSignal);
           setInputLevelDb(result.inputLevelDb);
+          setTransientHoldoff(result.transientHoldoff);
+          setHighInputLevel(result.highInputLevel);
           setSampleRateKhz(result.sampleRateKhz);
           setStandardDeviationCents(result.standardDeviationCents);
 
@@ -175,6 +179,8 @@ export default function App() {
       setIsListening(false);
       setHasSignal(false);
       setInputLevelDb(-100);
+      setTransientHoldoff(false);
+      setHighInputLevel(false);
       const clearMeasurement = (m: ResonanceMeasurement, targetHz: number): ResonanceMeasurement => ({
         ...m, measuredHz: null, targetHz, deviationCents: null, amplitudeDb: null,
         confidence: 0, timestampMs: Date.now(), status: 'no-signal',
@@ -310,6 +316,13 @@ export default function App() {
             </div>
           </div>
         </div>
+        {isListening && (transientHoldoff || highInputLevel) && (
+          <div role="status" className={`mx-1 mb-2 rounded-md border px-2 py-1.5 text-[11px] ${highInputLevel ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-amber-500/30 bg-amber-500/10 text-amber-200'}`}>
+            {highInputLevel
+              ? 'Túl erős bemeneti jel – üss finomabban vagy távolítsd a mikrofont a hangszertől.'
+              : 'Ütés tranziensének kiszűrése – várj a zengő sustain szakaszra.'}
+          </div>
+        )}
 
         {/* ================= TAB 1: MAIN TUNING SCREEN ================= */}
         {activeTab === 'hangolas' && (

@@ -26,7 +26,7 @@ export const BBStrobeBands: React.FC<Props> = ({
 
   // Smoothed deviation cents
   const smoothCentsRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
-  // A green state requires a continuously valid, in-tolerance measurement for 1 s.
+  // A green state requires a continuously valid, frequency-dependent in-tolerance measurement for 1 s.
   const greenSinceRef = useRef<{ alap: number | null; kvint: number | null; oktav: number | null }>({ alap: null, kvint: null, oktav: null });
 
   useEffect(() => {
@@ -58,15 +58,18 @@ export const BBStrobeBands: React.FC<Props> = ({
       // Integrate phase: speed proportional to cents
       // When cents = 0, speed = 0 (perfect standstill)
       // Positive cents = moves right, Negative cents = moves left
-      const kSpeed = 16.0; // pixels per second per cent
-      if (hasSignal && alap.status === 'valid') {
-        phasesRef.current.alap += smoothCentsRef.current.alap * kSpeed * dt;
+      // Strobe drift follows the physical frequency difference (beat rate), not a
+      // cents-only linear scale: Δf = f_target * (2^(cents/1200) - 1).
+      const beatDeltaHz = (targetHz: number, cents: number) =>
+        targetHz * (Math.pow(2, cents / 1200) - 1);
+      if (hasSignal && alap.status === 'valid' && alap.deviationCents !== null) {
+        phasesRef.current.alap += beatDeltaHz(alap.targetHz ?? 146.83, smoothCentsRef.current.alap) * 40 * dt;
       }
-      if (hasSignal && kvint.status === 'valid') {
-        phasesRef.current.kvint += smoothCentsRef.current.kvint * kSpeed * dt;
+      if (hasSignal && kvint.status === 'valid' && kvint.deviationCents !== null) {
+        phasesRef.current.kvint += beatDeltaHz(kvint.targetHz ?? 220.25, smoothCentsRef.current.kvint) * 68 * dt;
       }
-      if (hasSignal && oktav.status === 'valid') {
-        phasesRef.current.oktav += smoothCentsRef.current.oktav * kSpeed * dt;
+      if (hasSignal && oktav.status === 'valid' && oktav.deviationCents !== null) {
+        phasesRef.current.oktav += beatDeltaHz(oktav.targetHz ?? 293.66, smoothCentsRef.current.oktav) * 108 * dt;
       }
 
       ctx.clearRect(0, 0, w, h);
@@ -87,6 +90,7 @@ export const BBStrobeBands: React.FC<Props> = ({
           phase: phasesRef.current.alap,
           stripeWidth: 20, // Fine stripes for Alaphang
           cents: smoothCentsRef.current.alap,
+          targetHz: alap.targetHz ?? alap.measuredHz ?? 146.83,
           isValid: hasSignal && alap.status === 'valid',
         },
         {
@@ -98,6 +102,7 @@ export const BBStrobeBands: React.FC<Props> = ({
           phase: phasesRef.current.kvint,
           stripeWidth: 34, // Medium stripes for Kvint
           cents: smoothCentsRef.current.kvint,
+          targetHz: kvint.targetHz ?? kvint.measuredHz ?? 220.25,
           isValid: hasSignal && kvint.status === 'valid',
         },
         {
@@ -109,6 +114,7 @@ export const BBStrobeBands: React.FC<Props> = ({
           phase: phasesRef.current.oktav,
           stripeWidth: 54, // Wide block stripes for Oktáv
           cents: smoothCentsRef.current.oktav,
+          targetHz: oktav.targetHz ?? oktav.measuredHz ?? 293.66,
           isValid: hasSignal && oktav.status === 'valid',
         },
       ];
@@ -116,14 +122,16 @@ export const BBStrobeBands: React.FC<Props> = ({
       rows.forEach((row, idx) => {
         const now = currentTime;
         const key = row.key as 'alap' | 'kvint' | 'oktav';
-        const inTolerance = row.isValid && Number.isFinite(row.cents) && Math.abs(row.cents) <= 3.0;
+        // Practical psychoacoustic display bands (not a claim that JND equals this value).
+        const toleranceCents = row.targetHz < 180 ? 1.5 : row.targetHz < 260 ? 2.0 : 3.0;
+        const inTolerance = row.isValid && Number.isFinite(row.cents) && Math.abs(row.cents) <= toleranceCents;
         if (inTolerance) {
           if (greenSinceRef.current[key] === null) greenSinceRef.current[key] = now;
         } else {
           greenSinceRef.current[key] = null;
         }
         const isConfirmedGreen = inTolerance && greenSinceRef.current[key] !== null && now - greenSinceRef.current[key]! >= 1000;
-        const isNearButUnconfirmed = row.isValid && Math.abs(row.cents) <= 3.0 && !isConfirmedGreen;
+        const isNearButUnconfirmed = row.isValid && Math.abs(row.cents) <= toleranceCents && !isConfirmedGreen;
         const y = idx * (rowHeight + 4);
         const stripeW = row.stripeWidth;
         const period = stripeW * 2;
