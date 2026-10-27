@@ -138,7 +138,7 @@ export default function ReferenceWavBench() {
         <h2 className="font-semibold">1. Referenciafelvétel betöltése</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm text-slate-300">Alaphang célértéke
-            <select value={targetIndex} disabled={busy} onChange={(event) => { const nextIndex = Number(event.target.value); setTargetIndex(nextIndex); const audio = audioDataRef.current; if (audio) setFrames(analyzeWavRecording(audio.samples, audio.sampleRate, { fftSize: 16384, hopSize: 8192, targetHz: TARGETS[nextIndex].hz, peakFloorDb: -82 })); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
+            <select value={targetIndex} disabled={busy} onChange={(event) => { const nextIndex = Number(event.target.value); setTargetIndex(nextIndex); const audio = audioDataRef.current; if (audio) analyzeLoadedAudio(TARGETS[nextIndex].hz, channelMode); }} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
               {TARGETS.map((item, index) => <option key={item.label} value={index}>{item.label} · {item.hz.toFixed(6)} Hz</option>)}
             </select>
           </label>
@@ -180,22 +180,22 @@ export default function ReferenceWavBench() {
             <button onClick={exportCsv} className="rounded-xl border border-slate-600 px-4 py-2 text-sm">CSV export</button>
           </div>
           <div className="overflow-x-auto rounded-2xl border border-slate-800">
-            <table className="w-full min-w-[900px] text-left text-xs">
+            <table className="w-full min-w-[1120px] text-left text-xs">
               <thead className="bg-slate-900 text-slate-400"><tr>
                 <th className="p-3">Idő (s)</th><th className="p-3">Jelszint (dB)</th>
-                <th className="p-3">1× Hz</th><th className="p-3">1× cent</th>
-                <th className="p-3">2× Hz</th><th className="p-3">2× cent</th>
-                <th className="p-3">3× Hz</th><th className="p-3">3× cent</th>
+                <th className="p-3">1× Hz</th><th className="p-3">1× cent</th><th className="p-3">1× csúcs dBFS</th>
+                <th className="p-3">2× Hz</th><th className="p-3">2× cent</th><th className="p-3">2× csúcs dBFS</th>
+                <th className="p-3">3× Hz</th><th className="p-3">3× cent</th><th className="p-3">3× csúcs dBFS</th>
               </tr></thead>
               <tbody>{frames.map((frame, index) => <tr key={frame.timeSeconds} className="border-t border-slate-800">
                 <td className="p-3 font-mono">{frame.timeSeconds.toFixed(3)}</td><td className="p-3 font-mono">{frame.rmsDb.toFixed(1)}</td>
                 {frame.resonances.map((resonance, i) => <React.Fragment key={i}>
-                  <td className="p-3 font-mono">{fmt(resonance.measuredHz)}</td><td className="p-3 font-mono">{fmtCents(resonance.cents)}</td>
+                  <td className="p-3 font-mono">{fmt(resonance.measuredHz)}</td><td className="p-3 font-mono">{fmtCents(resonance.cents)}</td><td className="p-3 font-mono">{fmt(resonance.peakDb, 1)}</td>
                 </React.Fragment>)}
               </tr>)}</tbody>
             </table>
           </div>
-          <p className="text-xs leading-5 text-slate-500">A táblázat minden sora egy külön, átfedő hangablak. A korai ütésből származó értékek eltérhetnek a lecsengés stabilabb szakaszától. A hiányzó csúcs „—” marad; a program nem gyárt hozzá becsült hangolási értéket.</p>
+          <p className="text-xs leading-5 text-slate-500">A táblázat minden sora egy külön, átfedő hangablak. A korai ütésből származó értékek eltérhetnek a lecsengés stabilabb szakaszától. A hiányzó csúcs „—” marad; a program nem gyárt hozzá becsült hangolási értéket. A csúcs dBFS érték a relatív digitális jelszintet mutatja, nem kalibrált hangnyomást.</p>
         </section>
       </>}
     </div>
