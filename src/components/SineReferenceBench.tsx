@@ -68,7 +68,6 @@ export default function SineReferenceBench() {
   const microphoneSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const toneStopTimerRef = useRef<number | null>(null);
   const tonePlayingRef = useRef(false);
-  const lastTonePeakAtRef = useRef(0);
   const rafRef = useRef(0);
   const targetHzRef = useRef<number>(DEFAULT_TARGET.hz);
   const generatedHzRef = useRef<number>(DEFAULT_TARGET.hz);
@@ -208,7 +207,6 @@ export default function SineReferenceBench() {
       fftSizeRef.current = fftSize;
       settledAfterRef.current = performance.now() + (fftSize / context.sampleRate) * 1000 + 50;
       lastUiUpdateRef.current = 0;
-      lastTonePeakAtRef.current = 0;
       setListening(true);
       setActiveMode(mode);
       const isAcoustic = mode === 'acoustic';
@@ -270,7 +268,6 @@ export default function SineReferenceBench() {
           fftSize: fftSizeRef.current,
         };
 
-        if (mode === 'acoustic' && measuredHz !== null) lastTonePeakAtRef.current = now;
         // Avoid rerendering at the audio callback rate; measurement still updates 10x/s.
         if (now - lastUiUpdateRef.current >= 100) {
           lastUiUpdateRef.current = now;
