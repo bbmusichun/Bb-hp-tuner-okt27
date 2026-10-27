@@ -116,6 +116,7 @@ export class BBAudioEngine {
     this.transientDetected = false;
     this.transientHoldoff = false;
     this.stabilityHistory = [];
+    this.lastValidResonances = {};
   }
 
   public getMicState(): MicState {
@@ -298,10 +299,10 @@ export class BBAudioEngine {
 
     // Search for the 3 resonances:
     // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const fPeak = transientHoldoff ? null : this.findPeakInWindow(targetFundamentalHz, 240, this.freqData);
+    const fPeak = transientHoldoff ? null : this.findPeakInWindow(targetFundamentalHz, 150, this.freqData);
     // Search each resonance independently to reduce masking by a dominant fundamental.
-    const qPeak = transientHoldoff ? null : this.findPeakInWindow(targetFifthHz, 240, this.freqData);
-    const oPeak = transientHoldoff ? null : this.findPeakInWindow(targetOctaveHz, 240, this.freqData);
+    const qPeak = transientHoldoff ? null : this.findPeakInWindow(targetFifthHz, 150, this.freqData);
+    const oPeak = transientHoldoff ? null : this.findPeakInWindow(targetOctaveHz, 150, this.freqData);
 
     // Construct measurements
     const alap = this.buildResonanceMeasurement(
@@ -380,7 +381,7 @@ export class BBAudioEngine {
   }
 
   public getStabilityHistory(): { timestamp: number; cents: number; valid: boolean }[] {
-    return this.stabilityHistory;
+    return this.stabilityHistory.map((point) => ({ ...point }));
   }
 
   private buildResonanceMeasurement(
@@ -392,18 +393,20 @@ export class BBAudioEngine {
     now: number,
     hasSignal: boolean
   ): ResonanceMeasurement {
-    const cents = peak ? 1200 * Math.log2(peak.freq / targetHz) : null;
-    const confidence = peak ? Math.max(0, Math.min(1, (peak.magDb + 100) / 65)) : 0;
+    // Never accept a spectral peak when the time-domain gate says there is no usable signal.
+    const currentPeak = hasSignal ? peak : null;
+    const cents = currentPeak ? 1200 * Math.log2(currentPeak.freq / targetHz) : null;
+    const confidence = currentPeak ? Math.max(0, Math.min(1, (currentPeak.magDb + 100) / 65)) : 0;
     // A missing frame can briefly occur between FFT updates. Preserve the last good
     // numerical reading for up to 250 ms to prevent UI flicker, but keep status no-signal
     // so the interface never claims a stale reading is currently live.
-    const status = !hasSignal || !peak ? 'no-signal'
+    const status = !hasSignal || !currentPeak ? 'no-signal'
       : confidence > 0.25 && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain';
-    if (status === 'valid' && peak && cents !== null) {
+    if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
-        hz: peak.freq,
+        hz: currentPeak.freq,
         cents,
-        amplitudeDb: peak.magDb,
+        amplitudeDb: currentPeak.magDb,
         confidence,
         timestampMs: now,
       };
@@ -415,12 +418,12 @@ export class BBAudioEngine {
       role,
       name,
       noteName,
-      measuredHz: peak ? peak.freq : cachedIsFresh ? cached!.hz : null,
+      measuredHz: currentPeak ? currentPeak.freq : hasSignal && cachedIsFresh ? cached!.hz : null,
       targetHz,
-      deviationCents: cents !== null ? cents : cachedIsFresh ? cached!.cents : null,
-      amplitudeDb: peak ? peak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
-      confidence: peak ? confidence : cachedIsFresh ? cached!.confidence : 0,
-      timestampMs: peak ? now : cachedIsFresh ? cached!.timestampMs : now,
+      deviationCents: cents !== null ? cents : hasSignal && cachedIsFresh ? cached!.cents : null,
+      amplitudeDb: currentPeak ? currentPeak.magDb : hasSignal && cachedIsFresh ? cached!.amplitudeDb : null,
+      confidence: currentPeak ? confidence : hasSignal && cachedIsFresh ? cached!.confidence : 0,
+      timestampMs: currentPeak ? now : hasSignal && cachedIsFresh ? cached!.timestampMs : now,
       status,
     };
   }
