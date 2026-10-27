@@ -45,6 +45,26 @@ describe('conservative spectral note detection', () => {
     assert.equal(chooseNoteCandidate([d3, a3], detect), null);
   });
 
+  it('prefers the candidate whose detected peak is closer to its target frequency', () => {
+    const candidates = [
+      { id: 'a3', noteName: 'A3', frequency: 220 },
+      { id: 'd3', noteName: 'D3', frequency: 146.832 },
+    ];
+    const peaks = [
+      { hz: 220.8, db: -40 },
+      { hz: 146.9, db: -42 },
+      { hz: 293.8, db: -50 },
+      { hz: 440.6, db: -48 },
+      { hz: 440.5, db: -41 },
+    ];
+    const detect = (targetHz: number): SpectralPeak | null => {
+      const match = peaks.filter(p => Math.abs(1200 * Math.log2(p.hz / targetHz)) < 65)
+        .sort((a, b) => Math.abs(a.hz - targetHz) - Math.abs(b.hz - targetHz))[0];
+      return match ?? null;
+    };
+    assert.equal(chooseNoteCandidate(candidates, detect)?.id, 'd3');
+  });
+
   it('ignores invalid candidate frequencies', () => {
     const invalid = { id: 'bad', noteName: 'bad', frequency: Number.NaN };
     assert.equal(chooseNoteCandidate([invalid], () => null), null);
