@@ -52,11 +52,11 @@ export const BBCards: React.FC<Props> = ({
     <div className="w-full grid grid-cols-3 gap-2 my-1">
       {cards.map((c) => {
         const isSelected = selectedRole === c.role;
-        const measuredStr = c.data.measuredHz !== null ? `${c.data.measuredHz.toFixed(2)} Hz` : `${c.data.targetHz?.toFixed(2) || '0.00'} Hz`;
+        const measuredStr = c.data.measuredHz !== null && c.data.status === 'valid' ? `${c.data.measuredHz.toFixed(2)} Hz` : '— Hz';
         const targetStr = `Cél: ${c.data.targetHz ? c.data.targetHz.toFixed(2) : '--'} Hz`;
         const cents = c.data.deviationCents;
-        const centsStr = cents !== null ? `${cents > 0 ? '+' : ''}${cents.toFixed(1)} cent` : '0.0 cent';
-        const inTune = cents !== null && Math.abs(cents) <= 3.0;
+        const centsStr = cents !== null && c.data.status === 'valid' ? `${cents > 0 ? '+' : ''}${cents.toFixed(1)} cent` : '— cent';
+        const inTune = c.data.status === 'valid' && cents !== null && Math.abs(cents) <= 3.0;
 
         return (
           <button
@@ -94,7 +94,7 @@ export const BBCards: React.FC<Props> = ({
                 inTune ? 'text-[#10b981]' : Math.abs(cents || 0) > 10 ? 'text-[#f43f5e]' : 'text-[#f59e0b]'
               }`}
             >
-              {hasSignal ? centsStr : 'Nincs jel'}
+              {!hasSignal || c.data.status === 'no-signal' ? 'Nincs jel' : centsStr}
             </div>
 
             {/* Mini Sparkline Canvas */}
@@ -141,8 +141,8 @@ const SparklineCanvas: React.FC<{ lineColor: string; hasSignal: boolean; cents: 
       ctx.clearRect(0, 0, w, h);
 
       // Add a slight procedural wave based on cents error
-      const noise = hasSignal ? Math.sin(performance.now() * 0.01) * Math.min(6, Math.abs(cents) * 0.8) : 0;
-      historyRef.current.push(noise);
+      const sample = hasSignal && Number.isFinite(cents) ? Math.max(-10, Math.min(10, cents)) : 0;
+      historyRef.current.push(sample);
       if (historyRef.current.length > 30) historyRef.current.shift();
 
       // Zero line
@@ -161,7 +161,7 @@ const SparklineCanvas: React.FC<{ lineColor: string; hasSignal: boolean; cents: 
       const step = w / (historyRef.current.length - 1);
       historyRef.current.forEach((val, idx) => {
         const x = idx * step;
-        const y = centerY - val;
+        const y = centerY - (val / 10) * (h * 0.42);
         if (idx === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       });
