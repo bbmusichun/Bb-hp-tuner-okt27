@@ -23,6 +23,9 @@ export class BBAudioEngine {
   // Metering & input level
   private inputLevelDb = -100;
   private sampleRate = 48000;
+  private previousRms = 0;
+  private lastTransientAt = 0;
+  private transientDetected = false;
 
   // Pitch stability history (rolling 10 seconds)
   private stabilityHistory: { timestamp: number; cents: number; valid: boolean }[] = [];
@@ -87,6 +90,10 @@ export class BBAudioEngine {
     }
     this.micState = 'inactive';
     this.inputLevelDb = -100;
+    this.previousRms = 0;
+    this.lastTransientAt = 0;
+    this.transientDetected = false;
+    this.stabilityHistory = [];
   }
 
   public getMicState(): MicState {
@@ -195,6 +202,8 @@ export class BBAudioEngine {
     inputLevelDb: number;
     sampleRateKhz: number;
     standardDeviationCents: number;
+    transientHoldoff: boolean;
+    highInputLevel: boolean;
   } {
     const now = Date.now();
 
@@ -207,6 +216,8 @@ export class BBAudioEngine {
         inputLevelDb: -100,
         sampleRateKhz: Math.round(this.sampleRate / 1000),
         standardDeviationCents: 0,
+        transientHoldoff: false,
+        highInputLevel: false,
       };
     }
 
@@ -222,15 +233,25 @@ export class BBAudioEngine {
     const db = rms > 1e-5 ? Math.max(-100, Math.min(0, 20 * Math.log10(rms))) : -100;
     this.inputLevelDb = Math.round(db);
 
-    const hasSignal = db > -58; // threshold for audio signal presence
+    const hasSignal = db > -58; // RMS gate for audio presence
+    const highInputLevel = db > -8; // Near-full-scale input can clip or distort transients.
+
+    // Detect a sharp attack from the RMS envelope. Wait one FFT-window length after
+    // an attack so the transient is no longer dominant in the analyser's rolling frame.
+    const transientDetected = hasSignal && this.previousRms > 0 &&
+      rms > this.previousRms * 2.5 && rms > 0.003;
+    if (transientDetected) this.lastTransientAt = now;
+    this.previousRms = rms;
+    const transientHoldoff = this.lastTransientAt > 0 &&
+      now - this.lastTransientAt < (this.fftSize / this.sampleRate) * 1000 + 50;
+    this.transientDetected = transientDetected;
 
     // Search for the 3 resonances:
     // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const fPeak = this.findPeakInWindow(targetFundamentalHz, 240, this.freqData);
-    // 2. Kvint (Fifth): search within ±150 cents of target
-    const qPeak = this.findPeakInWindow(targetFifthHz, 240, this.freqData);
-    // 3. Oktáv (Octave): search within ±150 cents of target
-    const oPeak = this.findPeakInWindow(targetOctaveHz, 240, this.freqData);
+    const fPeak = transientHoldoff ? null : this.findPeakInWindow(targetFundamentalHz, 240, this.freqData);
+    // Search each resonance independently to reduce masking by a dominant fundamental.
+    const qPeak = transientHoldoff ? null : this.findPeakInWindow(targetFifthHz, 240, this.freqData);
+    const oPeak = transientHoldoff ? null : this.findPeakInWindow(targetOctaveHz, 240, this.freqData);
 
     // Construct measurements
     const alap = this.buildResonanceMeasurement(
@@ -297,6 +318,8 @@ export class BBAudioEngine {
       inputLevelDb: this.inputLevelDb,
       sampleRateKhz: Math.round(this.sampleRate / 1000),
       standardDeviationCents,
+      transientHoldoff,
+      highInputLevel,
     };
   }
 
