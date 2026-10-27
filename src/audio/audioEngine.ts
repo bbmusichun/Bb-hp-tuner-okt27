@@ -10,6 +10,7 @@ import { isTransientHoldoffActive } from './transientGuard';
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
 import { isSameMeasurementTarget } from './measurementCache';
+import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -422,12 +423,12 @@ export class BBAudioEngine {
       currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
     }
     const cents = currentPeak ? 1200 * Math.log2(currentPeak.freq / targetHz) : null;
-    const confidence = currentPeak ? Math.max(0, Math.min(1, (currentPeak.magDb + 100) / 65)) : 0;
+    const confidence = currentPeak ? resonanceConfidenceFromDb(currentPeak.magDb) : 0;
     // Handpan resonances can decay at different rates. Keep each last valid reading
     // visible for 2.5 s, explicitly marked as held rather than live, so the player can
     // read the value after the strike without confusing it with a current measurement.
     const status = currentPeak && hasSignal
-      ? confidence > 0.25 && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      ? isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
       : 'no-signal';
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
