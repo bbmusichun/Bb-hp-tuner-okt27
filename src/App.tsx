@@ -26,7 +26,7 @@ import { BBStabilityGraph } from './components/BBStabilityGraph';
 import { BBHangmezoView } from './components/BBHangmezoView';
 import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
-import { BBSpectrogram } from './components/BBSpectrogram';
+import { BBSpectrumWaterfall } from './components/BBSpectrumWaterfall';
 
 function loadTuningPreferences(): { a4Ref: number; scaleId: string; autoDetect: boolean } {
   const defaults = { a4Ref: 440, scaleId: PRESET_SCALES[0].id, autoDetect: true };
@@ -535,41 +535,24 @@ export default function App() {
 
         {/* ================= TAB 2: DETAILED SPECTRUM VIEW ================= */}
         {activeTab === 'spektrum' && (
-          <div className="flex-1 flex flex-col gap-3 py-2">
-            <BBSpectrum
-              alap={alap}
-              kvint={kvint}
-              oktav={oktav}
-              hasSignal={hasSignal}
-              onSelectPeak={setSelectedRole}
-            />
-            <BBSpectrogram active={isListening} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
-            <BBStabilityGraph
-              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
-              hasSignal={hasSignal}
-              currentCents={activeCents ?? 0}
-              targetHz={activeResonance.targetHz}
-              standardDeviationCents={standardDeviationCents}
-            />
-            <div className="p-3 rounded-xl bg-[#0b0f14] border border-white/5 text-xs text-slate-300">
-              <div className="font-bold text-white mb-1">Részletes Spektrális Csúcsok:</div>
-              <div className="grid grid-cols-3 gap-2 font-mono text-[11px] mt-2">
-                <div className="p-2 rounded bg-slate-900/60 border border-white/5">
-                  <div className="text-[#f59e0b] font-sans font-semibold">1× Alaphang</div>
-                  <div>{alap.measuredHz ? `${alap.measuredHz.toFixed(2)} Hz` : '--'}</div>
-                  <div className="text-slate-400">Amp: {alap.amplitudeDb ? `${alap.amplitudeDb.toFixed(1)} dB` : '--'}</div>
-                </div>
-                <div className="p-2 rounded bg-slate-900/60 border border-white/5">
-                  <div className="text-[#c084fc] font-sans font-semibold">3× Parciális</div>
-                  <div>{kvint.measuredHz ? `${kvint.measuredHz.toFixed(2)} Hz` : '--'}</div>
-                  <div className="text-slate-400">Amp: {kvint.amplitudeDb ? `${kvint.amplitudeDb.toFixed(1)} dB` : '--'}</div>
-                </div>
-                <div className="p-2 rounded bg-slate-900/60 border border-white/5">
-                  <div className="text-[#38bdf8] font-sans font-semibold">2× Oktáv</div>
-                  <div>{oktav.measuredHz ? `${oktav.measuredHz.toFixed(2)} Hz` : '--'}</div>
-                  <div className="text-slate-400">Amp: {oktav.amplitudeDb ? `${oktav.amplitudeDb.toFixed(1)} dB` : '--'}</div>
-                </div>
-              </div>
+          <div className="flex-1 flex flex-col gap-2 py-1 min-h-0">
+            <BBSpectrumWaterfall active={isListening} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
+            <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
+              <button onClick={() => setSelectedRole('fundamental')} className={`rounded-lg border p-2 text-left ${selectedRole === 'fundamental' ? 'border-amber-400/60 bg-amber-400/10' : 'border-white/10 bg-slate-900/50'}`}>
+                <div className="font-sans font-semibold text-amber-400">1× Alaphang</div>
+                <div className="text-white">{alap.measuredHz !== null ? alap.measuredHz.toFixed(2) + ' Hz' : '--'}</div>
+                <div className="text-slate-400">{alap.deviationCents !== null ? (alap.deviationCents > 0 ? '+' : '') + alap.deviationCents.toFixed(1) + ' cent' : '--'}</div>
+              </button>
+              <button onClick={() => setSelectedRole('octave')} className={`rounded-lg border p-2 text-left ${selectedRole === 'octave' ? 'border-cyan-400/60 bg-cyan-400/10' : 'border-white/10 bg-slate-900/50'}`}>
+                <div className="font-sans font-semibold text-cyan-400">2× Oktáv</div>
+                <div className="text-white">{oktav.measuredHz !== null ? oktav.measuredHz.toFixed(2) + ' Hz' : '--'}</div>
+                <div className="text-slate-400">{oktav.deviationCents !== null ? (oktav.deviationCents > 0 ? '+' : '') + oktav.deviationCents.toFixed(1) + ' cent' : '--'}</div>
+              </button>
+              <button onClick={() => setSelectedRole('fifth')} className={`rounded-lg border p-2 text-left ${selectedRole === 'fifth' ? 'border-purple-400/60 bg-purple-400/10' : 'border-white/10 bg-slate-900/50'}`}>
+                <div className="font-sans font-semibold text-purple-400">3× Kvint</div>
+                <div className="text-white">{kvint.measuredHz !== null ? kvint.measuredHz.toFixed(2) + ' Hz' : '--'}</div>
+                <div className="text-slate-400">{kvint.deviationCents !== null ? (kvint.deviationCents > 0 ? '+' : '') + kvint.deviationCents.toFixed(1) + ' cent' : '--'}</div>
+              </button>
             </div>
           </div>
         )}
