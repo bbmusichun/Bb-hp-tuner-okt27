@@ -157,7 +157,7 @@ export const BBSpectrum: React.FC<Props> = ({
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // Resonant Peak Pins (Alaphang, Kvint, Oktáv)
+      // Resonant Peak Pins (Alaphang, 3. parciális, Oktáv)
       const peaks = [
         {
           role: 'fundamental' as const,
@@ -169,8 +169,8 @@ export const BBSpectrum: React.FC<Props> = ({
         {
           role: 'fifth' as const,
           color: '#c084fc', // Purple
-          hz: kvint.measuredHz || kvint.targetHz || 220.21,
-          note: kvint.noteName || 'A3',
+          hz: kvint.measuredHz || kvint.targetHz || 440.50,
+          note: kvint.noteName || 'A4',
           visible: true,
         },
         {
