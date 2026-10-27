@@ -27,6 +27,7 @@ export class BBAudioEngine {
   private lastTransientAt = 0;
   private transientPeakRms = 0;
   private transientDetected = false;
+  private transientHoldoff = false;
 
   // Pitch stability history (rolling 10 seconds)
   private stabilityHistory: { timestamp: number; cents: number; valid: boolean }[] = [];
@@ -106,6 +107,7 @@ export class BBAudioEngine {
     this.lastTransientAt = 0;
     this.transientPeakRms = 0;
     this.transientDetected = false;
+    this.transientHoldoff = false;
     this.stabilityHistory = [];
   }
 
@@ -205,7 +207,7 @@ export class BBAudioEngine {
   /** Detect the most likely struck note from the complete configured scale. Harmonic evidence is
    * combined across f0, 2*f0 and 3*f0; low-confidence/ambiguous frames are rejected. */
   public detectNote(candidates: { id: string; noteName: string; frequency: number }[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
-    if (!this.analyser || this.micState !== 'active' || candidates.length === 0) return null;
+    if (!this.analyser || this.micState !== 'active' || candidates.length === 0 || this.transientHoldoff) return null;
     this.analyser.getFloatFrequencyData(this.freqData as any);
     const binWidth = this.sampleRate / (this.freqData.length * 2);
     const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number } | null => {
@@ -310,6 +312,7 @@ export class BBAudioEngine {
       (transientElapsed < 180 || !transientDecayed);
     if (!transientHoldoff) this.transientPeakRms = 0;
     this.transientDetected = transientDetected;
+    this.transientHoldoff = transientHoldoff;
 
     // Search for the 3 resonances:
     // 1. Alaphang (Fundamental): search within ±150 cents of target
