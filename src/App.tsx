@@ -27,12 +27,32 @@ import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
 import { BBSpectrogram } from './components/BBSpectrogram';
 
+function loadTuningPreferences(): { a4Ref: number; scaleId: string; autoDetect: boolean } {
+  const defaults = { a4Ref: 440, scaleId: PRESET_SCALES[0].id, autoDetect: true };
+  try {
+    const raw = localStorage.getItem('bb-tuner-preferences-v1');
+    if (!raw) return defaults;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return defaults;
+    const prefs = parsed as { a4Ref?: unknown; scaleId?: unknown; autoDetect?: unknown };
+    return {
+      a4Ref: typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
+        ? prefs.a4Ref : defaults.a4Ref,
+      scaleId: typeof prefs.scaleId === 'string' && PRESET_SCALES.some((scale) => scale.id === prefs.scaleId)
+        ? prefs.scaleId : defaults.scaleId,
+      autoDetect: typeof prefs.autoDetect === 'boolean' ? prefs.autoDetect : defaults.autoDetect,
+    };
+  } catch {
+    return defaults;
+  }
+}
+
 function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
   if (!value || typeof value !== 'object') return false;
   const entry = value as Partial<TuningLogEntry>;
   return typeof entry.id === 'string' &&
     typeof entry.noteName === 'string' &&
-    typeof entry.timestamp === 'number' && Number.isFinite(entry.timestamp) &&
+    typeof entry.timestamp === 'number' && Number.isFinite(entry.timestamp) && Number.isFinite(new Date(entry.timestamp).getTime()) &&
     typeof entry.fundamentalHz === 'number' && Number.isFinite(entry.fundamentalHz) && entry.fundamentalHz > 0 &&
     typeof entry.fundamentalCents === 'number' && Number.isFinite(entry.fundamentalCents) &&
     typeof entry.fifthHz === 'number' && Number.isFinite(entry.fifthHz) && entry.fifthHz > 0 &&
@@ -45,12 +65,15 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
 export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [autoDetect, setAutoDetect] = useState(true);
+  const [autoDetect, setAutoDetect] = useState(() => loadTuningPreferences().autoDetect);
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
 
   // Calibration and Scale
-  const [a4Ref, setA4Ref] = useState<number>(440);
-  const [currentScale, setCurrentScale] = useState<HandpanScale>(PRESET_SCALES[0]); // D Kurd 9
+  const [a4Ref, setA4Ref] = useState<number>(() => loadTuningPreferences().a4Ref);
+  const [currentScale, setCurrentScale] = useState<HandpanScale>(() => {
+    const prefs = loadTuningPreferences();
+    return PRESET_SCALES.find((scale) => scale.id === prefs.scaleId) ?? PRESET_SCALES[0];
+  }); // D Kurd 9 by default
 
   // Selected resonance focus for the main display and stability graph
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
@@ -79,7 +102,7 @@ export default function App() {
 
   useEffect(() => {
     if (toneNotes.length > 0) {
-      setSelectedNote(toneNotes[0]);
+      setSelectedNote((previous) => toneNotes.find((note) => note.id === previous.id) ?? toneNotes[0]);
     }
   }, [toneNotes]);
 
@@ -173,6 +196,18 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem('bb-tuner-measurements-v1', JSON.stringify(logs)); } catch (error) { console.warn('Nem sikerült menteni a mérési naplót:', error); }
   }, [logs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('bb-tuner-preferences-v1', JSON.stringify({
+        a4Ref,
+        scaleId: currentScale.id,
+        autoDetect,
+      }));
+    } catch (error) {
+      console.warn('Nem sikerült menteni a hangoló beállításait:', error);
+    }
+  }, [a4Ref, currentScale.id, autoDetect]);
 
   // Audio Analysis Loop (~30 Hz)
   useEffect(() => {
