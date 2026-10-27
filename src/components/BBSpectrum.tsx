@@ -239,12 +239,33 @@ export const BBSpectrum: React.FC<Props> = ({
         height={140}
         className="w-full h-[140px] block cursor-pointer"
         onClick={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const clickX = e.clientX - rect.left;
-          const pct = clickX / rect.width;
-          if (pct < 0.38) onSelectPeak?.('fundamental');
-          else if (pct < 0.65) onSelectPeak?.('fifth');
-          else onSelectPeak?.('octave');
+          if (!onSelectPeak) return;
+          const canvas = e.currentTarget;
+          const rect = canvas.getBoundingClientRect();
+          const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+          const plotLeft = 32;
+          const plotWidth = canvas.width - plotLeft - 12;
+          const frequencyAtClick = ((canvasX - plotLeft) / plotWidth) * 2400;
+          if (frequencyAtClick < 0 || frequencyAtClick > 2400) return;
+
+          const peakCandidates = [
+            {
+              role: 'fundamental' as const,
+              hz: alap.status === 'valid' && alap.measuredHz !== null ? alap.measuredHz : alap.targetHz ?? 146.83,
+            },
+            {
+              role: 'fifth' as const,
+              hz: kvint.status === 'valid' && kvint.measuredHz !== null ? kvint.measuredHz : kvint.targetHz ?? 440.50,
+            },
+            {
+              role: 'octave' as const,
+              hz: oktav.status === 'valid' && oktav.measuredHz !== null ? oktav.measuredHz : oktav.targetHz ?? 293.66,
+            },
+          ];
+          const nearest = peakCandidates.reduce((best, peak) =>
+            Math.abs(peak.hz - frequencyAtClick) < Math.abs(best.hz - frequencyAtClick) ? peak : best
+          );
+          onSelectPeak(nearest.role);
         }}
       />
     </div>
