@@ -480,7 +480,7 @@ export default function App() {
             />
             <BBSpectrogram active={isListening} />
             <BBStabilityGraph
-              roleName="Alaphang"
+              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
               hasSignal={hasSignal}
               currentCents={activeCents ?? 0}
               standardDeviationCents={standardDeviationCents}
