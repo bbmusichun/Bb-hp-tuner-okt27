@@ -142,3 +142,21 @@ test('long recordings can resolve a slow 0.1 Hz beat when enough cycles are pres
   assert.ok(Math.abs(result.beatFrequencyHz! - 0.1) < 0.02,
     `expected 0.1 Hz beat, got ${result.beatFrequencyHz}`);
 });
+
+
+test('broadband noise alone does not produce a confident beat estimate', () => {
+  const samples = new Float32Array(SAMPLE_RATE * 8);
+  let state = 0x12345678;
+  for (let i = 0; i < samples.length; i++) {
+    state = (1664525 * state + 1013904223) >>> 0;
+    samples[i] = 0.2 * ((state / 0xffffffff) * 2 - 1);
+  }
+  const result = analyzeBeatEnvelope(samples, {
+    sampleRate: SAMPLE_RATE,
+    windowMs: 10,
+    hopMs: 5,
+    minBeatHz: 0.2,
+    maxBeatHz: 2,
+  });
+  assert.equal(result.beatFrequencyHz, null);
+});
