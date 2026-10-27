@@ -26,6 +26,8 @@ export const BBStrobeBands: React.FC<Props> = ({
 
   // Smoothed deviation cents
   const smoothCentsRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
+  // A green state requires a continuously valid, in-tolerance measurement for 1 s.
+  const greenSinceRef = useRef<{ alap: number | null; kvint: number | null; oktav: number | null }>({ alap: null, kvint: null, oktav: null });
 
   useEffect(() => {
     let animId = 0;
@@ -112,6 +114,16 @@ export const BBStrobeBands: React.FC<Props> = ({
       ];
 
       rows.forEach((row, idx) => {
+        const now = currentTime;
+        const key = row.key as 'alap' | 'kvint' | 'oktav';
+        const inTolerance = row.isValid && Number.isFinite(row.cents) && Math.abs(row.cents) <= 3.0;
+        if (inTolerance) {
+          if (greenSinceRef.current[key] === null) greenSinceRef.current[key] = now;
+        } else {
+          greenSinceRef.current[key] = null;
+        }
+        const isConfirmedGreen = inTolerance && greenSinceRef.current[key] !== null && now - greenSinceRef.current[key]! >= 1000;
+        const isNearButUnconfirmed = row.isValid && Math.abs(row.cents) <= 3.0 && !isConfirmedGreen;
         const y = idx * (rowHeight + 4);
         const stripeW = row.stripeWidth;
         const period = stripeW * 2;
@@ -138,15 +150,17 @@ export const BBStrobeBands: React.FC<Props> = ({
         ctx.fillRect(0, y, w, rowHeight);
 
         // 2. Alternating red stripes
-        const isNearZero = row.isValid && Math.abs(row.cents) <= 0.8;
-        ctx.fillStyle = isNearZero ? redLightColor : redColor;
+        const isNearZero = isConfirmedGreen;
+        const stripeBase = isConfirmedGreen ? '#147a48' : isNearButUnconfirmed ? '#a36b16' : redColor;
+        const stripeLight = isConfirmedGreen ? '#31d889' : isNearButUnconfirmed ? '#e4ad43' : redLightColor;
+        ctx.fillStyle = stripeBase;
 
         for (let x = -period + offset; x < w + period; x += period) {
           // Soft gradient across stripe
           const grad = ctx.createLinearGradient(x, y, x + stripeW, y);
           grad.addColorStop(0, darkMidColor);
-          grad.addColorStop(0.2, isNearZero ? '#c94a55' : redLightColor);
-          grad.addColorStop(0.8, isNearZero ? '#b83a45' : redColor);
+          grad.addColorStop(0.2, stripeLight);
+          grad.addColorStop(0.8, stripeBase);
           grad.addColorStop(1, darkMidColor);
           ctx.fillStyle = grad;
           ctx.fillRect(x, y, stripeW, rowHeight);
@@ -167,7 +181,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         ctx.fillRect(centerX - 16, y, 32, rowHeight);
 
         // White hairline
-        ctx.fillStyle = isNearZero ? '#ffffff' : '#ffeedd';
+        ctx.fillStyle = isConfirmedGreen ? '#eafff2' : '#ffeedd';
         ctx.fillRect(centerX - 1, y, 2, rowHeight);
 
         ctx.restore();
