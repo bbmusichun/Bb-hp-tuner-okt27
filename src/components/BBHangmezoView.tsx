@@ -95,7 +95,7 @@ export const BBHangmezoView: React.FC<Props> = ({
             </span>
           </div>
           <div className="text-xs font-mono text-slate-400 mt-0.5">
-            Alap: {selectedNote.frequency.toFixed(2)} Hz &bull; Kvint: {selectedNote.fifthFreq.toFixed(2)} Hz &bull; Oktáv: {selectedNote.octaveFreq.toFixed(2)} Hz
+            Alap: {selectedNote.frequency.toFixed(2)} Hz &bull; 3. parciális: {selectedNote.fifthFreq.toFixed(2)} Hz &bull; Oktáv: {selectedNote.octaveFreq.toFixed(2)} Hz
           </div>
         </div>
 
