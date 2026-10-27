@@ -62,8 +62,8 @@ export default function SineReferenceBench() {
   const signalGainRef = useRef<GainNode | null>(null);
   const silentOutputRef = useRef<GainNode | null>(null);
   const rafRef = useRef(0);
-  const targetHzRef = useRef(DEFAULT_TARGET.hz);
-  const generatedHzRef = useRef(DEFAULT_TARGET.hz);
+  const targetHzRef = useRef<number>(DEFAULT_TARGET.hz);
+  const generatedHzRef = useRef<number>(DEFAULT_TARGET.hz);
   const detuningRef = useRef(0);
   const fftSizeRef = useRef(DEFAULT_FFT_SIZE);
   const settledAfterRef = useRef(0);
