@@ -146,6 +146,16 @@ export default function App() {
       if (now - lastTick >= 33) {
         lastTick = now;
 
+        if (autoDetect) {
+          const detected = bbAudioEngine.detectNote(
+            toneNotes.map((note) => ({ id: note.id, noteName: note.noteName, frequency: note.frequency }))
+          );
+          if (detected) {
+            const matched = toneNotes.find((note) => note.id === detected.id);
+            if (matched && matched.id !== selectedNote.id) setSelectedNote(matched);
+          }
+        }
+
         const result = bbAudioEngine.analyze(
           selectedNote.frequency,
           selectedNote.fifthFreq,
