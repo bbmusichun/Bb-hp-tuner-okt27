@@ -18,6 +18,15 @@ import {
 import { bbAudioEngine } from './audio/audioEngine';
 import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
 import { isWithinTuningTolerance } from './audio/tuningTolerance';
+import {
+  DEFAULT_PARTIAL_TARGET_OFFSET,
+  normalizePartialTargetOffsets,
+  partialTargetFrequency,
+  partialTargetOffsetKey,
+  type PartialTargetOffset,
+  type PartialTargetOffsetField,
+  type PartialTargetOffsetMap,
+} from './audio/partialTargets';
 import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
@@ -28,20 +37,36 @@ import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
 import { BBSpectrumWaterfall } from './components/BBSpectrumWaterfall';
 
-function loadTuningPreferences(): { a4Ref: number; scaleId: string; autoDetect: boolean } {
-  const defaults = { a4Ref: 440, scaleId: PRESET_SCALES[0].id, autoDetect: true };
+function loadTuningPreferences(): {
+  a4Ref: number;
+  scaleId: string;
+  autoDetect: boolean;
+  partialTargetOffsets: PartialTargetOffsetMap;
+} {
+  const defaults = {
+    a4Ref: 440,
+    scaleId: PRESET_SCALES[0].id,
+    autoDetect: true,
+    partialTargetOffsets: {} as PartialTargetOffsetMap,
+  };
   try {
     const raw = localStorage.getItem('bb-tuner-preferences-v1');
     if (!raw) return defaults;
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return defaults;
-    const prefs = parsed as { a4Ref?: unknown; scaleId?: unknown; autoDetect?: unknown };
+    const prefs = parsed as {
+      a4Ref?: unknown;
+      scaleId?: unknown;
+      autoDetect?: unknown;
+      partialTargetOffsets?: unknown;
+    };
     return {
       a4Ref: typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
         ? prefs.a4Ref : defaults.a4Ref,
       scaleId: typeof prefs.scaleId === 'string' && PRESET_SCALES.some((scale) => scale.id === prefs.scaleId)
         ? prefs.scaleId : defaults.scaleId,
       autoDetect: typeof prefs.autoDetect === 'boolean' ? prefs.autoDetect : defaults.autoDetect,
+      partialTargetOffsets: normalizePartialTargetOffsets(prefs.partialTargetOffsets),
     };
   } catch {
     return defaults;
@@ -71,6 +96,9 @@ export default function App() {
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(() => loadTuningPreferences().a4Ref);
+  const [partialTargetOffsets, setPartialTargetOffsets] = useState<PartialTargetOffsetMap>(
+    () => loadTuningPreferences().partialTargetOffsets,
+  );
   const [currentScale, setCurrentScale] = useState<HandpanScale>(() => {
     const prefs = loadTuningPreferences();
     return PRESET_SCALES.find((scale) => scale.id === prefs.scaleId) ?? PRESET_SCALES[0];
@@ -87,16 +115,18 @@ export default function App() {
       // Fundamental: f0 (e.g. D3 = 146.83 Hz)
       // Traditional handpan partials: fundamental (1x), octave (2x), compound fifth (3x).
       // The third partial is not the ordinary 1.5x musical fifth.
+      const key = partialTargetOffsetKey(currentScale.id, n.name);
+      const offsets = partialTargetOffsets[key] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
       return {
         id: `note_${idx}_${n.name}`,
         noteName: n.name,
         frequency: f0,
-        fifthFreq: f0 * 3.0,
-        octaveFreq: f0 * 2.0,
+        fifthFreq: partialTargetFrequency(f0, 3, offsets.thirdPartialCents),
+        octaveFreq: partialTargetFrequency(f0, 2, offsets.octaveCents),
         positionIndex: idx,
       };
     });
-  }, [currentScale, a4Ref]);
+  }, [currentScale, a4Ref, partialTargetOffsets]);
 
   // Selected tone field note (default Ding D3)
   const [selectedNote, setSelectedNote] = useState<ToneFieldNote>(toneNotes[0]);
@@ -106,6 +136,30 @@ export default function App() {
       setSelectedNote((previous) => toneNotes.find((note) => note.id === previous.id) ?? toneNotes[0]);
     }
   }, [toneNotes]);
+
+  const selectedPartialOffsetKey = partialTargetOffsetKey(currentScale.id, selectedNote.noteName);
+  const selectedPartialOffsets = partialTargetOffsets[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
+
+  const updateSelectedPartialOffset = (field: PartialTargetOffsetField, value: number) => {
+    setPartialTargetOffsets((previous) => {
+      const current = previous[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
+      const next: PartialTargetOffset = { ...current, [field]: value };
+      if (next.octaveCents === 0 && next.thirdPartialCents === 0) {
+        const copy = { ...previous };
+        delete copy[selectedPartialOffsetKey];
+        return copy;
+      }
+      return { ...previous, [selectedPartialOffsetKey]: next };
+    });
+  };
+
+  const resetSelectedPartialOffsets = () => {
+    setPartialTargetOffsets((previous) => {
+      const copy = { ...previous };
+      delete copy[selectedPartialOffsetKey];
+      return copy;
+    });
+  };
 
   // Note names for the 3 resonances of the selected note
   const resonanceNoteNames = useMemo(() => {
@@ -207,11 +261,12 @@ export default function App() {
         a4Ref,
         scaleId: currentScale.id,
         autoDetect,
+        partialTargetOffsets,
       }));
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale.id, autoDetect]);
+  }, [a4Ref, currentScale.id, autoDetect, partialTargetOffsets]);
 
   // Audio Analysis Loop (~30 Hz)
   useEffect(() => {
@@ -662,6 +717,11 @@ export default function App() {
           }}
           selectedScaleId={currentScale.id}
           onSelectScale={setCurrentScale}
+          selectedNoteName={selectedNote.noteName}
+          selectedNoteFundamentalHz={selectedNote.frequency}
+          partialTargetOffsets={selectedPartialOffsets}
+          onChangePartialTargetOffset={updateSelectedPartialOffset}
+          onResetPartialTargetOffsets={resetSelectedPartialOffsets}
           sampleRateKhz={sampleRateKhz}
           isListening={isListening}
         />
