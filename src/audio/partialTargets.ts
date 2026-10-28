@@ -20,7 +20,7 @@ export const DEFAULT_PARTIAL_TARGET_OFFSET: Readonly<PartialTargetOffset> = Obje
   thirdPartialCents: 0,
 });
 
-export const MAX_PARTIAL_TARGET_OFFSET_CENTS = 100;
+export const MAX_PARTIAL_TARGET_OFFSET_CENTS = 50;
 
 export function clampPartialTargetOffset(value: number): number {
   if (!Number.isFinite(value)) return 0;
