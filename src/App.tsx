@@ -85,7 +85,10 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
     typeof entry.fifthCents === 'number' && Number.isFinite(entry.fifthCents) &&
     typeof entry.octaveHz === 'number' && Number.isFinite(entry.octaveHz) && entry.octaveHz > 0 &&
     typeof entry.octaveCents === 'number' && Number.isFinite(entry.octaveCents) &&
-    typeof entry.overallInTune === 'boolean';
+    typeof entry.overallInTune === 'boolean' &&
+    (entry.fundamentalTargetHz === undefined || (typeof entry.fundamentalTargetHz === 'number' && Number.isFinite(entry.fundamentalTargetHz) && entry.fundamentalTargetHz > 0)) &&
+    (entry.fifthTargetHz === undefined || (typeof entry.fifthTargetHz === 'number' && Number.isFinite(entry.fifthTargetHz) && entry.fifthTargetHz > 0)) &&
+    (entry.octaveTargetHz === undefined || (typeof entry.octaveTargetHz === 'number' && Number.isFinite(entry.octaveTargetHz) && entry.octaveTargetHz > 0));
 }
 
 export default function App() {
@@ -374,6 +377,9 @@ export default function App() {
       fifthCents: kvint.deviationCents!,
       octaveHz: oktav.measuredHz!,
       octaveCents: oktav.deviationCents!,
+      fundamentalTargetHz: alap.targetHz ?? selectedNote.frequency,
+      fifthTargetHz: kvint.targetHz ?? selectedNote.fifthFreq,
+      octaveTargetHz: oktav.targetHz ?? selectedNote.octaveFreq,
       overallInTune:
         isWithinTuningTolerance(alap.deviationCents, alap.targetHz) &&
         isWithinTuningTolerance(kvint.deviationCents, kvint.targetHz) &&
