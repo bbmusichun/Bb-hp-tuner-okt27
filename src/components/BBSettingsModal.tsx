@@ -2,6 +2,8 @@ import React from 'react';
 import { X, Sliders, Music, ShieldCheck } from 'lucide-react';
 import { HandpanScale } from '../types/tuner';
 import { PRESET_SCALES } from '../audio/scales';
+import { MAX_PARTIAL_TARGET_OFFSET_CENTS, partialTargetFrequency } from '../audio/partialTargets';
+import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/partialTargets';
 
 interface Props {
   isOpen: boolean;
@@ -10,6 +12,11 @@ interface Props {
   onChangeA4: (a4: number) => void;
   selectedScaleId: string;
   onSelectScale: (scale: HandpanScale) => void;
+  selectedNoteName: string;
+  selectedNoteFundamentalHz: number;
+  partialTargetOffsets: PartialTargetOffset;
+  onChangePartialTargetOffset: (field: PartialTargetOffsetField, value: number) => void;
+  onResetPartialTargetOffsets: () => void;
   sampleRateKhz: number | null;
   isListening: boolean;
 }
@@ -21,6 +28,11 @@ export const BBSettingsModal: React.FC<Props> = ({
   onChangeA4,
   selectedScaleId,
   onSelectScale,
+  selectedNoteName,
+  selectedNoteFundamentalHz,
+  partialTargetOffsets,
+  onChangePartialTargetOffset,
+  onResetPartialTargetOffsets,
   sampleRateKhz,
   isListening,
 }) => {
@@ -109,6 +121,57 @@ export const BBSettingsModal: React.FC<Props> = ({
                 );
               })}
             </div>
+          </div>
+
+          {/* Independent partial targets */}
+          <div className="p-3 rounded-xl bg-[#080b0f] border border-white/5 space-y-3">
+            <div>
+              <div className="font-semibold text-slate-300">Egyedi felhangcélok</div>
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+                A(z) {selectedNoteName} hang mezőjének felhangjai külön is hangolhatók.
+                Az eltérések az ideális 2× és 3× frekvenciához képest értendők, és csak erre a hangra érvényesek.
+              </p>
+            </div>
+            {([
+              { field: 'octaveCents', label: 'Oktáv (2×)', multiplier: 2 as const },
+              { field: 'thirdPartialCents', label: '3. parciális (3×)', multiplier: 3 as const },
+            ] as const).map(({ field, label, multiplier }) => {
+              const offset = partialTargetOffsets[field];
+              const targetHz = partialTargetFrequency(selectedNoteFundamentalHz, multiplier, offset);
+              return (
+                <div key={field} className="grid grid-cols-[1fr_88px] gap-2 items-center">
+                  <div>
+                    <label htmlFor={field} className="block text-[11px] text-slate-300">{label}</label>
+                    <div className="font-mono text-[10px] text-slate-500 mt-0.5">{targetHz.toFixed(3)} Hz célfrekvencia</div>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id={field}
+                      type="number"
+                      min={-MAX_PARTIAL_TARGET_OFFSET_CENTS}
+                      max={MAX_PARTIAL_TARGET_OFFSET_CENTS}
+                      step="0.1"
+                      value={offset}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (event.target.value.trim() !== '' && Number.isFinite(value)) {
+                          onChangePartialTargetOffset(field, Math.max(-MAX_PARTIAL_TARGET_OFFSET_CENTS, Math.min(MAX_PARTIAL_TARGET_OFFSET_CENTS, value)));
+                        }
+                      }}
+                      className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-right font-mono text-xs text-white"
+                    />
+                    <span className="absolute right-2 -bottom-3 text-[9px] text-slate-500">cent</span>
+                  </div>
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              onClick={onResetPartialTargetOffsets}
+              className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-[11px] text-slate-300 hover:bg-slate-800"
+            >
+              Felhangcélok visszaállítása (2× / 3×)
+            </button>
           </div>
 
           {/* Audio Engine Info */}
