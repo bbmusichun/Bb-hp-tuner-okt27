@@ -24,11 +24,14 @@ export const BBMeresekView: React.FC<Props> = ({
 }) => {
   const handleExportCSV = () => {
     if (logs.length === 0) return;
-    const headers = ['Timestamp', 'Date', 'Note', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune'];
+    const headers = ['Timestamp', 'Date', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune'];
     const rows = logs.map((l) => [
       l.timestamp,
       new Date(l.timestamp).toISOString(),
+      l.scaleId ?? '',
       l.noteName,
+      l.audioSampleRateHz?.toFixed(0) ?? '',
+      l.inputLevelDbfs?.toFixed(1) ?? '',
       l.fundamentalHz.toFixed(3),
       l.fundamentalTargetHz?.toFixed(3) ?? '',
       l.fundamentalCents.toFixed(2),
@@ -165,6 +168,13 @@ export const BBMeresekView: React.FC<Props> = ({
                 )}
               </div>
 
+              {(log.audioSampleRateHz !== undefined || log.inputLevelDbfs !== undefined || log.scaleId) && (
+                <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-slate-500 font-mono">
+                  {log.scaleId && <span>Profil: {log.scaleId}</span>}
+                  {log.audioSampleRateHz !== undefined && <span>Fs: {log.audioSampleRateHz.toFixed(0)} Hz</span>}
+                  {log.inputLevelDbfs !== undefined && <span>Bemenet: {log.inputLevelDbfs.toFixed(1)} dBFS</span>}
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px] text-center">
                 <div className="p-1.5 rounded bg-slate-900/60 border border-white/5">
                   <div className="text-[9px] text-[#f59e0b] font-sans font-semibold">Alap</div>
