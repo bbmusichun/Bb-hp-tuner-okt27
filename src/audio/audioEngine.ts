@@ -243,7 +243,16 @@ export class BBAudioEngine {
     // plus a 50 ms safety guard. A shorter lockout could still measure the strike transient.
     const transientDetected = hasSignal && rms > 0.003 &&
       (this.previousRms < 0.001 || rms > this.previousRms * 2.5);
-    if (transientDetected) this.lastTransientAt = now;
+    if (transientDetected) {
+      this.lastTransientAt = now;
+      // A fresh strike invalidates the previous reading immediately. Otherwise a new,
+      // different note can appear to measure as the old note during the holdoff window
+      // because buildResonanceMeasurement intentionally retains valid readings.
+      this.lastValidResonances = {};
+      this.stabilityHistory = [];
+      this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
+      Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    }
     this.previousRms = rms;
     const transientHoldoff = isTransientHoldoffActive(
       this.lastTransientAt,
