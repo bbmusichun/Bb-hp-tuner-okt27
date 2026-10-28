@@ -122,4 +122,43 @@ describe('sine-reference validation of the live spectral peak algorithm', () => 
     assert.equal(findSpectralPeakInWindow(146.832384, -1, spectrum, SAMPLE_RATE), null);
     assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, 0), null);
   });
+
+  it('chooses the strongest local peak when several peaks fall inside the target window', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-100);
+    // Three plausible resonances inside the D3 search window; the middle peak is strongest.
+    spectrum[48] = -35;
+    spectrum[49] = -25;
+    spectrum[50] = -35;
+    spectrum[51] = -18;
+    spectrum[52] = -8;
+    spectrum[53] = -18;
+    spectrum[54] = -35;
+
+    const measured = findSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(measured);
+    assert.equal(measured.bin, 52);
+    assert.ok(Number.isFinite(measured.freq) && measured.freq > 0);
+    assert.ok(Number.isFinite(measured.magDb));
+  });
+
+  it('does not let non-finite bins become a reported peak', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-100);
+    spectrum[48] = Number.NaN;
+    spectrum[49] = Number.POSITIVE_INFINITY;
+    spectrum[52] = -40;
+    spectrum[53] = -20;
+    spectrum[54] = -40;
+
+    const measured = findSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(measured);
+    assert.equal(measured.bin, 53);
+    assert.ok(Number.isFinite(measured.freq));
+    assert.ok(Number.isFinite(measured.magDb));
+  });
+
+  it('returns no measurement when the spectrum is too short to contain a valid local peak', () => {
+    assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, new Float32Array([0, -10]), SAMPLE_RATE), null);
+  });
 });
