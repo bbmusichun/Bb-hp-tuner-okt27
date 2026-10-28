@@ -54,11 +54,16 @@ export interface TuningLogEntry {
   id: string;
   timestamp: number;
   noteName: string;
+  /** Measured frequencies. */
   fundamentalHz: number;
   fundamentalCents: number;
   fifthHz: number;
   fifthCents: number;
   octaveHz: number;
   octaveCents: number;
+  /** Target frequencies are optional for backward compatibility with older saved logs. */
+  fundamentalTargetHz?: number;
+  fifthTargetHz?: number;
+  octaveTargetHz?: number;
   overallInTune: boolean;
 }
