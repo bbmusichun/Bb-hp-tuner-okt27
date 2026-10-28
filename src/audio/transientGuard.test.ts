@@ -5,6 +5,7 @@ import { detectTransientOnset, isTransientHoldoffActive, requiredTransientHoldof
 describe('short-time transient onset detection', () => {
   it('detects a fresh strike even while a previous note is ringing', () => {
     assert.equal(detectTransientOnset(0.008, 0.021), true);
+    assert.equal(detectTransientOnset(0.008, 0.012), true);
     assert.equal(detectTransientOnset(0.0002, 0.004), true);
   });
 
