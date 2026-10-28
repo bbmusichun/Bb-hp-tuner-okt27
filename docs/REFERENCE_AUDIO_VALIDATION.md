@@ -155,3 +155,13 @@ These statistics describe repeatability of the captured readings only. They are 
 measurement uncertainty, and repeatability cannot detect a consistently wrong harmonic or an
 incorrectly selected spectral peak. Keep the microphone placement, distance, input path and
 instrument condition consistent when comparing sessions.
+
+
+## Capture metadata in exported records
+
+New live log entries record the active audio sample rate and the current input level in dBFS
+alongside the scale profile and measured/target frequencies. These fields are included in CSV
+exports to help compare runs made under different browser/device conditions. Older records remain
+valid with these fields absent. Input level is a snapshot of the app's input meter, not a calibrated
+sound-pressure level (dB SPL); it must not be interpreted as acoustic loudness or used to compare
+microphone sensitivity without a calibrated acoustic reference.
