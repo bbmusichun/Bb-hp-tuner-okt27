@@ -26,23 +26,33 @@ export default function LiveMicDiagnosticBench() {
   const [lastUpdate, setLastUpdate] = useState<number | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const contextRef = useRef<AudioContext | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const frameRef = useRef<number>(0);
   const aliveRef = useRef(false);
+  const lastUiUpdateRef = useRef(0);
+  const startingRef = useRef(false);
 
   const stop = () => {
     aliveRef.current = false;
     cancelAnimationFrame(frameRef.current);
+    sourceRef.current?.disconnect();
+    sourceRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
+    analyserRef.current?.disconnect();
     analyserRef.current = null;
+    startingRef.current = false;
     setStreaming(false);
     setInputDb(-100);
+    setSampleRate(null);
     setReadings(emptyReadings());
     setLastUpdate(null);
   };
 
   const start = async () => {
+    if (startingRef.current || aliveRef.current) return;
+    startingRef.current = true;
     setError('');
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -59,7 +69,9 @@ export default function LiveMicDiagnosticBench() {
       analyser.smoothingTimeConstant = 0;
       analyser.minDecibels = -100;
       analyser.maxDecibels = -10;
-      context.createMediaStreamSource(stream).connect(analyser);
+      const source = context.createMediaStreamSource(stream);
+      source.connect(analyser);
+      sourceRef.current = source;
       streamRef.current = stream;
       analyserRef.current = analyser;
       setSampleRate(context.sampleRate);
@@ -68,7 +80,7 @@ export default function LiveMicDiagnosticBench() {
 
       const spectrum = new Float32Array(analyser.frequencyBinCount);
       const waveform = new Float32Array(analyser.fftSize);
-      const tick = () => {
+      const tick = (timestamp: number) => {
         if (!aliveRef.current || !analyserRef.current) return;
         const activeAnalyser = analyserRef.current;
         activeAnalyser.getFloatFrequencyData(spectrum);
@@ -76,35 +88,50 @@ export default function LiveMicDiagnosticBench() {
         let sum = 0;
         for (const sample of waveform) sum += sample * sample;
         const rms = Math.sqrt(sum / waveform.length);
-        setInputDb(rms > 0 ? 20 * Math.log10(rms) : -100);
+        const dbfs = rms > 0 ? 20 * Math.log10(rms) : -100;
 
-        const next: Record<string, Reading> = {};
-        for (const target of TARGETS) {
-          const peak = findSpectralPeakInWindow(target.hz, 150, spectrum, context.sampleRate, -82);
-          next[target.key] = peak
-            ? {
-                hz: peak.freq,
-                cents: 1200 * Math.log2(peak.freq / target.hz),
-                peakDb: peak.magDb,
-              }
-            : { hz: null, cents: null, peakDb: null };
+        // Keep audio analysis running at frame rate, but update React state at 10 Hz.
+        if (timestamp - lastUiUpdateRef.current >= 100) {
+          lastUiUpdateRef.current = timestamp;
+          setInputDb(dbfs);
+          const next: Record<string, Reading> = {};
+          for (const target of TARGETS) {
+            // Suppress spectral peaks when the microphone input is effectively silent.
+            const peak = dbfs > -65
+              ? findSpectralPeakInWindow(target.hz, 150, spectrum, context.sampleRate, -82)
+              : null;
+            next[target.key] = peak
+              ? {
+                  hz: peak.freq,
+                  cents: 1200 * Math.log2(peak.freq / target.hz),
+                  peakDb: peak.magDb,
+                }
+              : { hz: null, cents: null, peakDb: null };
+          }
+          setReadings(next);
+          setLastUpdate(Date.now());
         }
-        setReadings(next);
-        setLastUpdate(Date.now());
         frameRef.current = requestAnimationFrame(tick);
       };
       frameRef.current = requestAnimationFrame(tick);
     } catch (cause) {
+      sourceRef.current?.disconnect();
+      sourceRef.current = null;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      analyserRef.current?.disconnect();
+      analyserRef.current = null;
       setError(cause instanceof Error ? cause.message : 'Nem sikerült elindítani a mikrofont.');
       setStreaming(false);
+    } finally {
+      startingRef.current = false;
     }
   };
 
   useEffect(() => () => {
     aliveRef.current = false;
     cancelAnimationFrame(frameRef.current);
+    sourceRef.current?.disconnect();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     void contextRef.current?.close();
   }, []);
