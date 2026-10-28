@@ -19,16 +19,19 @@ export const BBMeresekView: React.FC<Props> = ({
 }) => {
   const handleExportCSV = () => {
     if (logs.length === 0) return;
-    const headers = ['Timestamp', 'Date', 'Note', 'Fundamental_Hz', 'Fundamental_Cents', 'Third_Partial_Hz', 'Third_Partial_Cents', 'Octave_Hz', 'Octave_Cents', 'In_Tune'];
+    const headers = ['Timestamp', 'Date', 'Note', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune'];
     const rows = logs.map((l) => [
       l.timestamp,
       new Date(l.timestamp).toISOString(),
       l.noteName,
-      l.fundamentalHz.toFixed(2),
+      l.fundamentalHz.toFixed(3),
+      l.fundamentalTargetHz?.toFixed(3) ?? '',
       l.fundamentalCents.toFixed(2),
-      l.fifthHz.toFixed(2),
+      l.fifthHz.toFixed(3),
+      l.fifthTargetHz?.toFixed(3) ?? '',
       l.fifthCents.toFixed(2),
-      l.octaveHz.toFixed(2),
+      l.octaveHz.toFixed(3),
+      l.octaveTargetHz?.toFixed(3) ?? '',
       l.octaveCents.toFixed(2),
       l.overallInTune ? 'TRUE' : 'FALSE',
     ]);
@@ -132,7 +135,8 @@ export const BBMeresekView: React.FC<Props> = ({
               <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px] text-center">
                 <div className="p-1.5 rounded bg-slate-900/60 border border-white/5">
                   <div className="text-[9px] text-[#f59e0b] font-sans font-semibold">Alap</div>
-                  <div>{log.fundamentalHz.toFixed(1)}Hz</div>
+                  <div>{log.fundamentalHz.toFixed(2)} Hz</div>
+                  <div className="text-[9px] text-slate-500">Cél: {log.fundamentalTargetHz !== undefined ? log.fundamentalTargetHz.toFixed(2) : '—'} Hz</div>
                   <div className={Math.abs(log.fundamentalCents) <= 3 ? 'text-[#10b981] font-bold' : 'text-[#f59e0b]'}>
                     {log.fundamentalCents > 0 ? '+' : ''}{log.fundamentalCents.toFixed(1)}¢
                   </div>
@@ -140,7 +144,8 @@ export const BBMeresekView: React.FC<Props> = ({
 
                 <div className="p-1.5 rounded bg-slate-900/60 border border-white/5">
                   <div className="text-[9px] text-[#c084fc] font-sans font-semibold">3. parciális</div>
-                  <div>{log.fifthHz.toFixed(1)}Hz</div>
+                  <div>{log.fifthHz.toFixed(2)} Hz</div>
+                  <div className="text-[9px] text-slate-500">Cél: {log.fifthTargetHz !== undefined ? log.fifthTargetHz.toFixed(2) : '—'} Hz</div>
                   <div className={Math.abs(log.fifthCents) <= 3 ? 'text-[#10b981] font-bold' : 'text-[#c084fc]'}>
                     {log.fifthCents > 0 ? '+' : ''}{log.fifthCents.toFixed(1)}¢
                   </div>
@@ -148,7 +153,8 @@ export const BBMeresekView: React.FC<Props> = ({
 
                 <div className="p-1.5 rounded bg-slate-900/60 border border-white/5">
                   <div className="text-[9px] text-[#38bdf8] font-sans font-semibold">Oktáv</div>
-                  <div>{log.octaveHz.toFixed(1)}Hz</div>
+                  <div>{log.octaveHz.toFixed(2)} Hz</div>
+                  <div className="text-[9px] text-slate-500">Cél: {log.octaveTargetHz !== undefined ? log.octaveTargetHz.toFixed(2) : '—'} Hz</div>
                   <div className={Math.abs(log.octaveCents) <= 3 ? 'text-[#10b981] font-bold' : 'text-[#38bdf8]'}>
                     {log.octaveCents > 0 ? '+' : ''}{log.octaveCents.toFixed(1)}¢
                   </div>
