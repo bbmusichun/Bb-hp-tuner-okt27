@@ -141,3 +141,17 @@ for each recorded cent deviation, including custom per-note partial offsets. Old
 entries may not contain target-frequency fields; they remain readable, but their target values
 are shown as unavailable. For professional records, export the log after capturing measurements
 and retain the instrument profile and external reference information used during the session.
+
+
+## Repeatability summary
+
+The live logbook can summarize the ten most recent captures for the same scale profile and tone
+field. It reports the median cent deviation, median absolute deviation (MAD), and full observed
+range separately for the fundamental, third partial and octave. At least three captures are
+required. Only records that contain a scale identity are included, so legacy records are not
+silently mixed across unknown profiles.
+
+These statistics describe repeatability of the captured readings only. They are not a calibrated
+measurement uncertainty, and repeatability cannot detect a consistently wrong harmonic or an
+incorrectly selected spectral peak. Keep the microphone placement, distance, input path and
+instrument condition consistent when comparing sessions.
