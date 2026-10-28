@@ -104,4 +104,30 @@ describe('offline WAV resonance analysis', () => {
     assert.equal(mono[2], 0);
     assert.equal(downmixChannels([]).length, 0);
   });
+
+  it('measures a harmonic-rich handpan-like signal in deterministic broadband noise', () => {
+    const sampleRate = RATE;
+    const samples = new Float32Array(FFT_SIZE);
+    let seed = 0x12345678;
+    for (let i = 0; i < samples.length; i++) {
+      const t = i / sampleRate;
+      // Deterministic noise keeps this regression reproducible across CI runs.
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      const noise = ((seed / 0x100000000) * 2 - 1) * 0.002;
+      samples[i] = 0.45 * Math.sin(2 * Math.PI * D3 * t)
+        + 0.22 * Math.sin(2 * Math.PI * D3 * 2 * t)
+        + 0.12 * Math.sin(2 * Math.PI * D3 * 3 * t)
+        + noise;
+    }
+
+    const result = analyzeWavWindow(samples, sampleRate, { peakFloorDb: -82 });
+    assert.ok(result);
+    for (const resonance of result.resonances) {
+      assert.ok(resonance.measuredHz !== null, 'expected the partial to remain measurable in noise');
+      assert.ok(Math.abs(cents(resonance.measuredHz!, resonance.targetHz)) < 1,
+        'expected sub-cent accuracy for target ' + resonance.targetHz + ' Hz');
+      assert.ok(resonance.prominenceDb !== null && resonance.prominenceDb > 12,
+        'expected the harmonic peak to stand out from the noise floor');
+    }
+  });
 });
