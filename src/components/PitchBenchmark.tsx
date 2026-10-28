@@ -68,7 +68,7 @@ export default function PitchBenchmark() {
       analyser.fftSize = fftSize;
       analyser.smoothingTimeConstant = 0.05;
       analyser.minDecibels = -100;
-      analyser.maxDecibels = -10;
+      analyser.maxDecibels = 0; // Preserve strong spectral peak shape for sub-bin interpolation.
       ctx.createMediaStreamSource(stream).connect(analyser);
       streamRef.current = stream; ctxRef.current = ctx; analyserRef.current = analyser;
       setListening(true);

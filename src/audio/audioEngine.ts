@@ -83,7 +83,8 @@ export class BBAudioEngine {
       this.analyser.fftSize = this.fftSize;
       this.analyser.smoothingTimeConstant = 0.05; // Keep attack/sustain changes responsive; pitch smoothing is handled separately
       this.analyser.minDecibels = -100;
-      this.analyser.maxDecibels = -10;
+      // Do not clamp strong FFT peaks at -10 dB: a flattened peak biases sub-bin interpolation.
+      this.analyser.maxDecibels = 0;
 
       this.timeData = new Float32Array(this.analyser.fftSize);
       this.freqData = new Float32Array(this.analyser.frequencyBinCount);
@@ -209,7 +210,7 @@ export class BBAudioEngine {
         oktav: this.createEmptyResonance('octave', 'Oktáv', noteNames.octave, targetOctaveHz),
         hasSignal: false,
         inputLevelDb: -100,
-        sampleRateKhz: Math.round(this.sampleRate / 1000),
+        sampleRateKhz: Math.round(this.sampleRate / 100) / 10,
         standardDeviationCents: 0,
         transientHoldoff: false,
         highInputLevel: false,
@@ -336,7 +337,7 @@ export class BBAudioEngine {
       oktav,
       hasSignal,
       inputLevelDb: this.inputLevelDb,
-      sampleRateKhz: Math.round(this.sampleRate / 1000),
+      sampleRateKhz: Math.round(this.sampleRate / 100) / 10,
       standardDeviationCents,
       transientHoldoff,
       highInputLevel,
