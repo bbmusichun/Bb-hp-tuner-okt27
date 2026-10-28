@@ -1,6 +1,23 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isTransientHoldoffActive, requiredTransientHoldoffMs, StablePitchTracker } from './transientGuard';
+import { detectTransientOnset, isTransientHoldoffActive, requiredTransientHoldoffMs, StablePitchTracker } from './transientGuard';
+
+describe('short-time transient onset detection', () => {
+  it('detects a fresh strike even while a previous note is ringing', () => {
+    assert.equal(detectTransientOnset(0.008, 0.021), true);
+    assert.equal(detectTransientOnset(0.0002, 0.004), true);
+  });
+
+  it('does not trigger repeatedly on a steady sustain or low-level noise', () => {
+    assert.equal(detectTransientOnset(0.01, 0.011), false);
+    assert.equal(detectTransientOnset(0.0002, 0.0008), false);
+  });
+
+  it('rejects invalid detector parameters', () => {
+    assert.equal(detectTransientOnset(Number.NaN, 0.01), false);
+    assert.equal(detectTransientOnset(0.01, 0.02, 0.001, 1), false);
+  });
+});
 
 describe('rolling FFT transient guard', () => {
   it('waits for a complete FFT window plus a 50 ms safety guard', () => {
