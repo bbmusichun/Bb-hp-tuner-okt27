@@ -19,6 +19,7 @@ const emptyReadings = (): Record<string, Reading> => Object.fromEntries(
 
 export default function LiveMicDiagnosticBench() {
   const [streaming, setStreaming] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
   const [inputDb, setInputDb] = useState(-100);
   const [sampleRate, setSampleRate] = useState<number | null>(null);
@@ -32,8 +33,10 @@ export default function LiveMicDiagnosticBench() {
   const aliveRef = useRef(false);
   const lastUiUpdateRef = useRef(0);
   const startingRef = useRef(false);
+  const startGenerationRef = useRef(0);
 
   const stop = () => {
+    startGenerationRef.current += 1;
     aliveRef.current = false;
     cancelAnimationFrame(frameRef.current);
     sourceRef.current?.disconnect();
@@ -43,7 +46,9 @@ export default function LiveMicDiagnosticBench() {
     analyserRef.current?.disconnect();
     analyserRef.current = null;
     startingRef.current = false;
+    setStarting(false);
     setStreaming(false);
+    if (contextRef.current?.state === 'running') void contextRef.current.suspend().catch(() => undefined);
     setInputDb(-100);
     setSampleRate(null);
     setReadings(emptyReadings());
@@ -53,6 +58,8 @@ export default function LiveMicDiagnosticBench() {
   const start = async () => {
     if (startingRef.current || aliveRef.current) return;
     startingRef.current = true;
+    const generation = ++startGenerationRef.current;
+    setStarting(true);
     setError('');
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -61,9 +68,15 @@ export default function LiveMicDiagnosticBench() {
       const context = contextRef.current ?? new AudioContext({ latencyHint: 'interactive' });
       contextRef.current = context;
       if (context.state === 'suspended') await context.resume();
+      if (generation !== startGenerationRef.current) return;
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
+      // Permission may resolve after unmount or cancellation; never attach a stale stream.
+      if (generation !== startGenerationRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       const analyser = context.createAnalyser();
       analyser.fftSize = 16384;
       analyser.smoothingTimeConstant = 0;
@@ -115,6 +128,7 @@ export default function LiveMicDiagnosticBench() {
       };
       frameRef.current = requestAnimationFrame(tick);
     } catch (cause) {
+      if (generation !== startGenerationRef.current) return;
       sourceRef.current?.disconnect();
       sourceRef.current = null;
       streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -124,15 +138,23 @@ export default function LiveMicDiagnosticBench() {
       setError(cause instanceof Error ? cause.message : 'Nem sikerült elindítani a mikrofont.');
       setStreaming(false);
     } finally {
-      startingRef.current = false;
+      if (generation === startGenerationRef.current) {
+        startingRef.current = false;
+        setStarting(false);
+      }
     }
   };
 
   useEffect(() => () => {
+    startGenerationRef.current += 1;
     aliveRef.current = false;
     cancelAnimationFrame(frameRef.current);
     sourceRef.current?.disconnect();
+    sourceRef.current = null;
+    analyserRef.current?.disconnect();
+    analyserRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
     void contextRef.current?.close();
   }, []);
 
@@ -147,8 +169,8 @@ export default function LiveMicDiagnosticBench() {
         Ez a teszt közvetlenül a mikrofon spektrumát méri, a fő hangoló simítása és korábbi értéket megtartó logikája nélkül.
         Üsd meg a D3 Dinget, majd figyeld, hogy a jelszint és a három nyers mérés frissül-e.
       </p>
-      <button onClick={streaming ? stop : start} style={{ border: 0, borderRadius: 8, padding: '12px 18px', fontWeight: 700, cursor: 'pointer', background: streaming ? '#9f3039' : '#e0b15b', color: '#171717' }}>
-        {streaming ? 'Mikrofon leállítása' : 'Mikrofon indítása'}
+      <button onClick={streaming ? stop : start} disabled={starting} style={{ border: 0, borderRadius: 8, padding: '12px 18px', fontWeight: 700, cursor: starting ? 'wait' : 'pointer', opacity: starting ? 0.75 : 1, background: streaming ? '#9f3039' : '#e0b15b', color: '#171717' }}>
+        {streaming ? 'Mikrofon leállítása' : starting ? 'Mikrofon indítása…' : 'Mikrofon indítása'}
       </button>
       {error && <p role="alert" style={{ color: '#ff9292' }}>{error}</p>}
       <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 20 }}>
