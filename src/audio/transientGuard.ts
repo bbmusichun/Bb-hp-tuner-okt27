@@ -2,6 +2,27 @@
  * Transient guard for rolling analyser windows.
  * A frame is not free of the strike until a full FFT window has passed after onset.
  */
+/**
+ * Detect a fresh strike from a short-time RMS envelope, not the full rolling FFT
+ * window. The full-window RMS smears the attack over hundreds of milliseconds and
+ * can miss repeated strikes while the previous note is still ringing.
+ */
+export function detectTransientOnset(
+  previousShortRms: number,
+  currentShortRms: number,
+  minRms = 0.0015,
+  riseRatio = 1.6,
+): boolean {
+  if (!Number.isFinite(previousShortRms) || previousShortRms < 0 ||
+      !Number.isFinite(currentShortRms) || currentShortRms < 0 ||
+      !Number.isFinite(minRms) || minRms < 0 ||
+      !Number.isFinite(riseRatio) || riseRatio <= 1) return false;
+  return currentShortRms >= minRms &&
+    (previousShortRms < minRms * 0.5 ||
+      currentShortRms >= previousShortRms * riseRatio ||
+      currentShortRms - previousShortRms >= minRms * 2);
+}
+
 export function requiredTransientHoldoffMs(fftSize: number, sampleRate: number, guardMs = 50): number {
   if (!Number.isFinite(fftSize) || fftSize <= 0 ||
       !Number.isFinite(sampleRate) || sampleRate <= 0 ||

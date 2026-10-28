@@ -6,7 +6,7 @@
 
 import { ResonanceMeasurement, MicState } from '../types/tuner';
 import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
-import { isTransientHoldoffActive, StablePitchTracker } from './transientGuard';
+import { detectTransientOnset, isTransientHoldoffActive, StablePitchTracker } from './transientGuard';
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
 import { isSameMeasurementTarget } from './measurementCache';
@@ -241,8 +241,17 @@ export class BBAudioEngine {
     // Detect a sharp attack from the RMS envelope. Because AnalyserNode returns a rolling
     // FFT frame, ignore measurements until the whole FFT window has moved past the attack,
     // plus a 50 ms safety guard. A shorter lockout could still measure the strike transient.
-    const transientDetected = hasSignal && rms > 0.003 &&
-      (this.previousRms < 0.001 || rms > this.previousRms * 2.5);
+    // Detect the attack using only the newest ~21 ms, rather than the full 341 ms
+    // FFT window. Full-window RMS dilutes the transient and often misses a second
+    // strike while the previous handpan note is still ringing.
+    const shortWindowSize = Math.min(1024, this.timeData.length);
+    let shortSumSquares = 0;
+    for (let i = this.timeData.length - shortWindowSize; i < this.timeData.length; i++) {
+      shortSumSquares += this.timeData[i] * this.timeData[i];
+    }
+    const shortRms = Math.sqrt(shortSumSquares / shortWindowSize);
+    const transientDetected = hasSignal && detectTransientOnset(this.previousRms, shortRms);
+    this.previousRms = shortRms;
     if (transientDetected) {
       this.lastTransientAt = now;
       // A fresh strike invalidates the previous reading immediately. Otherwise a new,
@@ -253,7 +262,6 @@ export class BBAudioEngine {
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
     }
-    this.previousRms = rms;
     const transientHoldoff = isTransientHoldoffActive(
       this.lastTransientAt,
       now,
