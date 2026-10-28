@@ -1,9 +1,12 @@
 import React from 'react';
 import { TuningLogEntry } from '../types/tuner';
+import { summarizeRepeatability } from '../audio/repeatabilitySummary';
 import { Download, Trash2, CheckCircle, AlertTriangle, FileJson } from 'lucide-react';
 
 interface Props {
   logs: TuningLogEntry[];
+  selectedScaleId: string;
+  selectedNoteName: string;
   onClearLogs: () => void;
   onCapture: () => void;
   hasSignal: boolean;
@@ -12,6 +15,8 @@ interface Props {
 
 export const BBMeresekView: React.FC<Props> = ({
   logs,
+  selectedScaleId,
+  selectedNoteName,
   onClearLogs,
   onCapture,
   hasSignal,
@@ -60,6 +65,8 @@ export const BBMeresekView: React.FC<Props> = ({
     window.setTimeout(() => URL.revokeObjectURL(jsonUrl), 1000);
   };
 
+  const repeatability = summarizeRepeatability(logs, selectedScaleId, selectedNoteName, 10);
+
   return (
     <div className="w-full flex flex-col p-3 animate-in fade-in">
       <div className="flex items-center justify-between mb-3">
@@ -103,6 +110,32 @@ export const BBMeresekView: React.FC<Props> = ({
           </button>
         </div>
       </div>
+
+      {repeatability && (
+        <section className="mb-3 rounded-xl border border-white/10 bg-[#0b0f14] p-3">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h4 className="text-xs font-bold text-white">Ismételhetőség · {repeatability.noteName}</h4>
+            <span className="text-[10px] text-slate-400">{repeatability.sampleCount} legutóbbi mérés</span>
+          </div>
+          <p className="text-[10px] leading-relaxed text-slate-500 mb-3">
+            Az alábbi szórás az ismételt mérések egyezését mutatja. Nem hitelesített mérési bizonytalanság.
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { label: 'Alaphang', metric: repeatability.fundamental },
+              { label: '3. parciális', metric: repeatability.thirdPartial },
+              { label: 'Oktáv', metric: repeatability.octave },
+            ]).map(({ label, metric }) => (
+              <div key={label} className="rounded-lg border border-white/5 bg-slate-900/70 p-2 text-center">
+                <div className="text-[9px] text-slate-400 mb-1">{label}</div>
+                <div className="font-mono text-xs text-white">{metric.medianCents > 0 ? '+' : ''}{metric.medianCents.toFixed(2)}¢</div>
+                <div className="text-[9px] text-slate-400 mt-1">MAD {metric.madCents.toFixed(2)}¢</div>
+                <div className="text-[9px] text-slate-500">Tartomány {metric.rangeCents.toFixed(2)}¢</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {!canCapture && logs.length > 0 && <p className="text-[10px] text-slate-500 mb-2">Új mérés csak akkor rögzíthető, ha mindhárom csatorna érvényes.</p>}
       <div className="space-y-2 overflow-y-auto max-h-[380px] pr-1">
