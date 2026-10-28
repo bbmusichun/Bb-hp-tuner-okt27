@@ -11,14 +11,16 @@ export function detectTransientOnset(
   previousShortRms: number,
   currentShortRms: number,
   minRms = 0.0015,
-  riseRatio = 2.2,
+  riseRatio = 1.6,
 ): boolean {
   if (!Number.isFinite(previousShortRms) || previousShortRms < 0 ||
       !Number.isFinite(currentShortRms) || currentShortRms < 0 ||
       !Number.isFinite(minRms) || minRms < 0 ||
       !Number.isFinite(riseRatio) || riseRatio <= 1) return false;
   return currentShortRms >= minRms &&
-    (previousShortRms < minRms * 0.5 || currentShortRms >= previousShortRms * riseRatio);
+    (previousShortRms < minRms * 0.5 ||
+      currentShortRms >= previousShortRms * riseRatio ||
+      currentShortRms - previousShortRms >= minRms * 2);
 }
 
 export function requiredTransientHoldoffMs(fftSize: number, sampleRate: number, guardMs = 50): number {
