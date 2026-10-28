@@ -115,3 +115,19 @@ calibration result.
 4. Compare the per-window frequencies, cents, signal levels, local peak prominence, and the per-partial quality verdict (see above). Peak prominence is the detected peak level minus the median spectrum level in its target band; treat it as a diagnostic contrast metric, not a calibrated confidence score. Exclude no frames silently; invalid peaks must remain blank and weak/ambiguous readings must be identified.
 5. Run the live microphone lab on the target device. Keep the acoustic loopback test separate from digital accuracy.
 6. Before describing the app as professionally calibrated, validate against a traceable external frequency reference and document device, microphone, distance, level, sample rate, and measurement uncertainty.
+
+
+## Custom per-note partial targets
+
+The live tuner supports independent offsets for the octave (2×) and third partial (3×) for each
+note in the selected scale. These offsets are expressed in cents relative to the ideal harmonic
+frequency and are stored in the browser's existing tuning preferences, keyed by scale and note.
+Changing the global A4 reference recalculates the equal-tempered fundamental; the saved partial
+offsets remain relative to that fundamental. Resetting a note's offsets restores the ideal 2×/3×
+targets for that note.
+
+These controls let a maker compare a tone field with an instrument-specific target instead of
+assuming every real tone field is exactly harmonic. They do not automatically discover the
+correct target frequencies, and they do not certify a handpan as in tune. Record the intended
+targets from the instrument's specification or a traceable tuning reference before using the
+offsets for acceptance measurements.
