@@ -23,10 +23,10 @@ describe('custom handpan partial targets', () => {
   });
 
   it('clamps offsets to the supported range and ignores invalid values', () => {
-    assert.equal(clampPartialTargetOffset(150), 100);
-    assert.equal(clampPartialTargetOffset(-150), -100);
+    assert.equal(clampPartialTargetOffset(150), 50);
+    assert.equal(clampPartialTargetOffset(-150), -50);
     assert.equal(clampPartialTargetOffset(Number.NaN), 0);
-    assert.equal(partialTargetFrequency(D3, 2, 1000), partialTargetFrequency(D3, 2, 100));
+    assert.equal(partialTargetFrequency(D3, 2, 1000), partialTargetFrequency(D3, 2, 50));
     assert.ok(Number.isNaN(partialTargetFrequency(0, 2, 0)));
   });
 
@@ -44,7 +44,7 @@ describe('custom handpan partial targets', () => {
       '': { octaveCents: 3, thirdPartialCents: 0 },
     }), {
       'd-kurd-9:D3': { octaveCents: 12, thirdPartialCents: -4 },
-      'd-kurd-9:Bad': { octaveCents: 0, thirdPartialCents: 100 },
+      'd-kurd-9:Bad': { octaveCents: 0, thirdPartialCents: 50 },
     });
   });
 });
