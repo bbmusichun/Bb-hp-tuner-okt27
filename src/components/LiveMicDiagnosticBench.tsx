@@ -81,7 +81,7 @@ export default function LiveMicDiagnosticBench() {
       analyser.fftSize = 16384;
       analyser.smoothingTimeConstant = 0;
       analyser.minDecibels = -100;
-      analyser.maxDecibels = -10;
+      analyser.maxDecibels = 0; // Preserve strong spectral peak shape for sub-bin interpolation.
       const source = context.createMediaStreamSource(stream);
       source.connect(analyser);
       sourceRef.current = source;
