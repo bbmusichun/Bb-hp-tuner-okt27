@@ -238,13 +238,12 @@ export class BBAudioEngine {
     const hasSignal = db > -58; // RMS gate for audio presence
     const highInputLevel = db > -8; // Near-full-scale input can clip or distort transients.
 
-    // Detect a sharp attack from the RMS envelope. Because AnalyserNode returns a rolling
-    // FFT frame, ignore measurements until the whole FFT window has moved past the attack,
-    // plus a 50 ms safety guard. A shorter lockout could still measure the strike transient.
-    // Detect the attack using only the newest ~21 ms, rather than the full 341 ms
-    // FFT window. Full-window RMS dilutes the transient and often misses a second
-    // strike while the previous handpan note is still ringing.
-    const shortWindowSize = Math.min(1024, this.timeData.length);
+    // Detect attacks with a short-time RMS window that overlaps adjacent analysis
+    // frames. At a ~30 Hz UI analysis cadence, 1024 samples (~21 ms at 48 kHz)
+    // can leave gaps; 2048 samples (~43 ms) reduces the chance of missing a short strike.
+    // After onset, the separate holdoff still waits for the full FFT window plus 50 ms
+    // so the spectral measurement is not taken from the strike transient itself.
+    const shortWindowSize = Math.min(2048, this.timeData.length);
     let shortSumSquares = 0;
     for (let i = this.timeData.length - shortWindowSize; i < this.timeData.length; i++) {
       shortSumSquares += this.timeData[i] * this.timeData[i];

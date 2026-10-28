@@ -1,6 +1,7 @@
 /**
  * Transient guard for rolling analyser windows.
- * A frame is not free of the strike until a full FFT window has passed after onset.
+ * Onset detection uses short-time RMS; spectral measurement waits until a full FFT
+ * window plus a safety guard has passed so the strike transient is no longer in-frame.
  */
 /**
  * Detect a fresh strike from a short-time RMS envelope, not the full rolling FFT
