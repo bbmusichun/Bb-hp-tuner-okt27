@@ -54,6 +54,8 @@ export interface TuningLogEntry {
   id: string;
   timestamp: number;
   noteName: string;
+  /** Scale/profile identity; optional for older saved logs. */
+  scaleId?: string;
   /** Measured frequencies. */
   fundamentalHz: number;
   fundamentalCents: number;

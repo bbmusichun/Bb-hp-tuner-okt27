@@ -371,6 +371,7 @@ export default function App() {
       id: `log_${Date.now()}`,
       timestamp: Date.now(),
       noteName: selectedNote.noteName,
+      scaleId: currentScale.id,
       fundamentalHz: alap.measuredHz!,
       fundamentalCents: alap.deviationCents!,
       fifthHz: kvint.measuredHz!,
@@ -636,6 +637,8 @@ export default function App() {
           <div className="flex-1 flex flex-col">
             <BBMeresekView
               logs={logs}
+              selectedScaleId={currentScale.id}
+              selectedNoteName={selectedNote.noteName}
               onClearLogs={() => setLogs([])}
               onCapture={handleCaptureSnapshot}
               canCapture={[alap, kvint, oktav].every((m) => m.status === 'valid' && m.measuredHz !== null && m.deviationCents !== null)}
