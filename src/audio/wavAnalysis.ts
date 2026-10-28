@@ -1,4 +1,5 @@
 import { findSpectralPeakInWindow } from './spectralPeak';
+import { assessFundamentalIdentifiability, IdentifiabilityAssessment } from './fundamentalIdentifiability';
 
 export interface WavResonance {
   targetHz: number;
@@ -13,6 +14,8 @@ export interface WavFrameAnalysis {
   timeSeconds: number;
   rmsDb: number;
   resonances: WavResonance[];
+  /** Whether this window's spectrum roots the target note in a harmonic series. */
+  identifiability?: IdentifiabilityAssessment;
 }
 
 export interface WavAnalysisOptions {
@@ -156,6 +159,7 @@ export function analyzeWavWindow(
     timeSeconds: 0,
     rmsDb: 20 * Math.log10(Math.max(Math.sqrt(sumSquares / fftSize), 1e-12)),
     resonances,
+    identifiability: assessFundamentalIdentifiability(targetHz, spectrum, sampleRate, { peakFloorDb }),
   };
 }
 
