@@ -36,6 +36,27 @@ export const BBSettingsModal: React.FC<Props> = ({
   sampleRateKhz,
   isListening,
 }) => {
+  const [octaveDraft, setOctaveDraft] = React.useState(String(partialTargetOffsets.octaveCents));
+  const [thirdPartialDraft, setThirdPartialDraft] = React.useState(String(partialTargetOffsets.thirdPartialCents));
+
+  React.useEffect(() => {
+    setOctaveDraft(String(partialTargetOffsets.octaveCents));
+    setThirdPartialDraft(String(partialTargetOffsets.thirdPartialCents));
+  }, [selectedNoteName, partialTargetOffsets.octaveCents, partialTargetOffsets.thirdPartialCents]);
+
+  const commitOffset = (field: PartialTargetOffsetField, draft: string) => {
+    const parsed = draft.trim() === '' ? 0 : Number(draft);
+    if (Number.isFinite(parsed)) {
+      const value = Math.max(-MAX_PARTIAL_TARGET_OFFSET_CENTS, Math.min(MAX_PARTIAL_TARGET_OFFSET_CENTS, parsed));
+      onChangePartialTargetOffset(field, value);
+      if (field === 'octaveCents') setOctaveDraft(String(value));
+      else setThirdPartialDraft(String(value));
+    } else {
+      if (field === 'octaveCents') setOctaveDraft(String(partialTargetOffsets.octaveCents));
+      else setThirdPartialDraft(String(partialTargetOffsets.thirdPartialCents));
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -151,13 +172,12 @@ export const BBSettingsModal: React.FC<Props> = ({
                       min={-MAX_PARTIAL_TARGET_OFFSET_CENTS}
                       max={MAX_PARTIAL_TARGET_OFFSET_CENTS}
                       step="0.1"
-                      value={offset}
+                      value={field === 'octaveCents' ? octaveDraft : thirdPartialDraft}
                       onChange={(event) => {
-                        const value = Number(event.target.value);
-                        if (event.target.value.trim() !== '' && Number.isFinite(value)) {
-                          onChangePartialTargetOffset(field, Math.max(-MAX_PARTIAL_TARGET_OFFSET_CENTS, Math.min(MAX_PARTIAL_TARGET_OFFSET_CENTS, value)));
-                        }
+                        if (field === 'octaveCents') setOctaveDraft(event.target.value);
+                        else setThirdPartialDraft(event.target.value);
                       }}
+                      onBlur={(event) => commitOffset(field, event.target.value)}
                       className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-right font-mono text-xs text-white"
                     />
                     <span className="absolute right-2 -bottom-3 text-[9px] text-slate-500">cent</span>
