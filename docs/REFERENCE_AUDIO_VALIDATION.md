@@ -131,3 +131,13 @@ assuming every real tone field is exactly harmonic. They do not automatically di
 correct target frequencies, and they do not certify a handpan as in tune. Record the intended
 targets from the instrument's specification or a traceable tuning reference before using the
 offsets for acceptance measurements.
+
+
+## Auditable live measurement records
+
+The live measurement log stores the measured frequency and the target frequency separately for
+the fundamental, octave and third partial. CSV exports therefore preserve the actual target used
+for each recorded cent deviation, including custom per-note partial offsets. Older saved log
+entries may not contain target-frequency fields; they remain readable, but their target values
+are shown as unavailable. For professional records, export the log after capturing measurements
+and retain the instrument profile and external reference information used during the session.
