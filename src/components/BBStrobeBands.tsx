@@ -3,7 +3,7 @@ import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
 import { calibrateStrobeBandToMeasuredFrequency, formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
 import { isWithinTuningTolerance, tuningToleranceCents, type TuningToleranceMode } from '../audio/tuningTolerance';
-import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
+import { isStrobeMeasurementLive, strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
 import type { ResonanceMeasurement } from '../types/tuner';
 import { getStrikePitchPipeTargets, nextPitchPipeMode, normalizePitchPipeModes, pitchPipeModeLabel, pitchPipeVoiceId, type PitchPipeMode } from '../audio/pitchPipeModes';
@@ -177,9 +177,9 @@ export const BBStrobeBands: React.FC<Props> = ({
       const spectrum = current.active && current.hasSignal && !current.transientHoldoff ? bbAudioEngine.getFloatFrequencyData() : null;
       const sampleRate = bbAudioEngine.getSampleRate();
       const builtIns: Row[] = [
-        { id: 'fifth', name: 'Kvint · 3×', note: current.kvint.noteName || 'A4', targetHz: current.kvint.targetHz ?? current.baseFrequencyHz * 3, measuredHz: current.kvint.measuredHz, cents: current.kvint.deviationCents, db: current.kvint.amplitudeDb, timestamp: current.kvint.timestampMs, stripeWidth: 34, valid: current.hasSignal && current.kvint.status === 'valid', role: 'fifth' },
-        { id: 'octave', name: 'Oktáv · 2×', note: current.oktav.noteName || 'D4', targetHz: current.oktav.targetHz ?? current.baseFrequencyHz * 2, measuredHz: current.oktav.measuredHz, cents: current.oktav.deviationCents, db: current.oktav.amplitudeDb, timestamp: current.oktav.timestampMs, stripeWidth: 54, valid: current.hasSignal && current.oktav.status === 'valid', role: 'octave' },
-        { id: 'fundamental', name: 'Alap · 1×', note: current.alap.noteName || 'D3', targetHz: current.alap.targetHz ?? current.baseFrequencyHz, measuredHz: current.alap.measuredHz, cents: current.alap.deviationCents, db: current.alap.amplitudeDb, timestamp: current.alap.timestampMs, stripeWidth: 20, valid: current.hasSignal && current.alap.status === 'valid', role: 'fundamental' },
+        { id: 'fifth', name: 'Kvint · 3×', note: current.kvint.noteName || 'A4', targetHz: current.kvint.targetHz ?? current.baseFrequencyHz * 3, measuredHz: current.kvint.measuredHz, cents: current.kvint.deviationCents, db: current.kvint.amplitudeDb, timestamp: current.kvint.timestampMs, stripeWidth: 34, valid: isStrobeMeasurementLive(current.active, current.hasSignal, current.transientHoldoff, current.kvint.status), role: 'fifth' },
+        { id: 'octave', name: 'Oktáv · 2×', note: current.oktav.noteName || 'D4', targetHz: current.oktav.targetHz ?? current.baseFrequencyHz * 2, measuredHz: current.oktav.measuredHz, cents: current.oktav.deviationCents, db: current.oktav.amplitudeDb, timestamp: current.oktav.timestampMs, stripeWidth: 54, valid: isStrobeMeasurementLive(current.active, current.hasSignal, current.transientHoldoff, current.oktav.status), role: 'octave' },
+        { id: 'fundamental', name: 'Alap · 1×', note: current.alap.noteName || 'D3', targetHz: current.alap.targetHz ?? current.baseFrequencyHz, measuredHz: current.alap.measuredHz, cents: current.alap.deviationCents, db: current.alap.amplitudeDb, timestamp: current.alap.timestampMs, stripeWidth: 20, valid: isStrobeMeasurementLive(current.active, current.hasSignal, current.transientHoldoff, current.alap.status), role: 'fundamental' },
       ];
       const extras: Row[] = current.customBands.map((band, index) => {
         const targetHz = getStrobeBandTargetHz(band, current.baseFrequencyHz);
@@ -190,7 +190,7 @@ export const BBStrobeBands: React.FC<Props> = ({
           id: band.id, name: band.name, note: formatStrobeTargetExpression(band), targetHz,
           measuredHz, cents, db: peak?.magDb ?? null, timestamp: now,
           stripeWidth: 18 + (index % 3) * 9,
-          valid: Boolean(band.enabled && spectrum && (!current.active || !current.transientHoldoff) && cents !== null),
+          valid: Boolean(band.enabled && current.active && current.hasSignal && !current.transientHoldoff && spectrum && cents !== null),
         };
       });
       const rows = [...builtIns, ...extras];
