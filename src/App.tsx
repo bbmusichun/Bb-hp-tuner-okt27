@@ -40,7 +40,6 @@ import {
   type PartialTargetOffsetMap,
 } from './audio/partialTargets';
 import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
-import type { WavFrameAnalysis } from './audio/wavAnalysis';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
 import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
@@ -646,13 +645,10 @@ export default function App() {
 
   // Live Audio Analysis State
   const [isListening, setIsListening] = useState(false);
+  const [isFileInputActive, setIsFileInputActive] = useState(false);
   const [autoGainControlStatus, setAutoGainControlStatus] = useState<boolean | null>(null);
   const [micError, setMicError] = useState('');
   const [hasSignal, setHasSignal] = useState(false);
-  const [playbackStrobe, setPlaybackStrobe] = useState<{ frame: WavFrameAnalysis | null; playing: boolean }>({ frame: null, playing: false });
-  const handlePlaybackFrame = useCallback((frame: WavFrameAnalysis | null, playing: boolean) => {
-    setPlaybackStrobe((previous) => previous.frame === frame && previous.playing === playing ? previous : { frame, playing });
-  }, []);
   const [inputLevelDb, setInputLevelDb] = useState(-100);
   const [transientHoldoff, setTransientHoldoff] = useState(false);
   const [highInputLevel, setHighInputLevel] = useState(false);
@@ -824,17 +820,17 @@ export default function App() {
         }
       }
 
-      if (isListening) {
+      if (isListening || isFileInputActive) {
         animId = requestAnimationFrame(loop);
       }
     }
 
-    if (isListening) {
+    if (isListening || isFileInputActive) {
       animId = requestAnimationFrame(loop);
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isListening, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
+  }, [isListening, isFileInputActive, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
 
   // Toggle microphone
   const handleToggleMic = async () => {
@@ -859,6 +855,11 @@ export default function App() {
       setOktav(clearMeasurement(oktav, selectedNote.octaveFreq));
     } else {
       setMicError('');
+      // Stop the file-input analysis before opening the microphone.
+      if (isFileInputActive) {
+        bbAudioEngine.stopAudioElementInput();
+        setIsFileInputActive(false);
+      }
       // Stop the reference recording before opening the microphone to avoid speaker-to-mic feedback.
       if (ownDPlayerRef.current && !ownDPlayerRef.current.paused) {
         ownDPlayerRef.current.pause();
@@ -1174,7 +1175,7 @@ export default function App() {
                 title="A fő elemzési ciklus mért frissítési üteme"
                 aria-label={analysisFps !== null ? `Elemzési frissítés: ${analysisFps} képkocka másodpercenként` : 'Elemzési frissítési ütem még nem mérhető'}
                 className={analysisFps !== null && analysisFps < 20 ? 'text-amber-300' : ''}
-              >{isListening && analysisFps !== null ? `${analysisFps} FPS` : '— FPS'}</span>
+              >{(isListening || isFileInputActive) && analysisFps !== null ? `${analysisFps} FPS` : '— FPS'}</span>
               <span className="text-slate-600">|</span>
               <span className={inputNearClip ? 'w-11 text-right text-red-300' : 'w-11 text-right'}>
                 {isListening && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}
@@ -1234,17 +1235,34 @@ export default function App() {
               <audio
                 ref={ownDPlayerRef}
                 src="/audio/sajat-d-handpan.mp3"
-                loop={ownDLoop}
+                loop={false}
                 preload="metadata"
                 onLoadedMetadata={(event) => {
                   const duration = event.currentTarget.duration;
-                  setOwnDAudioDuration(Number.isFinite(duration) ? duration : 0);
+                  setOwnDAudioDuration(Number.isFinite(duration) ? Math.min(duration, 3) : 0);
                 }}
                 onDurationChange={(event) => {
                   const duration = event.currentTarget.duration;
-                  setOwnDAudioDuration(Number.isFinite(duration) ? duration : 0);
+                  setOwnDAudioDuration(Number.isFinite(duration) ? Math.min(duration, 3) : 0);
                 }}
-                onTimeUpdate={(event) => setOwnDAudioCurrentTime(event.currentTarget.currentTime)}
+                onTimeUpdate={(event) => {
+                  const player = event.currentTarget;
+                  if (player.currentTime >= 3) {
+                    if (ownDLoop) {
+                      player.currentTime = 0;
+                      setOwnDAudioCurrentTime(0);
+                    } else {
+                      player.pause();
+                      player.currentTime = 0;
+                      bbAudioEngine.stopAudioElementInput();
+                      setIsFileInputActive(false);
+                      setIsOwnDPlaying(false);
+                      setOwnDAudioCurrentTime(0);
+                    }
+                  } else {
+                    setOwnDAudioCurrentTime(player.currentTime);
+                  }
+                }
                 onCanPlay={() => setOwnDAudioError('')}
                 onError={() => {
                   setIsOwnDPlaying(false);
@@ -1252,8 +1270,8 @@ export default function App() {
                   setOwnDAudioCurrentTime(0);
                   setOwnDAudioError('A saját D-felvétel nem tölthető be. Frissítsd az oldalt, és próbáld újra.');
                 }}
-                onEnded={() => { setIsOwnDPlaying(false); setOwnDAudioCurrentTime(0); }}
-                onPause={(event) => { if (event.currentTarget.paused) setIsOwnDPlaying(false); }}
+                onEnded={() => { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); setOwnDAudioCurrentTime(0); }}
+                onPause={(event) => { if (event.currentTarget.paused) { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); } }}
                 onPlay={() => { setOwnDAudioError(''); setIsOwnDPlaying(true); }}
               />
               <div className="flex items-center justify-between gap-3">
@@ -1269,13 +1287,30 @@ export default function App() {
                     if (isOwnDPlaying) {
                       player.pause();
                       player.currentTime = 0;
+                      bbAudioEngine.stopAudioElementInput();
+                      setIsFileInputActive(false);
                       setOwnDAudioCurrentTime(0);
                       setIsOwnDPlaying(false);
                     } else if (!isListening) {
                       setOwnDAudioError('');
-                      void player.play().then(() => setIsOwnDPlaying(true)).catch(() => {
+                      const startPlayback = async () => {
+                        const playPromise = player.play();
+                        const inputPromise = bbAudioEngine.startAudioElementInput(player);
+                        const [playResult, inputReady] = await Promise.all([playPromise, inputPromise]);
+                        if (!inputReady) throw new Error('A hangfájl nem kapcsolható az elemzőhöz.');
+                        analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
+                        setAnalysisFps(null);
+                        setIsFileInputActive(true);
+                        setIsOwnDPlaying(true);
+                      };
+                      void startPlayback().catch((error) => {
+                        player.pause();
+                        bbAudioEngine.stopAudioElementInput();
+                        setIsFileInputActive(false);
                         setIsOwnDPlaying(false);
-                        setOwnDAudioError('A lejátszás nem indult el. Érintsd meg újra a Lejátszás gombot.');
+                        setOwnDAudioError(error instanceof Error
+                          ? error.message
+                          : 'A lejátszás nem indult el. Érintsd meg újra a Lejátszás gombot.');
                       });
                     }
                   }}
@@ -1363,7 +1398,6 @@ export default function App() {
                 frequency: note.frequency,
               }))}
               targetFrequencyHz={selectedNote.frequency}
-              onPlaybackFrame={handlePlaybackFrame}
             />
             {/* ================= SECTION B: MAIN PITCH & STROBE BANDS ================= */}
             <div>
@@ -1477,33 +1511,13 @@ export default function App() {
 
               {/* Three Stroboscope Bands (Alap, Kvint, Oktáv) */}
               <BBStrobeBands
-                alap={playbackStrobe.playing && !isListening && playbackStrobe.frame ? {
-                  role: 'fundamental', name: 'Alap', noteName: playbackStrobe.frame.detectedNote?.noteName ?? selectedNote.noteName,
-                  measuredHz: playbackStrobe.frame.resonances[0]?.measuredHz ?? null, targetHz: playbackStrobe.frame.resonances[0]?.targetHz ?? selectedNote.frequency,
-                  deviationCents: playbackStrobe.frame.resonances[0]?.cents ?? null, amplitudeDb: playbackStrobe.frame.resonances[0]?.peakDb ?? null,
-                  confidence: playbackStrobe.frame.detectedNote?.confidence ?? null, timestampMs: playbackStrobe.frame.timeSeconds * 1000,
-                  status: playbackStrobe.frame.resonances[0]?.measuredHz !== null && playbackStrobe.frame.resonances[0]?.measuredHz !== undefined ? 'valid' : 'no-signal',
-                } : alap}
-                kvint={playbackStrobe.playing && !isListening && playbackStrobe.frame ? {
-                  role: 'fifth', name: '3. parciális', noteName: selectedNote.noteName,
-                  measuredHz: playbackStrobe.frame.resonances[2]?.measuredHz ?? null, targetHz: playbackStrobe.frame.resonances[2]?.targetHz ?? selectedNote.frequency * 3,
-                  deviationCents: playbackStrobe.frame.resonances[2]?.cents ?? null, amplitudeDb: playbackStrobe.frame.resonances[2]?.peakDb ?? null,
-                  confidence: playbackStrobe.frame.detectedNote?.confidence ?? null, timestampMs: playbackStrobe.frame.timeSeconds * 1000,
-                  status: playbackStrobe.frame.resonances[2]?.measuredHz !== null && playbackStrobe.frame.resonances[2]?.measuredHz !== undefined ? 'valid' : 'no-signal',
-                } : kvint}
-                oktav={playbackStrobe.playing && !isListening && playbackStrobe.frame ? {
-                  role: 'octave', name: 'Oktáv', noteName: selectedNote.noteName,
-                  measuredHz: playbackStrobe.frame.resonances[1]?.measuredHz ?? null, targetHz: playbackStrobe.frame.resonances[1]?.targetHz ?? selectedNote.frequency * 2,
-                  deviationCents: playbackStrobe.frame.resonances[1]?.cents ?? null, amplitudeDb: playbackStrobe.frame.resonances[1]?.peakDb ?? null,
-                  confidence: playbackStrobe.frame.detectedNote?.confidence ?? null, timestampMs: playbackStrobe.frame.timeSeconds * 1000,
-                  status: playbackStrobe.frame.resonances[1]?.measuredHz !== null && playbackStrobe.frame.resonances[1]?.measuredHz !== undefined ? 'valid' : 'no-signal',
-                } : oktav}
-                hasSignal={playbackStrobe.playing && !isListening ? Boolean(playbackStrobe.frame?.resonances.some((resonance) => resonance.measuredHz !== null)) : hasSignal}
-                active={isListening}
+                alap={alap}
+                kvint={kvint}
+                oktav={oktav}
+                hasSignal={hasSignal}
+                active={isListening || isFileInputActive}
                 transientHoldoff={transientHoldoff}
                 baseFrequencyHz={selectedNote.frequency}
-                playbackSpectrum={playbackStrobe.playing && !isListening ? playbackStrobe.frame?.spectrum ?? null : null}
-                playbackSampleRateHz={playbackStrobe.playing && !isListening ? playbackStrobe.frame?.sampleRate ?? null : null}
                 selectedRole={selectedRole}
                 onSelectRole={setSelectedRole}
                 toleranceOverrideCents={toleranceOverrideCents}
