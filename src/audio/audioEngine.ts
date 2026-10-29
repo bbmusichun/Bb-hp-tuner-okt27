@@ -159,10 +159,6 @@ export class BBAudioEngine {
       this.analyser.smoothingTimeConstant = 0.05;
       this.analyser.minDecibels = -100;
       this.analyser.maxDecibels = 0;
-      this.toneSilenceGain = this.audioCtx.createGain();
-      this.toneSilenceGain.gain.setValueAtTime(0, now);
-      this.analyser.connect(this.toneSilenceGain);
-      this.toneSilenceGain.connect(this.audioCtx.destination);
       this.timeData = new Float32Array(this.analyser.fftSize);
       this.freqData = new Float32Array(this.analyser.frequencyBinCount);
 
@@ -607,6 +603,10 @@ export class BBAudioEngine {
       this.analyser.smoothingTimeConstant = 0.05;
       this.analyser.minDecibels = -100;
       this.analyser.maxDecibels = 0;
+      this.toneSilenceGain = this.audioCtx.createGain();
+      this.toneSilenceGain.gain.setValueAtTime(0, now);
+      this.analyser.connect(this.toneSilenceGain);
+      this.toneSilenceGain.connect(this.audioCtx.destination);
       this.timeData = new Float32Array(this.analyser.fftSize);
       this.freqData = new Float32Array(this.analyser.frequencyBinCount);
       this.sampleRate = this.audioCtx.sampleRate;
