@@ -3,6 +3,7 @@ import type { ResonanceMeasurement } from '../types/tuner';
 import { bbAudioEngine } from '../audio/audioEngine';
 import { isWithinTuningTolerance, type TuningToleranceMode } from '../audio/tuningTolerance';
 import { findSignificantSpectralPeaks, type SignificantSpectralPeak } from '../audio/peakSpectrum';
+import { getStrobeBandTargetHz, type StrobeBandConfig } from '../audio/strobeBands';
 
 interface Props {
   alap: ResonanceMeasurement;
@@ -11,6 +12,7 @@ interface Props {
   hasSignal: boolean;
   toleranceOverrideCents?: number | null;
   toleranceMode?: TuningToleranceMode;
+  customStrobeBands?: StrobeBandConfig[];
   onSelectPeak?: (role: 'fundamental' | 'fifth' | 'octave') => void;
   zoomTargetHz?: number | null;
   onClearZoom?: () => void;
@@ -50,15 +52,17 @@ interface HoverInfo {
 }
 
 export const BBSpectrum: React.FC<Props> = ({
-  alap, kvint, oktav, hasSignal, toleranceOverrideCents = null, toleranceMode = 'auto', onSelectPeak,
+  alap, kvint, oktav, hasSignal, toleranceOverrideCents = null, toleranceMode = 'auto', customStrobeBands = [], onSelectPeak,
   zoomTargetHz = null, onClearZoom,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latest = useRef({ alap, kvint, oktav, hasSignal, toleranceOverrideCents, toleranceMode, zoomTargetHz });
-  latest.current = { alap, kvint, oktav, hasSignal, toleranceOverrideCents, toleranceMode, zoomTargetHz };
+  const latest = useRef({ alap, kvint, oktav, hasSignal, toleranceOverrideCents, toleranceMode, customStrobeBands, zoomTargetHz, peakDisplayEnabled: true });
+  const peakMaxDbRef = useRef<Record<number, number>>({});
+  const latest.current = { alap, kvint, oktav, hasSignal, toleranceOverrideCents, toleranceMode, customStrobeBands, zoomTargetHz, peakDisplayEnabled };
+  const [peakDisplayEnabled, setPeakDisplayEnabled] = useState(true);
   const peaksRef = useRef<SignificantSpectralPeak[]>([]);
   const lastPeakUpdateRef = useRef(0);
-  const [peakRows, setPeakRows] = useState<SignificantSpectralPeak[]>([]);
+  const [peakRows, setPeakRows] = useState<Array<SignificantSpectralPeak & { maxAmplitudeDb: number }>>([]);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
 
   useEffect(() => {
@@ -124,6 +128,26 @@ export const BBSpectrum: React.FC<Props> = ({
         ctx.strokeStyle = '#3baed4'; ctx.lineWidth = 1.6; ctx.stroke();
       }
 
+      // The dark/light dashed lines mark custom stroboscope band targets over the FFT trace.
+      s.customStrobeBands.filter((band) => band.enabled).forEach((band, index) => {
+        const targetHz = getStrobeBandTargetHz(band, base);
+        if (!Number.isFinite(targetHz) || targetHz < low || targetHz > high) return;
+        const x = X(targetHz);
+        ctx.save();
+        ctx.setLineDash([3, 4]);
+        ctx.strokeStyle = 'rgba(2,6,23,.92)';
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke();
+        ctx.strokeStyle = 'rgba(203,213,225,.75)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.font = '9px system-ui'; ctx.textAlign = x > w - 125 ? 'right' : 'left'; ctx.textBaseline = 'top';
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillText(band.name.slice(0, 18), x + (x > w - 125 ? -3 : 3), T + 5 + (index % 3) * 10);
+        ctx.restore();
+      });
+
       const exactPeaks = s.hasSignal && Number.isFinite(maxInView)
         ? findSignificantSpectralPeaks(data, sampleRate, base, {
             minFrequencyHz: low, maxFrequencyHz: high, minimumAmplitudeDb: -88,
@@ -131,13 +155,17 @@ export const BBSpectrum: React.FC<Props> = ({
           })
         : [];
       peaksRef.current = exactPeaks;
+      exactPeaks.forEach((peak) => {
+        peakMaxDbRef.current[peak.bin] = Math.max(peakMaxDbRef.current[peak.bin] ?? -Infinity, peak.amplitudeDb);
+      });
       if (now - lastPeakUpdateRef.current > 200) {
         lastPeakUpdateRef.current = now;
-        setPeakRows([...exactPeaks].sort((a, b) => b.amplitudeDb - a.amplitudeDb).slice(0, 8));
+        setPeakRows([...exactPeaks].sort((a, b) => b.amplitudeDb - a.amplitudeDb).slice(0, 8)
+          .map((peak) => ({ ...peak, maxAmplitudeDb: peakMaxDbRef.current[peak.bin] ?? peak.amplitudeDb })));
       }
 
-      // Linotune-style peak markers use the exact FFT-bin locations, not parabolic interpolation.
-      exactPeaks.forEach((peak) => {
+      // Peak markers report exact FFT-bin locations; the optional overlay can be hidden independently.
+      if (s.peakDisplayEnabled) exactPeaks.forEach((peak) => {
         const x = X(peak.frequencyHz), y = Y(peak.amplitudeDb);
         ctx.beginPath(); ctx.moveTo(x, y + 5); ctx.lineTo(x, T + ph); ctx.strokeStyle = 'rgba(226,232,240,.38)';
         ctx.lineWidth = 1; ctx.stroke();
@@ -232,7 +260,11 @@ export const BBSpectrum: React.FC<Props> = ({
           <h3 className="text-sm font-bold text-white">Frekvenciaspektrum · pontos csúcsok</h3>
           <p className="text-[11px] text-slate-400">Azonosított parciálisok, zajpadló-szűrés és nagyítás kijelölés alapján</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button type="button" onClick={() => setPeakDisplayEnabled((enabled) => !enabled)} aria-pressed={peakDisplayEnabled}
+            className="rounded-lg border border-slate-700 px-2 py-1.5 text-[10px] text-slate-300">{peakDisplayEnabled ? 'Csúcsjelölők: be' : 'Csúcsjelölők: ki'}</button>
+          <button type="button" onClick={() => { peakMaxDbRef.current = {}; setPeakRows([]); }} disabled={!hasSignal}
+            className="rounded-lg border border-slate-700 px-2 py-1.5 text-[10px] text-slate-300 disabled:opacity-40">Maximum törlése</button>
           <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] text-slate-400">{hasSignal ? 'Élő mérés' : 'Várakozás'}</span>
           {zoomTargetHz !== null && Number.isFinite(zoomTargetHz) && (
             <button type="button" onClick={onClearZoom} className="rounded-lg border border-cyan-400/30 px-2 py-1.5 text-[10px] font-semibold text-cyan-200">Nagyítás törlése</button>
@@ -290,7 +322,7 @@ export const BBSpectrum: React.FC<Props> = ({
               <div key={peak.bin} className="min-w-0 rounded-lg border border-white/5 bg-white/[0.025] px-2 py-1.5">
                 <div className="truncate font-mono text-[11px] font-semibold text-slate-100">{peak.frequencyHz.toFixed(2)} Hz</div>
                 <div className="text-[10px] text-cyan-200">{peak.multipleOfBase.toFixed(3)}× alap</div>
-                <div className="text-[10px] text-slate-500">{peak.relativeDb.toFixed(1)} dB relatív</div>
+                <div className="text-[10px] text-slate-500">{peak.relativeDb.toFixed(1)} dB relatív · max {peak.maxAmplitudeDb.toFixed(1)} dBFS</div>
               </div>
             ))}
           </div>
