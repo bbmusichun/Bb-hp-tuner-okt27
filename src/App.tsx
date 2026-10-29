@@ -1890,6 +1890,7 @@ export default function App() {
               toleranceOverrideCents={toleranceOverrideCents}
               toleranceMode={toleranceMode}
               onSelectPeak={setSelectedRole}
+              onZoomTargetHz={setSpectrumZoomTargetHz}
               zoomTargetHz={spectrumZoomTargetHz}
               customStrobeBands={customStrobeBands}
               onClearZoom={() => setSpectrumZoomTargetHz(null)}
