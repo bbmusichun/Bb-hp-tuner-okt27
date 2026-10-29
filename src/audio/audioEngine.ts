@@ -58,6 +58,7 @@ export class BBAudioEngine {
   private toneGain: GainNode | null = null;
   private toneSilenceGain: GainNode | null = null;
   private preferredOutputDeviceId: string | null = null;
+  private pitchPipeVoices = new Map<string, { oscillator: OscillatorNode; gain: GainNode }>();
 
   public async startMicrophone(deviceId?: string | null): Promise<boolean> {
     try {
@@ -625,6 +626,75 @@ export class BBAudioEngine {
       timestampMs: Date.now(),
       status: 'no-signal',
     };
+  }
+
+  /**
+   * Play a strobe pitch-pipe voice without routing it back into the measurement analyser.
+   * Independent ids allow several target bands to sound at once, as in a multi-band pitch pipe.
+   * Passing durationMs plays a short output-only cue for strike-trigger mode.
+   */
+  public playPitchPipeTone(id: string, freqHz: number, durationMs?: number): void {
+    if (typeof id !== 'string' || !id.trim() || id.length > 100 ||
+        !Number.isFinite(freqHz) || freqHz <= 0 || freqHz > 20000) return;
+    this.stopPitchPipeTone(id);
+    if (!this.audioCtx) {
+      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
+    }
+    const context = this.audioCtx;
+    if (context.state === 'suspended') void context.resume();
+    void this.applyPreferredOutputDevice();
+
+    const now = context.currentTime;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.025);
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(freqHz, now);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+
+    const voice = { oscillator, gain };
+    this.pitchPipeVoices.set(id, voice);
+    oscillator.onended = () => {
+      if (this.pitchPipeVoices.get(id) === voice) this.pitchPipeVoices.delete(id);
+      oscillator.disconnect();
+      gain.disconnect();
+    };
+
+    if (typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs > 0) {
+      const endAt = now + Math.max(0.06, durationMs / 1000);
+      gain.gain.setValueAtTime(0.12, Math.max(now + 0.025, endAt - 0.03));
+      gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
+      oscillator.start(now);
+      oscillator.stop(endAt + 0.01);
+    } else {
+      oscillator.start(now);
+    }
+  }
+
+  /** Stop only the selected pitch-pipe voice; other active bands keep sounding. */
+  public stopPitchPipeTone(id: string): void {
+    const voice = this.pitchPipeVoices.get(id);
+    if (!voice) return;
+    this.pitchPipeVoices.delete(id);
+    const context = this.audioCtx;
+    if (!context) {
+      try { voice.oscillator.stop(); } catch { /* oscillator may already have stopped */ }
+      voice.oscillator.disconnect();
+      voice.gain.disconnect();
+      return;
+    }
+    const now = context.currentTime;
+    try {
+      voice.gain.gain.cancelScheduledValues(now);
+      voice.gain.gain.setValueAtTime(Math.max(0.0001, voice.gain.gain.value), now);
+      voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+      voice.oscillator.stop(now + 0.04);
+    } catch {
+      // The cue may already be scheduled to finish, or the context may be closing.
+    }
   }
 
   // Reference tone generator. When no microphone/file source is active, feed the
