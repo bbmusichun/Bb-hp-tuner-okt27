@@ -28,6 +28,7 @@ import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
 import { recordAnalysisFrame } from './audio/analysisRate';
 import { getStrobeBandTargetHz, normalizeStrobeBands, type StrobeBandConfig } from './audio/strobeBands';
 import { normalizeStrobeSensitivity } from './audio/strobeSensitivity';
+import { createWindowSyncRequest, createWindowSyncState, normalizeWindowSyncMessage, type WindowSyncMode } from './audio/windowSync';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
@@ -176,6 +177,20 @@ function loadTuningToleranceMode(): TuningToleranceMode {
 function loadFreezeTargetsPreference(): boolean {
   try { return localStorage.getItem('hangoal-freeze-targets-v1') === 'true'; }
   catch { return false; }
+}
+
+function loadWindowSyncMode(): WindowSyncMode {
+  try {
+    const value = sessionStorage.getItem('hangoal-window-sync-mode-v1');
+    return value === 'master' || value === 'slave' ? value : 'off';
+  } catch { return 'off'; }
+}
+
+function createWindowSyncPeerId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  } catch { /* Fall through to a non-cryptographic tab identifier. */ }
+  return 'hangoal-tab-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
 
 function formatAudioTime(seconds: number): string {
