@@ -156,6 +156,23 @@ function loadTuningPreferences(): {
     return defaults;
   }
 }
+function loadOwnDVolumePreference(): number {
+  try {
+    const stored = localStorage.getItem('hangoal-own-d-volume-v1');
+    if (stored === null) return 0.8;
+    const value = Number(stored);
+    return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.8;
+  } catch {
+    return 0.8;
+  }
+}
+
+function formatAudioTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const totalSeconds = Math.floor(seconds);
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
+}
+
 function loadDisabledToneNotesByScale(): Record<string, string[]> {
   try {
     return normalizeDisabledToneNotes(JSON.parse(localStorage.getItem('hangoal-disabled-tone-notes-v1') ?? '{}'));
@@ -232,6 +249,13 @@ export default function App() {
   });
   const [isOwnDPlaying, setIsOwnDPlaying] = useState(false);
   const [ownDAudioError, setOwnDAudioError] = useState('');
+  const [ownDVolume, setOwnDVolume] = useState<number>(loadOwnDVolumePreference);
+  const [ownDAudioCurrentTime, setOwnDAudioCurrentTime] = useState(0);
+  const [ownDAudioDuration, setOwnDAudioDuration] = useState(0);
+  useEffect(() => {
+    if (ownDPlayerRef.current) ownDPlayerRef.current.volume = ownDVolume;
+  }, [ownDVolume]);
+
   const strikeToneTimerRef = useRef<number | null>(null);
   const previousTransientHoldoffRef = useRef(false);
 
@@ -1196,9 +1220,18 @@ export default function App() {
                 src="/audio/sajat-d-handpan.mp3"
                 loop={ownDLoop}
                 preload="metadata"
+                onLoadedMetadata={(event) => {
+                  const duration = event.currentTarget.duration;
+                  setOwnDAudioDuration(Number.isFinite(duration) ? duration : 0);
+                }}
+                onDurationChange={(event) => {
+                  const duration = event.currentTarget.duration;
+                  setOwnDAudioDuration(Number.isFinite(duration) ? duration : 0);
+                }}
+                onTimeUpdate={(event) => setOwnDAudioCurrentTime(event.currentTarget.currentTime)}
                 onCanPlay={() => setOwnDAudioError('')}
                 onError={() => setOwnDAudioError('A saját D-felvétel nem tölthető be. Frissítsd az oldalt, és próbáld újra.')}
-                onEnded={() => setIsOwnDPlaying(false)}
+                onEnded={() => { setIsOwnDPlaying(false); setOwnDAudioCurrentTime(0); }}
                 onPause={() => setIsOwnDPlaying(false)}
                 onPlay={() => { setOwnDAudioError(''); setIsOwnDPlaying(true); }}
               />
@@ -1215,6 +1248,7 @@ export default function App() {
                     if (isOwnDPlaying) {
                       player.pause();
                       player.currentTime = 0;
+                      setOwnDAudioCurrentTime(0);
                       setIsOwnDPlaying(false);
                     } else if (!isListening) {
                       setOwnDAudioError('');
@@ -1232,6 +1266,53 @@ export default function App() {
                   <Volume2 className="h-4 w-4" />
                   {isOwnDPlaying ? "Leállítás" : "Lejátszás"}
                 </button>
+              </div>
+              <div className="mt-3">
+                <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                  <label htmlFor="hangoal-own-d-position">Felvétel pozíciója</label>
+                  <span className="font-mono tabular-nums">{formatAudioTime(ownDAudioCurrentTime)} / {formatAudioTime(ownDAudioDuration)}</span>
+                </div>
+                <input
+                  id="hangoal-own-d-position"
+                  type="range"
+                  min={0}
+                  max={Math.max(ownDAudioDuration, 0.1)}
+                  step={0.05}
+                  value={Math.min(ownDAudioCurrentTime, ownDAudioDuration || 0)}
+                  onChange={(event) => {
+                    const nextTime = Number(event.target.value);
+                    if (ownDPlayerRef.current && Number.isFinite(nextTime)) {
+                      ownDPlayerRef.current.currentTime = nextTime;
+                      setOwnDAudioCurrentTime(nextTime);
+                    }
+                  }}
+                  disabled={!ownDAudioDuration}
+                  aria-label="Lejátszási pozíció"
+                  className="w-full accent-amber-400 disabled:opacity-40"
+                />
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <label htmlFor="hangoal-own-d-volume" className="shrink-0 text-xs text-slate-300">Hangerő</label>
+                <input
+                  id="hangoal-own-d-volume"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={Math.round(ownDVolume * 100)}
+                  onChange={(event) => {
+                    const nextVolume = Math.max(0, Math.min(1, Number(event.target.value) / 100));
+                    setOwnDVolume(nextVolume);
+                    try {
+                      localStorage.setItem('hangoal-own-d-volume-v1', String(nextVolume));
+                    } catch {
+                      // Keep volume control usable when browser storage is unavailable.
+                    }
+                  }}
+                  aria-label="Saját D hangerő"
+                  className="min-w-0 flex-1 accent-amber-400"
+                />
+                <span className="w-9 text-right text-xs tabular-nums text-slate-400">{Math.round(ownDVolume * 100)}%</span>
               </div>
               {isListening && <p className="mt-2 text-[11px] text-amber-200/80">A mikrofonmérés aktív; a felvétel lejátszása ilyenkor le van tiltva, hogy a hangszóró ne zavarja a mérést.</p>}
               {ownDAudioError && <p role="alert" className="mt-2 text-[11px] text-rose-300">{ownDAudioError}</p>}
