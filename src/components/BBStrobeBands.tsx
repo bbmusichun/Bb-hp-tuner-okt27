@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
-import { formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
+import { calibrateStrobeBandToMeasuredFrequency, formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
 import { isWithinTuningTolerance, tuningToleranceCents, type TuningToleranceMode } from '../audio/tuningTolerance';
 import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
@@ -464,9 +464,9 @@ export const BBStrobeBands: React.FC<Props> = ({
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                   <button type="button" disabled={freezeTargetSettings || !valid || cents === null}
                     onClick={() => {
-                      if (cents === null || !Number.isFinite(cents)) return;
-                      const nextOffset = Math.max(-1200, Math.min(1200, band.centsOffset + cents));
-                      updateBand(band.id, { centsOffset: nextOffset });
+                      if (measured === null || !Number.isFinite(measured)) return;
+                      const calibrated = calibrateStrobeBandToMeasuredFrequency(band, measured, baseFrequencyHz);
+                      if (calibrated) updateBand(band.id, { centsOffset: calibrated.centsOffset });
                     }}
                     className="rounded-md border border-emerald-400/30 bg-emerald-400/5 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40">
                     Kalibrálás a mért hangra
