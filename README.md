@@ -35,6 +35,10 @@ npm run preview
 
 A CI ugyanazt a TypeScript-ellenőrzést, tesztcsomagot és production buildet futtatja.
 
+## Kiadás előtti átvétel
+
+A valós telefonos/mikrofonos ellenőrzéshez használd a [kiadás előtti átvételi ellenőrzőlistát](docs/RELEASE_ACCEPTANCE_CHECKLIST.md).
+
 ## Hangolási használat
 
 1. Nyisd meg HTTPS-en a webappot, és engedélyezd a mikrofont.
