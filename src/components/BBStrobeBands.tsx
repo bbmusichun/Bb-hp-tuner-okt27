@@ -81,6 +81,7 @@ export const BBStrobeBands: React.FC<Props> = ({
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const [pitchPipeModes, setPitchPipeModes] = useState<Record<string, PitchPipeMode>>(loadPitchPipeModes);
+  const continuousPitchTargetsRef = useRef<Record<string, number>>({});
   const previousTransientRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, toleranceMode, strobeSensitivity, baseFrequencyHz, customBands, isPaused });
@@ -108,10 +109,12 @@ export const BBStrobeBands: React.FC<Props> = ({
     const voiceId = pitchPipeVoiceId(id);
     // Each band owns an output-only voice; other continuous pitch pipes are unaffected.
     bbAudioEngine.stopPitchPipeTone(voiceId);
+    delete continuousPitchTargetsRef.current[id];
     setPitchPipeModes((previous) => ({ ...previous, [id]: nextMode }));
     const targetHz = targetForPipe(id) ?? fallbackHz;
     if (nextMode === 'continuous' && Number.isFinite(targetHz) && targetHz > 0) {
       bbAudioEngine.playPitchPipeTone(voiceId, targetHz);
+      continuousPitchTargetsRef.current[id] = targetHz;
     }
   };
 
@@ -129,6 +132,29 @@ export const BBStrobeBands: React.FC<Props> = ({
       bbAudioEngine.playPitchPipeTone(pitchPipeVoiceId(id), frequencyHz, 180);
     });
   }, [transientHoldoff, active, pitchPipeModes, alap.targetHz, kvint.targetHz, oktav.targetHz, customBands, baseFrequencyHz]);
+
+  useEffect(() => {
+    // A continuous pitch pipe follows every target-frequency change without feeding the tone back into analysis.
+    Object.entries(pitchPipeModes).forEach(([id, mode]) => {
+      if (mode !== 'continuous') {
+        delete continuousPitchTargetsRef.current[id];
+        return;
+      }
+
+      const targetHz = targetForPipe(id);
+      const previousHz = continuousPitchTargetsRef.current[id];
+      if (!Number.isFinite(targetHz) || targetHz === null || targetHz <= 0) {
+        bbAudioEngine.stopPitchPipeTone(pitchPipeVoiceId(id));
+        delete continuousPitchTargetsRef.current[id];
+        return;
+      }
+      if (previousHz === undefined || Math.abs(1200 * Math.log2(targetHz / previousHz)) > 0.05) {
+        bbAudioEngine.stopPitchPipeTone(pitchPipeVoiceId(id));
+        bbAudioEngine.playPitchPipeTone(pitchPipeVoiceId(id), targetHz);
+        continuousPitchTargetsRef.current[id] = targetHz;
+      }
+    });
+  }, [pitchPipeModes, alap.targetHz, kvint.targetHz, oktav.targetHz, customBands, baseFrequencyHz]);
 
   useEffect(() => {
     const reload = () => setCustomBands(loadCustomBands());
