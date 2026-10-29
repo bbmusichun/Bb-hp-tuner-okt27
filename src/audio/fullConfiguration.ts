@@ -1,7 +1,7 @@
 import type { TuningLogEntry } from '../types/tuner';
 import { parseInstrumentProfileBackup, type InstrumentProfile } from './instrumentProfiles';
 import { normalizeDisabledToneNotes } from './scaleNoteSelection';
-import { normalizeStrobeBands, type StrobeBandConfig } from './strobeBands';
+import { MAX_CUSTOM_STROBE_BANDS, normalizeStrobeBands, type StrobeBandConfig } from './strobeBands';
 import type { AutoDetectionMode } from './detectionModes';
 import type { TuningReadoutMode } from './readoutModes';
 import type { ReferenceToneMode } from './referenceToneModes';
@@ -97,7 +97,7 @@ export function parseHangoalFullConfiguration(
 
   if (!isRecord(value.disabledToneNotesByScale)) return null;
   const disabledToneNotesByScale = normalizeDisabledToneNotes(value.disabledToneNotesByScale);
-  if (!Array.isArray(value.customStrobeBands) || value.customStrobeBands.length > 8) return null;
+  if (!Array.isArray(value.customStrobeBands) || value.customStrobeBands.length > MAX_CUSTOM_STROBE_BANDS) return null;
   const customStrobeBands = normalizeStrobeBands(value.customStrobeBands);
   if (customStrobeBands.length !== value.customStrobeBands.length ||
     customStrobeBands.some((band) => band.source !== 'custom')) return null;
