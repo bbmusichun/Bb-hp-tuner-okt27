@@ -19,6 +19,7 @@ import {
 import { bbAudioEngine } from './audio/audioEngine';
 import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
 import { isWithinTuningTolerance } from './audio/tuningTolerance';
+import { buildChromaticTargetNote, midiFromFrequency } from './audio/chromaticPitch';
 import {
   DEFAULT_PARTIAL_TARGET_OFFSET,
   normalizePartialTargetOffsets,
@@ -33,6 +34,7 @@ import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBConfigurableStrobeBands } from './components/BBConfigurableStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
 import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
+import { BBPitchDial } from './components/BBPitchDial';
 import { BBCards } from './components/BBCards';
 import { BBStabilityGraph } from './components/BBStabilityGraph';
 import { BBHangmezoView } from './components/BBHangmezoView';
@@ -199,12 +201,36 @@ export default function App() {
 
   // Selected tone field note (default Ding D3)
   const [selectedNote, setSelectedNote] = useState<ToneFieldNote>(toneNotes[0]);
+  const [chromaticTargetMidi, setChromaticTargetMidi] = useState<number | null>(null);
+  const [isPitchDialOpen, setIsPitchDialOpen] = useState(false);
 
   useEffect(() => {
+    if (chromaticTargetMidi !== null) {
+      const chromaticTarget = buildChromaticTargetNote(chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets);
+      if (chromaticTarget) setSelectedNote(chromaticTarget);
+      return;
+    }
     if (toneNotes.length > 0) {
       setSelectedNote((previous) => toneNotes.find((note) => note.id === previous.id) ?? toneNotes[0]);
     }
-  }, [toneNotes]);
+  }, [toneNotes, chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets]);
+
+  const selectedMidi = useMemo(() => midiFromFrequency(selectedNote.frequency, a4Ref), [selectedNote.frequency, a4Ref]);
+
+  const handleSelectChromaticMidi = (midi: number) => {
+    const target = buildChromaticTargetNote(midi, a4Ref, currentScale.id, partialTargetOffsets);
+    if (!target) return;
+    autoDetectionRef.current = null;
+    setAutoDetect(false);
+    setChromaticTargetMidi(midi);
+    setSelectedNote(target);
+    setSelectedRole('fundamental');
+  };
+
+  const handleSelectToneFieldNote = (note: ToneFieldNote) => {
+    setChromaticTargetMidi(null);
+    setSelectedNote(note);
+  };
 
   const selectedPartialOffsetKey = partialTargetOffsetKey(currentScale.id, selectedNote.noteName);
   const selectedPartialOffsets = partialTargetOffsets[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
@@ -239,6 +265,7 @@ export default function App() {
   });
 
   const handleSelectScale = (scale: HandpanScale) => {
+    setChromaticTargetMidi(null);
     setCurrentScale(scale);
     setInstrumentProfiles((previous) => previous.map((profile) => profile.id === activeInstrumentProfileId
       ? { ...profile, scaleId: scale.id, customScale: undefined }
@@ -250,6 +277,7 @@ export default function App() {
     const scaleId = 'custom-' + activeInstrumentProfileId;
     const parsed = parseCustomScale(name, source, scaleId);
     if (!parsed) return false;
+    setChromaticTargetMidi(null);
     setCurrentScale(parsed);
     setInstrumentProfiles((previous) => previous.map((profile) => profile.id === activeInstrumentProfileId
       ? { ...saveActiveProfileSettings(profile), scaleId: parsed.id, customScale: parsed }
@@ -259,6 +287,7 @@ export default function App() {
   };
 
   const handleSelectInstrumentProfile = (profileId: string) => {
+    setChromaticTargetMidi(null);
     const profilesWithCurrentSettings = instrumentProfiles.map((profile) =>
       profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
     );
@@ -300,6 +329,7 @@ export default function App() {
     );
     if (!imported) return false;
 
+    setChromaticTargetMidi(null);
     const currentProfiles = instrumentProfiles.map((profile) =>
       profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
     );
@@ -337,6 +367,7 @@ export default function App() {
     if (remaining.length === profilesWithCurrentSettings.length) return;
     setInstrumentProfiles(remaining);
     if (profileId === activeInstrumentProfileId) {
+      setChromaticTargetMidi(null);
       const nextProfile = remaining[0];
       setActiveInstrumentProfileId(nextProfile.id);
       setA4Ref(nextProfile.a4Ref);
@@ -479,7 +510,7 @@ export default function App() {
       if (now - lastTick >= 33) {
         lastTick = now;
 
-        if (autoDetect) {
+        if (autoDetect && chromaticTargetMidi === null) {
           const detected = bbAudioEngine.detectNote(
             toneNotes.map((note) => ({ id: note.id, noteName: note.noteName, frequency: note.frequency }))
           );
@@ -533,7 +564,7 @@ export default function App() {
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isListening, selectedNote, resonanceNoteNames, autoDetect, toneNotes]);
+  }, [isListening, selectedNote, resonanceNoteNames, autoDetect, toneNotes, chromaticTargetMidi]);
 
   // Toggle microphone
   const handleToggleMic = async () => {
@@ -673,7 +704,11 @@ export default function App() {
 
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => setAutoDetect((value) => !value)}
+                onClick={() => {
+                  const next = !autoDetect;
+                  setAutoDetect(next);
+                  if (next && chromaticTargetMidi !== null) setChromaticTargetMidi(null);
+                }}
                 className={`px-2 py-1 rounded-full border text-[10px] font-semibold ${autoDetect ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 text-slate-400'}`}
                 title="Automatikus hangfelismerés kapcsolása"
               >
@@ -806,6 +841,18 @@ export default function App() {
                 </button>
               </div>
 
+              <div className="mb-1 flex justify-end px-1">
+                <button
+                  type="button"
+                  onClick={() => setIsPitchDialOpen((open) => !open)}
+                  aria-expanded={isPitchDialOpen}
+                  className="rounded-full border border-cyan-400/30 bg-cyan-400/5 px-2.5 py-1.5 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-400/10"
+                >
+                  {isPitchDialOpen ? 'Pitch tárcsa elrejtése' : 'Kromatikus pitch tárcsa'}
+                </button>
+              </div>
+              {isPitchDialOpen && <BBPitchDial selectedMidi={selectedMidi} onSelectMidi={handleSelectChromaticMidi} />}
+
               {/* Three Stroboscope Bands (Alap, Kvint, Oktáv) */}
               <BBStrobeBands
                 alap={alap}
@@ -896,7 +943,7 @@ export default function App() {
             <BBHangmezoView
               notes={toneNotes}
               selectedNote={selectedNote}
-              onSelectNote={setSelectedNote}
+              onSelectNote={handleSelectToneFieldNote}
               hasSignal={hasSignal}
               alapCents={alap.deviationCents}
             />
