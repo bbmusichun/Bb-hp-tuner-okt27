@@ -20,7 +20,10 @@ export class BBAudioEngine {
   private analyser: AnalyserNode | null = null;
   private microphoneStream: MediaStream | null = null;
   private autoGainControlStatus: boolean | null = null;
-  private sourceNode: MediaStreamAudioSourceNode | null = null;
+  private sourceNode: AudioNode | null = null;
+  private mediaElementSourceNode: MediaElementAudioSourceNode | null = null;
+  private mediaElementSourceElement: HTMLAudioElement | null = null;
+  private inputMode: 'inactive' | 'microphone' | 'media-element' = 'inactive';
 
   private micState: MicState = 'inactive';
   private errorMessage = '';
@@ -56,6 +59,7 @@ export class BBAudioEngine {
   public async startMicrophone(): Promise<boolean> {
     try {
       if (this.micState === 'active' && this.microphoneStream) return true;
+      if (this.inputMode === 'media-element') this.stopAudioElementInput();
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
         this.micState = 'error';
         this.errorMessage = 'Ez a böngésző nem biztosít mikrofon-hozzáférést. Nyisd meg az alkalmazást támogatott, HTTPS-kapcsolaton.';
@@ -102,6 +106,7 @@ export class BBAudioEngine {
 
       this.sourceNode = this.audioCtx.createMediaStreamSource(this.microphoneStream);
       this.sourceNode.connect(this.analyser);
+      this.inputMode = 'microphone';
 
       this.micState = 'active';
       this.errorMessage = '';
@@ -123,6 +128,89 @@ export class BBAudioEngine {
         : err instanceof Error ? err.message : 'Nem sikerült hozzáférni a mikrofonhoz';
       return false;
     }
+  }
+
+  /**
+   * Routes an HTML audio element through the same analyser used by microphone input.
+   * This powers a short prerecorded test without requesting microphone permissions.
+   */
+  public async startAudioElementInput(element: HTMLAudioElement): Promise<boolean> {
+    try {
+      if (!this.audioCtx) {
+        const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
+      }
+      if (this.audioCtx.state === 'suspended') await this.audioCtx.resume();
+      this.sampleRate = this.audioCtx.sampleRate;
+
+      if (this.microphoneStream) {
+        this.microphoneStream.getTracks().forEach((track) => track.stop());
+        this.microphoneStream = null;
+      }
+      this.sourceNode?.disconnect();
+      this.sourceNode = null;
+
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = this.fftSize;
+      this.analyser.smoothingTimeConstant = 0.05;
+      this.analyser.minDecibels = -100;
+      this.analyser.maxDecibels = 0;
+      this.timeData = new Float32Array(this.analyser.fftSize);
+      this.freqData = new Float32Array(this.analyser.frequencyBinCount);
+
+      if (!this.mediaElementSourceNode || this.mediaElementSourceElement !== element) {
+        this.mediaElementSourceNode?.disconnect();
+        this.mediaElementSourceNode = this.audioCtx.createMediaElementSource(element);
+        this.mediaElementSourceElement = element;
+      } else {
+        this.mediaElementSourceNode.disconnect();
+      }
+      // Connect both to the analyser and destination: measurement sees the file while
+      // the user can still hear it. Same-origin bundled audio is read locally.
+      this.mediaElementSourceNode.connect(this.analyser);
+      this.mediaElementSourceNode.connect(this.audioCtx.destination);
+      this.sourceNode = this.mediaElementSourceNode;
+      this.inputMode = 'media-element';
+      this.micState = 'active';
+      this.autoGainControlStatus = null;
+      this.errorMessage = '';
+      this.previousRms = 0;
+      this.lastTransientAt = 0;
+      this.transientDetected = false;
+      this.transientHoldoff = false;
+      this.lastValidResonances = {};
+      this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
+      Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+      return true;
+    } catch (err: unknown) {
+      this.mediaElementSourceNode?.disconnect();
+      this.sourceNode?.disconnect();
+      this.sourceNode = null;
+      this.analyser = null;
+      this.inputMode = 'inactive';
+      this.micState = 'error';
+      this.errorMessage = err instanceof Error ? err.message : 'A hangfájl nem csatlakoztatható az elemzőhöz.';
+      return false;
+    }
+  }
+
+  /** Disconnect the prerecorded input from the shared analyser without asking for a microphone. */
+  public stopAudioElementInput(): void {
+    if (this.inputMode !== 'media-element') return;
+    this.sourceNode?.disconnect();
+    this.sourceNode = null;
+    this.analyser = null;
+    this.inputMode = 'inactive';
+    this.micState = 'inactive';
+    this.inputLevelDb = -100;
+    this.previousRms = 0;
+    this.lastTransientAt = 0;
+    this.transientDetected = false;
+    this.transientHoldoff = false;
+    this.stabilityHistory = [];
+    this.lastValidResonances = {};
+    this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
+    Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
   }
 
   public stopMicrophone(): void {
