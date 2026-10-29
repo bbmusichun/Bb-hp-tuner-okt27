@@ -769,6 +769,7 @@ export default function App() {
               kvint={kvint}
               oktav={oktav}
               hasSignal={hasSignal}
+              toleranceOverrideCents={toleranceOverrideCents}
               onSelectPeak={setSelectedRole}
             />
 
@@ -780,6 +781,7 @@ export default function App() {
               hasSignal={hasSignal}
               selectedRole={selectedRole}
               onSelectRole={setSelectedRole}
+              toleranceOverrideCents={toleranceOverrideCents}
             />
 
             {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
