@@ -14,8 +14,8 @@ export interface WavResonance {
 export interface WavFrameAnalysis {
   timeSeconds: number;
   /** Spectrum for this exact window, shared with the live stroboscope visualization. */
-  spectrum: Float32Array;
-  sampleRate: number;
+  spectrum?: Float32Array;
+  sampleRate?: number;
   rmsDb: number;
   resonances: WavResonance[];
   /** Whether this window's spectrum roots the target note in a harmonic series. */
