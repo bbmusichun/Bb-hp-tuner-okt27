@@ -70,3 +70,22 @@ describe('conservative spectral note detection', () => {
     assert.equal(chooseNoteCandidate([invalid], () => null), null);
   });
 });
+
+
+describe('robust note recognition for detuned handpan notes', () => {
+  it('recognizes a note that is substantially sharp when its harmonics agree', () => {
+    const shifted = d3.frequency * Math.pow(2, 100 / 1200);
+    const peaks = [
+      { hz: shifted, db: -35 },
+      { hz: shifted * 2, db: -43 },
+      { hz: shifted * 3, db: -46 },
+    ];
+    const detect = (targetHz: number, centsWindow = 45): SpectralPeak | null => {
+      const match = peaks
+        .filter((p) => Math.abs(1200 * Math.log2(p.hz / targetHz)) <= centsWindow)
+        .sort((a, b) => Math.abs(1200 * Math.log2(a.hz / targetHz)) - Math.abs(1200 * Math.log2(b.hz / targetHz)))[0];
+      return match ?? null;
+    };
+    assert.equal(chooseNoteCandidate([d3, a3], detect)?.id, 'd3');
+  });
+});
