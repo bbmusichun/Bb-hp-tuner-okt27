@@ -5,12 +5,15 @@ import { PRESET_SCALES } from '../audio/scales';
 import { MAX_PARTIAL_TARGET_OFFSET_CENTS, partialTargetFrequency } from '../audio/partialTargets';
 import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/partialTargets';
 import type { InstrumentProfile } from '../audio/instrumentProfiles';
+import { tuningToleranceCents } from '../audio/tuningTolerance';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   a4Ref: number;
   onChangeA4: (a4: number) => void;
+  toleranceOverrideCents: number | null;
+  onChangeToleranceOverrideCents: (value: number | null) => void;
   selectedScaleId: string;
   onSelectScale: (scale: HandpanScale) => void;
   selectedNoteName: string;
@@ -35,6 +38,8 @@ export const BBSettingsModal: React.FC<Props> = ({
   onClose,
   a4Ref,
   onChangeA4,
+  toleranceOverrideCents,
+  onChangeToleranceOverrideCents,
   selectedScaleId,
   onSelectScale,
   selectedNoteName,
@@ -270,6 +275,39 @@ export const BBSettingsModal: React.FC<Props> = ({
               className="w-full accent-[#f59e0b] h-1.5 bg-slate-700 rounded-lg cursor-pointer"
             />
           </div>
+
+          {/* Adjustable in-tune threshold */}
+          <section className="p-3 rounded-xl bg-[#080b0f] border border-white/5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-semibold text-slate-300">Pontossági tűrés</div>
+              <div className="font-mono text-[10px] text-[#f59e0b]">
+                ±{(toleranceOverrideCents ?? tuningToleranceCents(selectedNoteFundamentalHz)).toFixed(1)} cent
+              </div>
+            </div>
+            <p className="text-[10px] leading-relaxed text-slate-400">
+              A színjelzést és a mentett „pontos” minősítést állítja; a mért frekvenciát és centeltérést nem módosítja.
+            </p>
+            <div className="grid grid-cols-5 gap-1.5">
+              {([{ label: 'Auto', value: null }, { label: '±1', value: 1 }, { label: '±2', value: 2 }, { label: '±5', value: 5 }, { label: '±10', value: 10 }] as const).map((option) => {
+                const selected = toleranceOverrideCents === option.value;
+                return (
+                  <button
+                    key={option.label}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => onChangeToleranceOverrideCents(option.value)}
+                    className={\`rounded-lg border px-1 py-2 text-[10px] font-semibold transition \${
+                      selected
+                        ? 'border-[#f59e0b] bg-[#f59e0b] text-slate-950'
+                        : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                    }\`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
 
           {/* Scale Selection */}
           <div className="p-3 rounded-xl bg-[#080b0f] border border-white/5">
