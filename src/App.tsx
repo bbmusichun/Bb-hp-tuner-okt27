@@ -3,7 +3,7 @@
  * Pixel-perfect implementation of the functional specification and visual design.
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Menu,
   Settings,
@@ -40,6 +40,7 @@ import {
   type PartialTargetOffsetMap,
 } from './audio/partialTargets';
 import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
+import type { WavFrameAnalysis } from './audio/wavAnalysis';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBConfigurableStrobeBands } from './components/BBConfigurableStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
@@ -649,6 +650,10 @@ export default function App() {
   const [autoGainControlStatus, setAutoGainControlStatus] = useState<boolean | null>(null);
   const [micError, setMicError] = useState('');
   const [hasSignal, setHasSignal] = useState(false);
+  const [playbackStrobe, setPlaybackStrobe] = useState<{ frame: WavFrameAnalysis | null; playing: boolean }>({ frame: null, playing: false });
+  const handlePlaybackFrame = useCallback((frame: WavFrameAnalysis | null, playing: boolean) => {
+    setPlaybackStrobe((previous) => previous.frame === frame && previous.playing === playing ? previous : { frame, playing });
+  }, []);
   const [inputLevelDb, setInputLevelDb] = useState(-100);
   const [transientHoldoff, setTransientHoldoff] = useState(false);
   const [highInputLevel, setHighInputLevel] = useState(false);
@@ -1359,6 +1364,7 @@ export default function App() {
                 frequency: note.frequency,
               }))}
               targetFrequencyHz={selectedNote.frequency}
+              onPlaybackFrame={handlePlaybackFrame}
             />
             {/* ================= SECTION B: MAIN PITCH & STROBE BANDS ================= */}
             <div>
@@ -1472,10 +1478,28 @@ export default function App() {
 
               {/* Three Stroboscope Bands (Alap, Kvint, Oktáv) */}
               <BBStrobeBands
-                alap={alap}
-                kvint={kvint}
-                oktav={oktav}
-                hasSignal={hasSignal}
+                alap={playbackStrobe.playing && !isListening && playbackStrobe.frame ? {
+                  role: 'fundamental', name: 'Alap', noteName: playbackStrobe.frame.detectedNote?.noteName ?? selectedNote.noteName,
+                  measuredHz: playbackStrobe.frame.resonances[0]?.measuredHz ?? null, targetHz: playbackStrobe.frame.resonances[0]?.targetHz ?? selectedNote.frequency,
+                  deviationCents: playbackStrobe.frame.resonances[0]?.cents ?? null, amplitudeDb: playbackStrobe.frame.resonances[0]?.peakDb ?? null,
+                  confidence: playbackStrobe.frame.detectedNote?.confidence ?? null, timestampMs: playbackStrobe.frame.timeSeconds * 1000,
+                  status: playbackStrobe.frame.resonances[0]?.measuredHz !== null && playbackStrobe.frame.resonances[0]?.measuredHz !== undefined ? 'valid' : 'no-signal',
+                } : alap}
+                kvint={playbackStrobe.playing && !isListening && playbackStrobe.frame ? {
+                  role: 'fifth', name: '3. parciális', noteName: selectedNote.noteName,
+                  measuredHz: playbackStrobe.frame.resonances[2]?.measuredHz ?? null, targetHz: playbackStrobe.frame.resonances[2]?.targetHz ?? selectedNote.frequency * 3,
+                  deviationCents: playbackStrobe.frame.resonances[2]?.cents ?? null, amplitudeDb: playbackStrobe.frame.resonances[2]?.peakDb ?? null,
+                  confidence: playbackStrobe.frame.detectedNote?.confidence ?? null, timestampMs: playbackStrobe.frame.timeSeconds * 1000,
+                  status: playbackStrobe.frame.resonances[2]?.measuredHz !== null && playbackStrobe.frame.resonances[2]?.measuredHz !== undefined ? 'valid' : 'no-signal',
+                } : kvint}
+                oktav={playbackStrobe.playing && !isListening && playbackStrobe.frame ? {
+                  role: 'octave', name: 'Oktáv', noteName: selectedNote.noteName,
+                  measuredHz: playbackStrobe.frame.resonances[1]?.measuredHz ?? null, targetHz: playbackStrobe.frame.resonances[1]?.targetHz ?? selectedNote.frequency * 2,
+                  deviationCents: playbackStrobe.frame.resonances[1]?.cents ?? null, amplitudeDb: playbackStrobe.frame.resonances[1]?.peakDb ?? null,
+                  confidence: playbackStrobe.frame.detectedNote?.confidence ?? null, timestampMs: playbackStrobe.frame.timeSeconds * 1000,
+                  status: playbackStrobe.frame.resonances[1]?.measuredHz !== null && playbackStrobe.frame.resonances[1]?.measuredHz !== undefined ? 'valid' : 'no-signal',
+                } : oktav}
+                hasSignal={playbackStrobe.playing && !isListening ? Boolean(playbackStrobe.frame?.resonances.some((resonance) => resonance.measuredHz !== null)) : hasSignal}
                 selectedRole={selectedRole}
                 onSelectRole={setSelectedRole}
                 toleranceOverrideCents={toleranceOverrideCents}
