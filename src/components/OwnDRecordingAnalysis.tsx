@@ -10,6 +10,7 @@ interface Props {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   noteCandidates: NoteCandidate[];
   targetFrequencyHz: number;
+  onPlaybackFrame?: (frame: WavFrameAnalysis | null, playing: boolean) => void;
 }
 
 type AnalysisState = 'loading' | 'analyzing' | 'ready' | 'error';
@@ -52,12 +53,13 @@ function findFrameAtTime(frames: WavFrameAnalysis[], timeSeconds: number): numbe
  * Runs the exact shared offline spectrum analyser and conservative note detector
  * against the bundled handpan recording. It never requests microphone permission.
  */
-export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequencyHz }: Props) {
+export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequencyHz, onPlaybackFrame }: Props) {
   const [state, setState] = useState<AnalysisState>('loading');
   const [progress, setProgress] = useState(0);
   const [recordingLoaded, setRecordingLoaded] = useState(false);
   const [frames, setFrames] = useState<WavFrameAnalysis[]>([]);
   const [frameIndex, setFrameIndex] = useState(0);
+  const [playbackActive, setPlaybackActive] = useState(false);
   const [error, setError] = useState('');
   const audioSamplesRef = useRef<{ samples: Float32Array; sampleRate: number } | null>(null);
   const analysisVersionRef = useRef(0);
@@ -176,10 +178,13 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
       if (!player.paused && !player.ended) animationFrame = window.requestAnimationFrame(tick);
     };
     const start = () => {
+      setPlaybackActive(true);
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      syncToPlayback();
       animationFrame = window.requestAnimationFrame(tick);
     };
     const stop = () => {
+      setPlaybackActive(false);
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
       animationFrame = 0;
       syncToPlayback();
@@ -202,6 +207,11 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
   }, [audioRef, syncToPlayback]);
 
   const current = frames[Math.min(frameIndex, Math.max(0, frames.length - 1))];
+
+  useEffect(() => {
+    onPlaybackFrame?.(state === 'ready' ? current ?? null : null, playbackActive);
+  }, [current, onPlaybackFrame, playbackActive, state]);
+
   const detected = current?.detectedNote ?? null;
   const labels = ['Alaphang · 1×', 'Oktáv · 2×', '3. parciális · 3×'];
   const resultRows = current?.resonances ?? [];
