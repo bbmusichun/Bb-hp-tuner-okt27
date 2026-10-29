@@ -1169,7 +1169,7 @@ export default function App() {
 
             {/* Right: Sample rate, input level dB, and LED meter */}
             <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-              <span title="A mikrofon mintavételezési frekvenciája">{sampleRateKhz !== null ? `${sampleRateKhz} kHz` : '— kHz'}</span>
+              <span title="A hangbemenet mintavételezési frekvenciája">{sampleRateKhz !== null ? `${sampleRateKhz} kHz` : '— kHz'}</span>
               <span className="text-slate-600">|</span>
               <span
                 title="A fő elemzési ciklus mért frissítési üteme"
@@ -1265,6 +1265,9 @@ export default function App() {
                 }}
                 onCanPlay={() => setOwnDAudioError('')}
                 onError={() => {
+                  bbAudioEngine.stopAudioElementInput();
+                  setIsFileInputActive(false);
+                  setHasSignal(false);
                   setIsOwnDPlaying(false);
                   setOwnDAudioDuration(0);
                   setOwnDAudioCurrentTime(0);
@@ -1277,7 +1280,7 @@ export default function App() {
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-white">Saját D lejátszása</div>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">A saját D Kurd handpan-felvételed, hangolási referencia nélkül.</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">A saját D Kurd handpan-felvétel első 3 másodperce fut át a teljes hangolóelemzésen.</p>
                 </div>
                 <button
                   type="button"
