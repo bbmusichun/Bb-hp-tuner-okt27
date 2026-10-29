@@ -55,6 +55,7 @@ function findFrameAtTime(frames: WavFrameAnalysis[], timeSeconds: number): numbe
 export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequencyHz }: Props) {
   const [state, setState] = useState<AnalysisState>('loading');
   const [progress, setProgress] = useState(0);
+  const [recordingLoaded, setRecordingLoaded] = useState(false);
   const [frames, setFrames] = useState<WavFrameAnalysis[]>([]);
   const [frameIndex, setFrameIndex] = useState(0);
   const [error, setError] = useState('');
@@ -63,7 +64,7 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
   const frameIndexRef = useRef(0);
 
   const candidatesKey = useMemo(
-    () => noteCandidates.map((candidate) => candidate.id + ':' + candidate.frequency.toFixed(5)).join('|'),
+    () => noteCandidates.map((candidate) => candidate.id + ':' + candidate.noteName + ':' + candidate.frequency.toFixed(5)).join('|'),
     [noteCandidates],
   );
 
@@ -91,6 +92,7 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
         const samples = downmixChannels(channels);
         if (samples.length < 16384) throw new Error('A felvétel túl rövid az elemzéshez.');
         audioSamplesRef.current = { samples, sampleRate: decoded.sampleRate };
+        setRecordingLoaded(true);
         setProgress(0);
         setState('analyzing');
       } catch (cause) {
@@ -153,7 +155,7 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
     };
     void run();
     return () => { cancelled = true; };
-  }, [candidatesKey, targetFrequencyHz, noteCandidates]);
+  }, [recordingLoaded, candidatesKey, targetFrequencyHz]);
 
   const syncToPlayback = useCallback(() => {
     const player = audioRef.current;
