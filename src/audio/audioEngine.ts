@@ -76,7 +76,9 @@ export class BBAudioEngine {
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: false,
+          // Ask the browser/OS to normalize microphone level for quiet strikes.
+          // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
+          autoGainControl: true,
         },
       });
 
@@ -165,7 +167,7 @@ export class BBAudioEngine {
   /** Detect the most likely struck note from the complete configured scale. Harmonic evidence is
    * combined across f0, 2*f0 and 3*f0; low-confidence/ambiguous frames are rejected. */
   public detectNote(candidates: NoteCandidate[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
-    if (!this.analyser || this.micState !== 'active' || candidates.length === 0 || this.transientHoldoff) return null;
+    if (!this.analyser || this.micState !== 'active' || candidates.length === 0) return null;
     this.analyser.getFloatFrequencyData(this.freqData as any);
     const binWidth = this.sampleRate / (this.freqData.length * 2);
     const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number } | null => {

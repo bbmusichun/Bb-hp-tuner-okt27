@@ -17,9 +17,9 @@ export function chooseNoteCandidate(candidates: NoteCandidate[], peakNear: PeakL
   const ranked = candidates
     .filter(c => Boolean(c.id) && Boolean(c.noteName) && Number.isFinite(c.frequency) && c.frequency > 0)
     .map(candidate => {
-      const fundamental = peakNear(candidate.frequency, 65);
-      const octave = peakNear(candidate.frequency * 2, 55);
-      const third = peakNear(candidate.frequency * 3, 55);
+      const fundamental = peakNear(candidate.frequency, 150);
+      const octave = peakNear(candidate.frequency * 2, 90);
+      const third = peakNear(candidate.frequency * 3, 90);
       const f = fundamental && Number.isFinite(fundamental.db) && Number.isFinite(fundamental.hz) ? fundamental : null;
       const o = octave && Number.isFinite(octave.db) && Number.isFinite(octave.hz) ? octave : null;
       const t = third && Number.isFinite(third.db) && Number.isFinite(third.hz) ? third : null;
