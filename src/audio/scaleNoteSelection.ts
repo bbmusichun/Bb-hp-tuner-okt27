@@ -1,5 +1,3 @@
-import type { ToneFieldNote } from '../types/tuner';
-
 /** Validate locally persisted note-enable state; unknown ids are filtered when applied to a scale. */
 export function normalizeDisabledToneNotes(value: unknown): Record<string, string[]> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -25,7 +23,7 @@ export function getEnabledToneNotes<T extends { id: string }>(
 }
 
 /** True when a note can be disabled without removing the scale's final enabled target. */
-export function canDisableToneNote(notes: ToneFieldNote[], disabledIds: readonly string[], noteId: string): boolean {
+export function canDisableToneNote(notes: readonly { id: string }[], disabledIds: readonly string[], noteId: string): boolean {
   if (disabledIds.includes(noteId)) return true;
   return getEnabledToneNotes(notes, disabledIds).length > 1;
 }
