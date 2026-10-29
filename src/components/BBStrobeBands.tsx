@@ -239,7 +239,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-white/5 shadow-inner">
           <canvas ref={canvasRef} width={600} height={canvasHeight}
             aria-label="A kvint, oktáv, alap és további frekvenciák egyetlen élő stroboszkópos nézetben"
-            className="block h-auto w-full" />
+            className="block w-full" style={{ height: canvasHeight }} />
         </div>
       </div>
 
