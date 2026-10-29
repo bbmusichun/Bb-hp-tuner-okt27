@@ -57,6 +57,7 @@ export class BBAudioEngine {
   private toneOsc: OscillatorNode | null = null;
   private toneGain: GainNode | null = null;
   private toneSilenceGain: GainNode | null = null;
+  private preferredOutputDeviceId: string | null = null;
 
   public async startMicrophone(deviceId?: string | null): Promise<boolean> {
     try {
@@ -76,6 +77,7 @@ export class BBAudioEngine {
       if (this.audioCtx.state === 'suspended') {
         await this.audioCtx.resume();
       }
+      await this.applyPreferredOutputDevice();
 
       this.sampleRate = this.audioCtx.sampleRate;
 
@@ -133,8 +135,21 @@ export class BBAudioEngine {
     }
   }
 
+  public setPreferredOutputDeviceId(deviceId: string | null): void {
+    this.preferredOutputDeviceId = deviceId && deviceId.trim() ? deviceId : null;
+  }
+
+  private async applyPreferredOutputDevice(): Promise<void> {
+    if (!this.preferredOutputDeviceId || !this.audioCtx) return;
+    const contextWithSink = this.audioCtx as AudioContext & { setSinkId?: (sinkId: string) => Promise<void> };
+    if (typeof contextWithSink.setSinkId !== 'function') return;
+    try { await contextWithSink.setSinkId(this.preferredOutputDeviceId); }
+    catch (error) { this.errorMessage = error instanceof Error ? error.message : 'A mentett hangkimenet nem érhető el.'; }
+  }
+
   /** Route Web Audio output to an explicitly selected audio output when the browser supports it. */
   public async setOutputDevice(deviceId: string | null): Promise<boolean> {
+    this.setPreferredOutputDeviceId(deviceId);
     try {
       if (!this.audioCtx) {
         const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -176,6 +191,7 @@ export class BBAudioEngine {
         this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
       }
       if (this.audioCtx.state === 'suspended') await this.audioCtx.resume();
+      await this.applyPreferredOutputDevice();
       this.sampleRate = this.audioCtx.sampleRate;
 
       if (this.microphoneStream) {
@@ -625,6 +641,7 @@ export class BBAudioEngine {
     if (this.audioCtx.state === 'suspended') {
       void this.audioCtx.resume();
     }
+    void this.applyPreferredOutputDevice();
     const now = this.audioCtx.currentTime;
     const useToneAsAnalysisInput = this.inputMode === 'inactive';
 
