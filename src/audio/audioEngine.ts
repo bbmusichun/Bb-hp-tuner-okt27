@@ -24,7 +24,7 @@ export class BBAudioEngine {
   private sourceNode: AudioNode | null = null;
   private mediaElementSourceNode: MediaElementAudioSourceNode | null = null;
   private mediaElementSourceElement: HTMLAudioElement | null = null;
-  private inputMode: 'inactive' | 'microphone' | 'media-element' = 'inactive';
+  private inputMode: 'inactive' | 'microphone' | 'media-element' | 'tone' = 'inactive';
 
   private micState: MicState = 'inactive';
   private errorMessage = '';
@@ -56,10 +56,12 @@ export class BBAudioEngine {
   // Tone generator for audio reference
   private toneOsc: OscillatorNode | null = null;
   private toneGain: GainNode | null = null;
+  private toneSilenceGain: GainNode | null = null;
 
   public async startMicrophone(): Promise<boolean> {
     try {
       if (this.micState === 'active' && this.microphoneStream) return true;
+      if (this.inputMode === 'tone') this.stopTone();
       if (this.inputMode === 'media-element') this.stopAudioElementInput();
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
         this.micState = 'error';
@@ -137,6 +139,7 @@ export class BBAudioEngine {
    */
   public async startAudioElementInput(element: HTMLAudioElement): Promise<boolean> {
     try {
+      if (this.inputMode === 'tone') this.stopTone();
       if (!this.audioCtx) {
         const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
         this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
@@ -577,22 +580,56 @@ export class BBAudioEngine {
     };
   }
 
-  // Reference tone generator
+  // Reference tone generator. When no microphone/file source is active, feed the
+  // generated sine into the shared analyser as well as the speaker so every view uses
+  // the same live measurement state. Strike cues during microphone measurement remain
+  // output-only and never contaminate the microphone input.
   public playTone(freqHz: number): void {
     if (!Number.isFinite(freqHz) || freqHz <= 0) return;
     this.stopTone();
     if (!this.audioCtx) {
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.audioCtx = new AudioCtxClass();
+      this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
     }
     if (this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
+      void this.audioCtx.resume();
     }
     const now = this.audioCtx.currentTime;
+    const useToneAsAnalysisInput = this.inputMode === 'inactive';
+
+    if (useToneAsAnalysisInput) {
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = this.fftSize;
+      this.analyser.smoothingTimeConstant = 0.05;
+      this.analyser.minDecibels = -100;
+      this.analyser.maxDecibels = 0;
+      this.toneSilenceGain = this.audioCtx.createGain();
+      this.toneSilenceGain.gain.setValueAtTime(0, now);
+      this.analyser.connect(this.toneSilenceGain);
+      this.toneSilenceGain.connect(this.audioCtx.destination);
+      this.timeData = new Float32Array(this.analyser.fftSize);
+      this.freqData = new Float32Array(this.analyser.frequencyBinCount);
+      this.sampleRate = this.audioCtx.sampleRate;
+      this.inputMode = 'tone';
+      this.micState = 'active';
+      this.autoGainControlStatus = null;
+      this.errorMessage = '';
+      this.previousRms = 0;
+      this.lastTransientAt = 0;
+      this.transientDetected = false;
+      this.transientHoldoff = false;
+      this.lastValidResonances = {};
+      this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
+      Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    }
+
     this.toneGain = this.audioCtx.createGain();
     this.toneGain.gain.setValueAtTime(0.001, now);
     this.toneGain.gain.exponentialRampToValueAtTime(0.3, now + 0.05);
     this.toneGain.connect(this.audioCtx.destination);
+    if (this.inputMode === 'tone' && this.analyser) {
+      this.toneGain.connect(this.analyser);
+    }
 
     this.toneOsc = this.audioCtx.createOscillator();
     this.toneOsc.type = 'sine';
@@ -615,6 +652,24 @@ export class BBAudioEngine {
       return;
     }
     const now = context.currentTime;
+    const toneWasAnalysisInput = this.inputMode === 'tone';
+    if (toneWasAnalysisInput) {
+      // Stop the common analysis loop from reading a stale tone frame immediately.
+      this.analyser = null;
+      this.toneSilenceGain?.disconnect();
+      this.toneSilenceGain = null;
+      this.inputMode = 'inactive';
+      this.micState = 'inactive';
+      this.inputLevelDb = -100;
+      this.previousRms = 0;
+      this.lastTransientAt = 0;
+      this.transientDetected = false;
+      this.transientHoldoff = false;
+      this.stabilityHistory = [];
+      this.lastValidResonances = {};
+      this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
+      Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    }
     try {
       gain.gain.cancelScheduledValues(now);
       gain.gain.setTargetAtTime(0.0001, now, 0.012);

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { NoteCandidate } from '../audio/noteDetection';
+import { estimatePartialInharmonicity } from '../audio/partialInharmonicity';
 import {
   analyzeWavRecordingAsync,
   downmixChannels,
@@ -10,6 +11,7 @@ interface Props {
   audioRef: React.RefObject<HTMLAudioElement | null>;
   noteCandidates: NoteCandidate[];
   targetFrequencyHz: number;
+  onApplyPartialOffsets?: (octaveCents: number, thirdPartialCents: number) => void;
 }
 
 type AnalysisState = 'loading' | 'analyzing' | 'ready' | 'error';
@@ -52,7 +54,7 @@ function findFrameAtTime(frames: WavFrameAnalysis[], timeSeconds: number): numbe
  * Runs the exact shared offline spectrum analyser and conservative note detector
  * against the bundled handpan recording. It never requests microphone permission.
  */
-export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequencyHz }: Props) {
+export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequencyHz, onApplyPartialOffsets }: Props) {
   const [state, setState] = useState<AnalysisState>('loading');
   const [progress, setProgress] = useState(0);
   const [recordingLoaded, setRecordingLoaded] = useState(false);
@@ -210,6 +212,10 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
   const detected = current?.detectedNote ?? null;
   const labels = ['Alaphang · 1×', 'Oktáv · 2×', '3. parciális · 3×'];
   const resultRows = current?.resonances ?? [];
+  const partialEstimate = useMemo(
+    () => estimatePartialInharmonicity(frames, targetFrequencyHz),
+    [frames, targetFrequencyHz],
+  );
 
   return (
     <section className="mt-3 space-y-3 rounded-xl border border-cyan-400/20 bg-slate-950/70 p-3" aria-live="polite">
@@ -288,6 +294,49 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
               </div>
             ))}
           </div>
+          <section className="rounded-lg border border-violet-400/20 bg-violet-400/[0.04] p-3" aria-label="Felhangarány becslése">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-xs font-bold text-violet-200">Felhangarány becslése a felvételből</h4>
+              <span className={partialEstimate.reliable
+                ? 'rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold text-emerald-200'
+                : 'rounded-full border border-amber-400/25 bg-amber-400/5 px-2 py-1 text-[10px] text-amber-200'}>
+                {partialEstimate.reliable ? 'Stabil becslés' : 'Még nem elég megbízható'}
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+              A 2× és 3× felhangot ugyanannak az ablaknak a mért alaphangjához viszonyítjuk, így az egész hangszer hangolási eltérése nem keveredik a felhangarányba.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-md border border-white/5 bg-black/20 p-2">
+                <div className="text-[10px] text-slate-500">Oktáv · 2×</div>
+                <div className="mt-1 font-mono text-sm text-white">{formatCents(partialEstimate.octaveCents)}</div>
+                <div className="text-[10px] text-slate-500">MAD {formatCents(partialEstimate.octaveMadCents)}</div>
+              </div>
+              <div className="rounded-md border border-white/5 bg-black/20 p-2">
+                <div className="text-[10px] text-slate-500">3. parciális · 3×</div>
+                <div className="mt-1 font-mono text-sm text-white">{formatCents(partialEstimate.thirdPartialCents)}</div>
+                <div className="text-[10px] text-slate-500">MAD {formatCents(partialEstimate.thirdPartialMadCents)}</div>
+              </div>
+            </div>
+            <div className="mt-2 text-[10px] text-slate-400">
+              Minőségi minták: {partialEstimate.sampleCount} / {partialEstimate.matchingNoteFrames} hangazonos ablak
+              ({Math.round(partialEstimate.coverage * 100)}% fedettség)
+            </div>
+            {partialEstimate.reliable && onApplyPartialOffsets && (
+              <button
+                type="button"
+                onClick={() => onApplyPartialOffsets(partialEstimate.octaveCents as number, partialEstimate.thirdPartialCents as number)}
+                className="mt-3 w-full rounded-lg border border-violet-300/30 bg-violet-300/10 px-3 py-2 text-xs font-semibold text-violet-100 hover:bg-violet-300/15"
+              >
+                Eltolások alkalmazása a kiválasztott hanghoz
+              </button>
+            )}
+            {!partialEstimate.reliable && (
+              <p className="mt-2 text-[10px] leading-relaxed text-slate-500">
+                Alkalmazás csak legalább 4 erős, stabil és egymással egyező mérési ablak esetén engedélyezett. A felvétel nem hitelesített referencia, ezért az értékeket csak ellenőrzés után alkalmazd.
+              </p>
+            )}
+          </section>
           <p className="text-[10px] leading-relaxed text-slate-500">
             Elemzett ablak: {frameIndex + 1}/{frames.length}. A frekvenciák és eltérések a felvétel minden egymást átfedő részablakából készülnek. A felvétel saját hangolási állapotát mérjük, nem ideális referenciahangot.
           </p>
