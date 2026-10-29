@@ -1446,7 +1446,7 @@ export default function App() {
               )}
               {isTuningPanelPickerOpen && (
                 <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
-                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  <div className="grid max-h-[45vh] grid-cols-1 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2">
                     {TUNING_VIEW_PANELS.map((panel) => (
                       <label key={panel.id} className="flex min-w-0 items-start gap-2 rounded-lg border border-white/5 bg-black/15 px-2.5 py-2">
                         <input type="checkbox" checked={customTuningView.panels.includes(panel.id)} onChange={(event) => setCustomTuningView((previous) => ({
