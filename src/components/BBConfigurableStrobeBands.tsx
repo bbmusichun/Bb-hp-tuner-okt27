@@ -154,7 +154,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
 
     animationId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationId);
-  }, []);
+  }, [bands.length]);
 
   const updateBand = (id: string, patch: Partial<StrobeBandConfig>) => {
     setBands((previous) => normalizeStrobeBands(
