@@ -826,7 +826,7 @@ export default function App() {
       }
     }
 
-    if isSignalInputActive {
+    if (isSignalInputActive) {
       animId = requestAnimationFrame(loop);
     }
 
@@ -1163,7 +1163,7 @@ export default function App() {
                     : 'bg-slate-600'
                 }`}
               />
-              <span className={`text-[11px] font-medium ${(isListening || isFileInputActive) ? 'text-slate-200' : 'text-slate-400'}`}>
+              <span className={`text-[11px] font-medium ${isSignalInputActive ? 'text-slate-200' : 'text-slate-400'}`}>
                 {isListening ? 'Mikrofon aktív' : isFileInputActive ? 'Hangfájl tesztelése' : isReferenceTonePlaying ? 'Szinuszjel aktív' : 'Mikrofon inaktív'}
               </span>
             </div>
@@ -1176,10 +1176,10 @@ export default function App() {
                 title="A fő elemzési ciklus mért frissítési üteme"
                 aria-label={analysisFps !== null ? `Elemzési frissítés: ${analysisFps} képkocka másodpercenként` : 'Elemzési frissítési ütem még nem mérhető'}
                 className={analysisFps !== null && analysisFps < 20 ? 'text-amber-300' : ''}
-              >{(isListening || isFileInputActive) && analysisFps !== null ? `${analysisFps} FPS` : '— FPS'}</span>
+              >{isSignalInputActive && analysisFps !== null ? `${analysisFps} FPS` : '— FPS'}</span>
               <span className="text-slate-600">|</span>
               <span className={inputNearClip ? 'w-11 text-right text-red-300' : 'w-11 text-right'}>
-                {(isListening || isFileInputActive) && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}
+                {isSignalInputActive && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}
               </span>
 
               {/* 8-segment LED VU meter matching screenshot */}
@@ -1187,7 +1187,7 @@ export default function App() {
                 {[0, 1, 2, 3, 4, 5, 6, 7].map((barIdx) => {
                   // Thresholds: -60, -50, -40, -30, -20, -12, -6, -2 dB
                   const thresholds = [-60, -50, -40, -30, -22, -14, -8, -3];
-                  const isLit = (isListening || isFileInputActive) && hasSignal && inputLevelDb >= thresholds[barIdx];
+                  const isLit = isSignalInputActive && hasSignal && inputLevelDb >= thresholds[barIdx];
 
                   let colorClass = 'bg-[#10b981]'; // Green (bars 0-4)
                   if (barIdx >= 5 && barIdx <= 6) colorClass = 'bg-[#f59e0b]'; // Yellow/Amber
@@ -1406,6 +1406,10 @@ export default function App() {
                 frequency: note.frequency,
               }))}
               targetFrequencyHz={selectedNote.frequency}
+              onApplyPartialOffsets={(octaveCents, thirdPartialCents) => {
+                updateSelectedPartialOffset('octaveCents', octaveCents);
+                updateSelectedPartialOffset('thirdPartialCents', thirdPartialCents);
+              }}
             />
             {/* ================= SECTION B: MAIN PITCH & STROBE BANDS ================= */}
             <div>
