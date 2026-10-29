@@ -856,6 +856,7 @@ export default function App() {
       if (ownDPlayerRef.current && !ownDPlayerRef.current.paused) {
         ownDPlayerRef.current.pause();
         ownDPlayerRef.current.currentTime = 0;
+        setOwnDAudioCurrentTime(0);
         setIsOwnDPlaying(false);
       }
       const ok = await bbAudioEngine.startMicrophone();
