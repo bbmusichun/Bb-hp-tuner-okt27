@@ -18,8 +18,8 @@ export const BBHangmezoView: React.FC<Props> = ({
   hasSignal,
   alapCents,
 }) => {
-  const ding = notes[0];
-  const perimeter = notes.slice(1);
+  const ding = notes.find((note) => note.positionIndex === 0);
+  const perimeter = notes.filter((note) => note.positionIndex !== 0);
   const toneStopTimerRef = useRef<number | null>(null);
 
   const playReferenceTone = (frequency: number, durationMs: number) => {
