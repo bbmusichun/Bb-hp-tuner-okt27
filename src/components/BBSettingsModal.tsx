@@ -296,11 +296,11 @@ export const BBSettingsModal: React.FC<Props> = ({
                     type="button"
                     aria-pressed={selected}
                     onClick={() => onChangeToleranceOverrideCents(option.value)}
-                    className={\`rounded-lg border px-1 py-2 text-[10px] font-semibold transition \${
+                    className={`rounded-lg border px-1 py-2 text-[10px] font-semibold transition ${
                       selected
                         ? 'border-[#f59e0b] bg-[#f59e0b] text-slate-950'
                         : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
-                    }\`}
+                    }`}
                   >
                     {option.label}
                   </button>
