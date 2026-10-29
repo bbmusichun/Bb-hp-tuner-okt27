@@ -822,6 +822,17 @@ export default function App() {
     ? '(kissé magas)'
     : '(kissé mély)';
 
+  const keyboardActionsRef = useRef({
+    handleToggleMic,
+    handleSelectToneFieldNote,
+    handleToggleReferenceTone,
+  });
+  keyboardActionsRef.current = {
+    handleToggleMic,
+    handleSelectToneFieldNote,
+    handleToggleReferenceTone,
+  };
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -842,7 +853,7 @@ export default function App() {
           const nextIndex = currentIndex < 0
             ? action === 'next-note' ? 0 : enabledToneNotes.length - 1
             : (currentIndex + (action === 'next-note' ? 1 : -1) + enabledToneNotes.length) % enabledToneNotes.length;
-          handleSelectToneFieldNote(enabledToneNotes[nextIndex]);
+          keyboardActionsRef.current.handleSelectToneFieldNote(enabledToneNotes[nextIndex]);
           setSelectedRole('fundamental');
           return;
         }
@@ -855,7 +866,7 @@ export default function App() {
           return;
         }
         case 'toggle-microphone':
-          void handleToggleMic();
+          void keyboardActionsRef.current.handleToggleMic();
           return;
         case 'cycle-detection': {
           if (autoDetectionMode === 'single-shot' && singleShotCaptured) {
@@ -871,7 +882,7 @@ export default function App() {
           return;
         }
         case 'toggle-reference-tone':
-          if (referenceToneMode === 'continuous' && !isListening) handleToggleReferenceTone();
+          if (referenceToneMode === 'continuous' && !isListening) keyboardActionsRef.current.handleToggleReferenceTone();
           return;
         case 'show-shortcuts':
           setIsKeyboardHelpOpen((open) => !open);
@@ -884,6 +895,8 @@ export default function App() {
   }, [
     enabledToneNotes,
     selectedNote.id,
+    selectedNote.frequency,
+    referenceToneHz,
     selectedRole,
     isListening,
     isSettingsOpen,
