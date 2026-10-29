@@ -20,6 +20,8 @@ import { bbAudioEngine } from './audio/audioEngine';
 import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
 import { isWithinTuningTolerance } from './audio/tuningTolerance';
 import { buildChromaticTargetNote, midiFromFrequency } from './audio/chromaticPitch';
+import { transposeFrequencyBySemitones } from './audio/transposition';
+import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
   DEFAULT_PARTIAL_TARGET_OFFSET,
   normalizePartialTargetOffsets,
@@ -38,6 +40,7 @@ import { BBPitchDial } from './components/BBPitchDial';
 import { BBCards } from './components/BBCards';
 import { BBStabilityGraph } from './components/BBStabilityGraph';
 import { BBHangmezoView } from './components/BBHangmezoView';
+import { BBScaleNoteEnablePanel } from './components/BBScaleNoteEnablePanel';
 import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
 import { BBSpectrumWaterfall } from './components/BBSpectrumWaterfall';
@@ -57,6 +60,7 @@ function loadTuningPreferences(): {
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
   toleranceOverrideCents: number | null;
+  transposeSemitones: number;
   scale: HandpanScale;
 } {
   const defaultProfile: InstrumentProfile = {
@@ -74,6 +78,7 @@ function loadTuningPreferences(): {
     instrumentProfiles: [defaultProfile],
     activeInstrumentProfileId: defaultProfile.id,
     toleranceOverrideCents: null,
+    transposeSemitones: 0,
     scale: PRESET_SCALES[0],
   };
   try {
@@ -89,6 +94,7 @@ function loadTuningPreferences(): {
       instrumentProfiles?: unknown;
       activeInstrumentProfileId?: unknown;
       toleranceOverrideCents?: unknown;
+      transposeSemitones?: unknown;
     };
     const legacyA4 = typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
       ? prefs.a4Ref : defaultProfile.a4Ref;
@@ -118,12 +124,22 @@ function loadTuningPreferences(): {
       toleranceOverrideCents: typeof prefs.toleranceOverrideCents === 'number' &&
         Number.isFinite(prefs.toleranceOverrideCents) && prefs.toleranceOverrideCents >= 0.5 && prefs.toleranceOverrideCents <= 20
         ? prefs.toleranceOverrideCents : null,
+      transposeSemitones: typeof prefs.transposeSemitones === 'number' && Number.isInteger(prefs.transposeSemitones) && prefs.transposeSemitones >= -12 && prefs.transposeSemitones <= 12
+        ? prefs.transposeSemitones : 0,
       scale: activeProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId) ?? PRESET_SCALES[0],
     };
   } catch {
     return defaults;
   }
 }
+function loadDisabledToneNotesByScale(): Record<string, string[]> {
+  try {
+    return normalizeDisabledToneNotes(JSON.parse(localStorage.getItem('hangoal-disabled-tone-notes-v1') ?? '{}'));
+  } catch {
+    return {};
+  }
+}
+
 function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
   if (!value || typeof value !== 'object') return false;
   const entry = value as Partial<TuningLogEntry>;
@@ -156,6 +172,7 @@ export default function App() {
     () => loadTuningPreferences().toleranceOverrideCents,
   );
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
+  const [transposeSemitones, setTransposeSemitones] = useState<number>(() => loadTuningPreferences().transposeSemitones);
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(() => loadTuningPreferences().a4Ref);
@@ -176,12 +193,16 @@ export default function App() {
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
   const [isReferenceTonePlaying, setIsReferenceTonePlaying] = useState(false);
 
+  const [disabledToneNotesByScale, setDisabledToneNotesByScale] = useState<Record<string, string[]>>(loadDisabledToneNotesByScale);
+
   // Compute tone field notes with current A4
   const toneNotes: ToneFieldNote[] = useMemo(() => {
     return currentScale.notes.map((n, idx) => {
-      const f0 = typeof n.frequencyHz === 'number' && Number.isFinite(n.frequencyHz) && n.frequencyHz > 0
+      const sourceFrequency = typeof n.frequencyHz === 'number' && Number.isFinite(n.frequencyHz) && n.frequencyHz > 0
         ? n.frequencyHz
         : midiToFreq(n.midi, a4Ref);
+      const f0 = transposeFrequencyBySemitones(sourceFrequency, transposeSemitones);
+      const displayNoteName = freqToNoteAndCents(f0, a4Ref).note;
       // Handpan acoustic resonances:
       // Fundamental: f0 (e.g. D3 = 146.83 Hz)
       // Traditional handpan partials: fundamental (1x), octave (2x), compound fifth (3x).
@@ -190,14 +211,28 @@ export default function App() {
       const offsets = partialTargetOffsets[key] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
       return {
         id: `note_${idx}_${n.name}`,
-        noteName: n.name,
+        noteName: displayNoteName,
+        sourceNoteName: n.name,
         frequency: f0,
         fifthFreq: partialTargetFrequency(f0, 3, offsets.thirdPartialCents),
         octaveFreq: partialTargetFrequency(f0, 2, offsets.octaveCents),
         positionIndex: idx,
       };
     });
-  }, [currentScale, a4Ref, partialTargetOffsets]);
+  }, [currentScale, a4Ref, partialTargetOffsets, transposeSemitones]);
+
+  const disabledToneNoteIds = useMemo(
+    () => new Set(disabledToneNotesByScale[currentScale.id] ?? []),
+    [disabledToneNotesByScale, currentScale.id],
+  );
+  const enabledToneNotes = useMemo(
+    () => getEnabledToneNotes(toneNotes, [...disabledToneNoteIds]),
+    [toneNotes, disabledToneNoteIds],
+  );
+  const enabledToneNoteIds = useMemo(
+    () => new Set(enabledToneNotes.map((note) => note.id)),
+    [enabledToneNotes],
+  );
 
   // Selected tone field note (default Ding D3)
   const [selectedNote, setSelectedNote] = useState<ToneFieldNote>(toneNotes[0]);
@@ -211,11 +246,18 @@ export default function App() {
       return;
     }
     if (toneNotes.length > 0) {
-      setSelectedNote((previous) => toneNotes.find((note) => note.id === previous.id) ?? toneNotes[0]);
+      setSelectedNote((previous) => enabledToneNotes.find((note) => note.id === previous.id) ?? enabledToneNotes[0] ?? toneNotes[0]);
     }
-  }, [toneNotes, chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets]);
+  }, [toneNotes, enabledToneNotes, chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets]);
 
   const selectedMidi = useMemo(() => midiFromFrequency(selectedNote.frequency, a4Ref), [selectedNote.frequency, a4Ref]);
+
+  const handleSetTranspose = (value: number) => {
+    const next = Math.max(-12, Math.min(12, Math.round(value)));
+    setTransposeSemitones(next);
+    setChromaticTargetMidi(null);
+    autoDetectionRef.current = null;
+  };
 
   const handleSelectChromaticMidi = (midi: number) => {
     const target = buildChromaticTargetNote(midi, a4Ref, currentScale.id, partialTargetOffsets);
@@ -232,7 +274,34 @@ export default function App() {
     setSelectedNote(note);
   };
 
-  const selectedPartialOffsetKey = partialTargetOffsetKey(currentScale.id, selectedNote.noteName);
+  const handleToggleToneNote = (noteId: string) => {
+    const isCurrentlyDisabled = disabledToneNoteIds.has(noteId);
+    if (!isCurrentlyDisabled && enabledToneNotes.length <= 1) return;
+
+    if (!isCurrentlyDisabled && selectedNote.id === noteId) {
+      const replacement = enabledToneNotes.find((note) => note.id !== noteId);
+      if (replacement) {
+        setChromaticTargetMidi(null);
+        setSelectedNote(replacement);
+        setSelectedRole('fundamental');
+      }
+    }
+
+    setDisabledToneNotesByScale((previous) => {
+      const disabled = new Set(previous[currentScale.id] ?? []);
+      if (disabled.has(noteId)) disabled.delete(noteId);
+      else {
+        if (getEnabledToneNotes(toneNotes, [...disabled]).length <= 1) return previous;
+        disabled.add(noteId);
+      }
+      const next = { ...previous };
+      if (disabled.size > 0) next[currentScale.id] = [...disabled];
+      else delete next[currentScale.id];
+      return next;
+    });
+  };
+
+  const selectedPartialOffsetKey = partialTargetOffsetKey(currentScale.id, selectedNote.sourceNoteName ?? selectedNote.noteName);
   const selectedPartialOffsets = partialTargetOffsets[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
 
   const updateSelectedPartialOffset = (field: PartialTargetOffsetField, value: number) => {
@@ -492,6 +561,7 @@ export default function App() {
         scaleId: currentScale.id,
         autoDetect,
         toleranceOverrideCents,
+        transposeSemitones,
         partialTargetOffsets,
         instrumentProfiles: profilesToSave,
         activeInstrumentProfileId,
@@ -499,7 +569,15 @@ export default function App() {
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale, autoDetect, toleranceOverrideCents, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+  }, [a4Ref, currentScale, autoDetect, toleranceOverrideCents, transposeSemitones, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('hangoal-disabled-tone-notes-v1', JSON.stringify(disabledToneNotesByScale));
+    } catch (error) {
+      console.warn('Nem sikerült menteni az aktív hangmezőket:', error);
+    }
+  }, [disabledToneNotesByScale]);
 
   // Audio Analysis Loop (~30 Hz)
   useEffect(() => {
@@ -512,7 +590,7 @@ export default function App() {
 
         if (autoDetect && chromaticTargetMidi === null) {
           const detected = bbAudioEngine.detectNote(
-            toneNotes.map((note) => ({ id: note.id, noteName: note.noteName, frequency: note.frequency }))
+            enabledToneNotes.map((note) => ({ id: note.id, noteName: note.noteName, frequency: note.frequency }))
           );
           if (detected) {
             if (autoDetectionRef.current?.id === detected.id) {
@@ -520,7 +598,7 @@ export default function App() {
             } else {
               autoDetectionRef.current = { id: detected.id, count: 1 };
             }
-            const matched = toneNotes.find((note) => note.id === detected.id);
+            const matched = enabledToneNotes.find((note) => note.id === detected.id);
             // Require three consecutive matching frames to avoid note changes from a single transient.
             if (matched && matched.id !== selectedNote.id && autoDetectionRef.current.count >= 3) setSelectedNote(matched);
           } else {
@@ -564,7 +642,7 @@ export default function App() {
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isListening, selectedNote, resonanceNoteNames, autoDetect, toneNotes, chromaticTargetMidi]);
+  }, [isListening, selectedNote, resonanceNoteNames, autoDetect, toneNotes, enabledToneNotes, chromaticTargetMidi]);
 
   // Toggle microphone
   const handleToggleMic = async () => {
@@ -853,6 +931,21 @@ export default function App() {
               </div>
               {isPitchDialOpen && <BBPitchDial selectedMidi={selectedMidi} onSelectMidi={handleSelectChromaticMidi} />}
 
+              <section className="my-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white">Skála transzponálása</div>
+                    <div className="mt-0.5 text-[10px] text-slate-400">Félhangok · a kromatikus tárcsa közvetlen célhangját nem módosítja</div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button type="button" aria-label="Transzponálás egy félhanggal lejjebb" onClick={() => handleSetTranspose(transposeSemitones - 1)} disabled={transposeSemitones <= -12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">−</button>
+                    <span className="min-w-[54px] text-center font-mono text-xs font-semibold text-amber-200">{transposeSemitones > 0 ? '+' : ''}{transposeSemitones} st</span>
+                    <button type="button" aria-label="Transzponálás egy félhanggal feljebb" onClick={() => handleSetTranspose(transposeSemitones + 1)} disabled={transposeSemitones >= 12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">+</button>
+                    <button type="button" onClick={() => handleSetTranspose(0)} disabled={transposeSemitones === 0} className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-400 disabled:opacity-30">Nullázás</button>
+                  </div>
+                </div>
+              </section>
+
               {/* Three Stroboscope Bands (Alap, Kvint, Oktáv) */}
               <BBStrobeBands
                 alap={alap}
@@ -941,11 +1034,17 @@ export default function App() {
         {activeTab === 'hangmezo' && (
           <div className="flex-1 flex flex-col justify-center">
             <BBHangmezoView
-              notes={toneNotes}
+              notes={enabledToneNotes}
+              totalNoteCount={toneNotes.length}
               selectedNote={selectedNote}
               onSelectNote={handleSelectToneFieldNote}
               hasSignal={hasSignal}
               alapCents={alap.deviationCents}
+            />
+            <BBScaleNoteEnablePanel
+              notes={toneNotes}
+              enabledNoteIds={enabledToneNoteIds}
+              onToggleNote={handleToggleToneNote}
             />
           </div>
         )}

@@ -32,7 +32,9 @@ export type BBNavTab = 'hangolas' | 'spektrum' | 'hangmezo' | 'meresek';
 
 export interface ToneFieldNote {
   id: string;
-  noteName: string; // e.g. "D3", "A3", "Bb3"
+  noteName: string; // Display/target pitch, e.g. "D3", "A3", "Bb3"
+  /** Original tone-field name used to locate its calibration after transposition. */
+  sourceNoteName?: string;
   frequency: number; // Target fundamental Hz
   fifthFreq: number; // Target third partial (3x fundamental) Hz
   octaveFreq: number; // Target 2x Hz

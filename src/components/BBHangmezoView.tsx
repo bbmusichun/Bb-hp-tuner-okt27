@@ -9,6 +9,7 @@ interface Props {
   onSelectNote: (note: ToneFieldNote) => void;
   hasSignal: boolean;
   alapCents: number | null;
+  totalNoteCount?: number;
 }
 
 export const BBHangmezoView: React.FC<Props> = ({
@@ -17,9 +18,11 @@ export const BBHangmezoView: React.FC<Props> = ({
   onSelectNote,
   hasSignal,
   alapCents,
+  totalNoteCount,
 }) => {
-  const ding = notes[0];
-  const perimeter = notes.slice(1);
+  const ding = notes.find((note) => note.positionIndex === 0);
+  const perimeter = notes.filter((note) => note.positionIndex !== 0);
+  const perimeterCount = Math.max(0, (totalNoteCount ?? notes.length) - 1);
   const toneStopTimerRef = useRef<number | null>(null);
 
   const playReferenceTone = (frequency: number, durationMs: number) => {
@@ -71,8 +74,10 @@ export const BBHangmezoView: React.FC<Props> = ({
         )}
 
         {/* Perimeter Tone Fields */}
-        {perimeter.map((note, idx) => {
-          const angle = (idx / perimeter.length) * Math.PI * 2 - Math.PI / 2;
+        {perimeter.map((note) => {
+          const angle = perimeterCount > 0
+            ? ((note.positionIndex - 1) / perimeterCount) * Math.PI * 2 - Math.PI / 2
+            : -Math.PI / 2;
           const radius = 98; // pixels from center
           const x = Math.cos(angle) * radius;
           const y = Math.sin(angle) * radius;
