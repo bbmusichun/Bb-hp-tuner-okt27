@@ -727,6 +727,7 @@ export default function App() {
   };
 
   const handleCreateInstrumentProfile = (name: string) => {
+    if (windowSyncMode === 'slave') return;
     const trimmedName = name.trim().slice(0, 80);
     if (!trimmedName || !activeInstrumentProfile) return;
     const id = 'instrument-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -746,7 +747,7 @@ export default function App() {
   };
 
   const handleImportInstrumentProfiles = (backup: unknown): boolean => {
-    if (!activeInstrumentProfile) return false;
+    if (windowSyncMode === 'slave' || !activeInstrumentProfile) return false;
     const imported = parseInstrumentProfileBackup(
       backup,
       PRESET_SCALES.map((scale) => scale.id),
@@ -825,6 +826,7 @@ export default function App() {
   };
 
   const handleImportConfiguration = (value: unknown): boolean => {
+    if (windowSyncMode === 'slave') return false;
     if (value && typeof value === 'object' && !Array.isArray(value) &&
       (value as Record<string, unknown>).schemaVersion === 2) {
       const currentProfile = instrumentProfiles.find((profile) => profile.id === activeInstrumentProfileId);
@@ -878,6 +880,7 @@ export default function App() {
   };
 
   const handleRenameInstrumentProfile = (profileId: string, name: string) => {
+    if (windowSyncMode === 'slave') return;
     const trimmedName = name.trim().slice(0, 80);
     if (!trimmedName) return;
     setInstrumentProfiles((previous) => previous.map((profile) =>
@@ -886,7 +889,7 @@ export default function App() {
   };
 
   const handleDeleteInstrumentProfile = (profileId: string) => {
-    if (instrumentProfiles.length <= 1) return;
+    if (windowSyncMode === 'slave' || instrumentProfiles.length <= 1) return;
     const profilesWithCurrentSettings = instrumentProfiles.map((profile) =>
       profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
     );
