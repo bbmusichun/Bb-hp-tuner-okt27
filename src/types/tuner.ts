@@ -47,6 +47,8 @@ export interface HandpanScale {
   notes: {
     name: string;
     midi: number;
+    /** Exact custom target for non-equal-tempered instrument notes. Presets omit it. */
+    frequencyHz?: number;
   }[];
 }
 
@@ -54,11 +56,24 @@ export interface TuningLogEntry {
   id: string;
   timestamp: number;
   noteName: string;
+  /** Scale/profile identity; optional for older saved logs. */
+  scaleId?: string;
+  /** Physical instrument identity; optional for older saved logs. */
+  instrumentProfileId?: string;
+  instrumentProfileName?: string;
+  /** Capture conditions, optional for older saved logs. */
+  audioSampleRateHz?: number;
+  inputLevelDbfs?: number;
+  /** Measured frequencies. */
   fundamentalHz: number;
   fundamentalCents: number;
   fifthHz: number;
   fifthCents: number;
   octaveHz: number;
   octaveCents: number;
+  /** Target frequencies are optional for backward compatibility with older saved logs. */
+  fundamentalTargetHz?: number;
+  fifthTargetHz?: number;
+  octaveTargetHz?: number;
   overallInTune: boolean;
 }

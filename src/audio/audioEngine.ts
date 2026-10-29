@@ -6,7 +6,7 @@
 
 import { ResonanceMeasurement, MicState } from '../types/tuner';
 import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
-import { isTransientHoldoffActive, StablePitchTracker } from './transientGuard';
+import { detectTransientOnset, isTransientHoldoffActive, StablePitchTracker } from './transientGuard';
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
 import { isSameMeasurementTarget } from './measurementCache';
@@ -83,7 +83,8 @@ export class BBAudioEngine {
       this.analyser.fftSize = this.fftSize;
       this.analyser.smoothingTimeConstant = 0.05; // Keep attack/sustain changes responsive; pitch smoothing is handled separately
       this.analyser.minDecibels = -100;
-      this.analyser.maxDecibels = -10;
+      // Do not clamp strong FFT peaks at -10 dB: a flattened peak biases sub-bin interpolation.
+      this.analyser.maxDecibels = 0;
 
       this.timeData = new Float32Array(this.analyser.fftSize);
       this.freqData = new Float32Array(this.analyser.frequencyBinCount);
@@ -209,7 +210,7 @@ export class BBAudioEngine {
         oktav: this.createEmptyResonance('octave', 'Oktáv', noteNames.octave, targetOctaveHz),
         hasSignal: false,
         inputLevelDb: -100,
-        sampleRateKhz: Math.round(this.sampleRate / 1000),
+        sampleRateKhz: Math.round(this.sampleRate / 100) / 10,
         standardDeviationCents: 0,
         transientHoldoff: false,
         highInputLevel: false,
@@ -238,13 +239,29 @@ export class BBAudioEngine {
     const hasSignal = db > -58; // RMS gate for audio presence
     const highInputLevel = db > -8; // Near-full-scale input can clip or distort transients.
 
-    // Detect a sharp attack from the RMS envelope. Because AnalyserNode returns a rolling
-    // FFT frame, ignore measurements until the whole FFT window has moved past the attack,
-    // plus a 50 ms safety guard. A shorter lockout could still measure the strike transient.
-    const transientDetected = hasSignal && rms > 0.003 &&
-      (this.previousRms < 0.001 || rms > this.previousRms * 2.5);
-    if (transientDetected) this.lastTransientAt = now;
-    this.previousRms = rms;
+    // Detect attacks with a short-time RMS window that overlaps adjacent analysis
+    // frames. At a ~30 Hz UI analysis cadence, 1024 samples (~21 ms at 48 kHz)
+    // can leave gaps; 2048 samples (~43 ms) reduces the chance of missing a short strike.
+    // After onset, the separate holdoff still waits for the full FFT window plus 50 ms
+    // so the spectral measurement is not taken from the strike transient itself.
+    const shortWindowSize = Math.min(2048, this.timeData.length);
+    let shortSumSquares = 0;
+    for (let i = this.timeData.length - shortWindowSize; i < this.timeData.length; i++) {
+      shortSumSquares += this.timeData[i] * this.timeData[i];
+    }
+    const shortRms = Math.sqrt(shortSumSquares / shortWindowSize);
+    const transientDetected = hasSignal && detectTransientOnset(this.previousRms, shortRms);
+    this.previousRms = shortRms;
+    if (transientDetected) {
+      this.lastTransientAt = now;
+      // A fresh strike invalidates the previous reading immediately. Otherwise a new,
+      // different note can appear to measure as the old note during the holdoff window
+      // because buildResonanceMeasurement intentionally retains valid readings.
+      this.lastValidResonances = {};
+      this.stabilityHistory = [];
+      this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
+      Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    }
     const transientHoldoff = isTransientHoldoffActive(
       this.lastTransientAt,
       now,
@@ -320,7 +337,7 @@ export class BBAudioEngine {
       oktav,
       hasSignal,
       inputLevelDb: this.inputLevelDb,
-      sampleRateKhz: Math.round(this.sampleRate / 1000),
+      sampleRateKhz: Math.round(this.sampleRate / 100) / 10,
       standardDeviationCents,
       transientHoldoff,
       highInputLevel,

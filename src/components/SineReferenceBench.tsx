@@ -163,7 +163,7 @@ export default function SineReferenceBench() {
       analyser.fftSize = fftSize;
       analyser.smoothingTimeConstant = 0.05;
       analyser.minDecibels = -100;
-      analyser.maxDecibels = -10;
+      analyser.maxDecibels = 0; // Preserve strong spectral peak shape for sub-bin interpolation.
 
       if (mode === 'acoustic') {
         const stream = await navigator.mediaDevices.getUserMedia({

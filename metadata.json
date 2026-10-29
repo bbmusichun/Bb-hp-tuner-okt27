@@ -1,6 +1,6 @@
 {
-  "name": "Resonix Handpan Tuner & Acoustic Lab",
-  "description": "Mobile-first PWA Handpan Tuner with 3D interactive acoustic resonance visualization, real-time multi-partial detection (Fundamental 1×, Octave 2×, Fifth 3×), FFT spectrum, spectrogram waterfall, and precision tone generator.",
+  "name": "BB Tuner – Handpan Hangoló és Akusztikai Labor",
+  "description": "Mobil handpan hangoló élő felhangelemzéssel, fizikai hangszerprofilokkal, egyedi célfrekvenciákkal és exportálható mérési naplóval.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

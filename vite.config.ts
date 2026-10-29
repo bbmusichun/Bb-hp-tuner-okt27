@@ -15,9 +15,9 @@ export default defineConfig(() => {
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
           id: '/',
-          name: 'Resonix Handpan Tuner & Acoustic Lab',
-          short_name: 'Resonix',
-          description: 'Precision multi-partial Handpan Tuner & Acoustic Spectral Analyzer',
+          name: 'BB Tuner – Handpan Hangoló és Akusztikai Labor',
+          short_name: 'BB Tuner',
+          description: 'Professzionális munkára tervezett handpan hangoló, felhangelemző és mérési napló.',
           theme_color: '#0d1117',
           background_color: '#090d16',
           display: 'standalone',

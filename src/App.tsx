@@ -1,5 +1,5 @@
 /**
- * BB Tuner – Handpan tuning analyzer
+ * BB Tuner – Handpan hangoló és felhangelemző
  * Pixel-perfect implementation of the functional specification and visual design.
  */
 
@@ -18,6 +18,15 @@ import {
 import { bbAudioEngine } from './audio/audioEngine';
 import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
 import { isWithinTuningTolerance } from './audio/tuningTolerance';
+import {
+  DEFAULT_PARTIAL_TARGET_OFFSET,
+  normalizePartialTargetOffsets,
+  partialTargetFrequency,
+  partialTargetOffsetKey,
+  type PartialTargetOffset,
+  type PartialTargetOffsetField,
+  type PartialTargetOffsetMap,
+} from './audio/partialTargets';
 import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
@@ -27,27 +36,83 @@ import { BBHangmezoView } from './components/BBHangmezoView';
 import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
 import { BBSpectrumWaterfall } from './components/BBSpectrumWaterfall';
+import {
+  normalizeInstrumentProfiles,
+  resolveActiveInstrumentProfileId,
+  parseCustomScale,
+  parseInstrumentProfileBackup,
+  type InstrumentProfile,
+} from './audio/instrumentProfiles';
 
-function loadTuningPreferences(): { a4Ref: number; scaleId: string; autoDetect: boolean } {
-  const defaults = { a4Ref: 440, scaleId: PRESET_SCALES[0].id, autoDetect: true };
+function loadTuningPreferences(): {
+  a4Ref: number;
+  scaleId: string;
+  autoDetect: boolean;
+  partialTargetOffsets: PartialTargetOffsetMap;
+  instrumentProfiles: InstrumentProfile[];
+  activeInstrumentProfileId: string;
+  scale: HandpanScale;
+} {
+  const defaultProfile: InstrumentProfile = {
+    id: 'instrument-default',
+    name: 'Saját handpan',
+    a4Ref: 440,
+    scaleId: PRESET_SCALES[0].id,
+    partialTargetOffsets: {},
+  };
+  const defaults = {
+    a4Ref: defaultProfile.a4Ref,
+    scaleId: defaultProfile.scaleId,
+    autoDetect: true,
+    partialTargetOffsets: defaultProfile.partialTargetOffsets,
+    instrumentProfiles: [defaultProfile],
+    activeInstrumentProfileId: defaultProfile.id,
+    scale: PRESET_SCALES[0],
+  };
   try {
     const raw = localStorage.getItem('bb-tuner-preferences-v1');
     if (!raw) return defaults;
     const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return defaults;
-    const prefs = parsed as { a4Ref?: unknown; scaleId?: unknown; autoDetect?: unknown };
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return defaults;
+    const prefs = parsed as {
+      a4Ref?: unknown;
+      scaleId?: unknown;
+      autoDetect?: unknown;
+      partialTargetOffsets?: unknown;
+      instrumentProfiles?: unknown;
+      activeInstrumentProfileId?: unknown;
+    };
+    const legacyA4 = typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
+      ? prefs.a4Ref : defaultProfile.a4Ref;
+    const legacyScaleId = typeof prefs.scaleId === 'string' && PRESET_SCALES.some((scale) => scale.id === prefs.scaleId)
+      ? prefs.scaleId : defaultProfile.scaleId;
+    const fallbackProfile: InstrumentProfile = {
+      id: defaultProfile.id,
+      name: defaultProfile.name,
+      a4Ref: legacyA4,
+      scaleId: legacyScaleId,
+      partialTargetOffsets: normalizePartialTargetOffsets(prefs.partialTargetOffsets),
+    };
+    const profiles = normalizeInstrumentProfiles(
+      prefs.instrumentProfiles,
+      PRESET_SCALES.map((scale) => scale.id),
+      fallbackProfile,
+    );
+    const activeInstrumentProfileId = resolveActiveInstrumentProfileId(prefs.activeInstrumentProfileId, profiles);
+    const activeProfile = profiles.find((profile) => profile.id === activeInstrumentProfileId) ?? profiles[0];
     return {
-      a4Ref: typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
-        ? prefs.a4Ref : defaults.a4Ref,
-      scaleId: typeof prefs.scaleId === 'string' && PRESET_SCALES.some((scale) => scale.id === prefs.scaleId)
-        ? prefs.scaleId : defaults.scaleId,
+      a4Ref: activeProfile.a4Ref,
+      scaleId: activeProfile.scaleId,
       autoDetect: typeof prefs.autoDetect === 'boolean' ? prefs.autoDetect : defaults.autoDetect,
+      partialTargetOffsets: activeProfile.partialTargetOffsets,
+      instrumentProfiles: profiles,
+      activeInstrumentProfileId,
+      scale: activeProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId) ?? PRESET_SCALES[0],
     };
   } catch {
     return defaults;
   }
 }
-
 function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
   if (!value || typeof value !== 'object') return false;
   const entry = value as Partial<TuningLogEntry>;
@@ -60,7 +125,14 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
     typeof entry.fifthCents === 'number' && Number.isFinite(entry.fifthCents) &&
     typeof entry.octaveHz === 'number' && Number.isFinite(entry.octaveHz) && entry.octaveHz > 0 &&
     typeof entry.octaveCents === 'number' && Number.isFinite(entry.octaveCents) &&
-    typeof entry.overallInTune === 'boolean';
+    typeof entry.overallInTune === 'boolean' &&
+    (entry.fundamentalTargetHz === undefined || (typeof entry.fundamentalTargetHz === 'number' && Number.isFinite(entry.fundamentalTargetHz) && entry.fundamentalTargetHz > 0)) &&
+    (entry.fifthTargetHz === undefined || (typeof entry.fifthTargetHz === 'number' && Number.isFinite(entry.fifthTargetHz) && entry.fifthTargetHz > 0)) &&
+    (entry.octaveTargetHz === undefined || (typeof entry.octaveTargetHz === 'number' && Number.isFinite(entry.octaveTargetHz) && entry.octaveTargetHz > 0)) &&
+    (entry.audioSampleRateHz === undefined || (typeof entry.audioSampleRateHz === 'number' && Number.isFinite(entry.audioSampleRateHz) && entry.audioSampleRateHz > 0)) &&
+    (entry.inputLevelDbfs === undefined || (typeof entry.inputLevelDbfs === 'number' && Number.isFinite(entry.inputLevelDbfs) && entry.inputLevelDbfs >= -160 && entry.inputLevelDbfs <= 0)) &&
+    (entry.instrumentProfileId === undefined || typeof entry.instrumentProfileId === 'string') &&
+    (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string');
 }
 
 export default function App() {
@@ -71,10 +143,18 @@ export default function App() {
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(() => loadTuningPreferences().a4Ref);
-  const [currentScale, setCurrentScale] = useState<HandpanScale>(() => {
-    const prefs = loadTuningPreferences();
-    return PRESET_SCALES.find((scale) => scale.id === prefs.scaleId) ?? PRESET_SCALES[0];
-  }); // D Kurd 9 by default
+  const [partialTargetOffsets, setPartialTargetOffsets] = useState<PartialTargetOffsetMap>(
+    () => loadTuningPreferences().partialTargetOffsets,
+  );
+  const [currentScale, setCurrentScale] = useState<HandpanScale>(() => loadTuningPreferences().scale); // D Kurd 9 by default
+  const [instrumentProfiles, setInstrumentProfiles] = useState<InstrumentProfile[]>(
+    () => loadTuningPreferences().instrumentProfiles,
+  );
+  const [activeInstrumentProfileId, setActiveInstrumentProfileId] = useState(
+    () => loadTuningPreferences().activeInstrumentProfileId,
+  );
+  const activeInstrumentProfile = instrumentProfiles.find((profile) => profile.id === activeInstrumentProfileId)
+    ?? instrumentProfiles[0];
 
   // Selected resonance focus for the main display and stability graph
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
@@ -82,21 +162,25 @@ export default function App() {
   // Compute tone field notes with current A4
   const toneNotes: ToneFieldNote[] = useMemo(() => {
     return currentScale.notes.map((n, idx) => {
-      const f0 = midiToFreq(n.midi, a4Ref);
+      const f0 = typeof n.frequencyHz === 'number' && Number.isFinite(n.frequencyHz) && n.frequencyHz > 0
+        ? n.frequencyHz
+        : midiToFreq(n.midi, a4Ref);
       // Handpan acoustic resonances:
       // Fundamental: f0 (e.g. D3 = 146.83 Hz)
       // Traditional handpan partials: fundamental (1x), octave (2x), compound fifth (3x).
       // The third partial is not the ordinary 1.5x musical fifth.
+      const key = partialTargetOffsetKey(currentScale.id, n.name);
+      const offsets = partialTargetOffsets[key] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
       return {
         id: `note_${idx}_${n.name}`,
         noteName: n.name,
         frequency: f0,
-        fifthFreq: f0 * 3.0,
-        octaveFreq: f0 * 2.0,
+        fifthFreq: partialTargetFrequency(f0, 3, offsets.thirdPartialCents),
+        octaveFreq: partialTargetFrequency(f0, 2, offsets.octaveCents),
         positionIndex: idx,
       };
     });
-  }, [currentScale, a4Ref]);
+  }, [currentScale, a4Ref, partialTargetOffsets]);
 
   // Selected tone field note (default Ding D3)
   const [selectedNote, setSelectedNote] = useState<ToneFieldNote>(toneNotes[0]);
@@ -106,6 +190,146 @@ export default function App() {
       setSelectedNote((previous) => toneNotes.find((note) => note.id === previous.id) ?? toneNotes[0]);
     }
   }, [toneNotes]);
+
+  const selectedPartialOffsetKey = partialTargetOffsetKey(currentScale.id, selectedNote.noteName);
+  const selectedPartialOffsets = partialTargetOffsets[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
+
+  const updateSelectedPartialOffset = (field: PartialTargetOffsetField, value: number) => {
+    setPartialTargetOffsets((previous) => {
+      const current = previous[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
+      const next: PartialTargetOffset = { ...current, [field]: value };
+      if (next.octaveCents === 0 && next.thirdPartialCents === 0) {
+        const copy = { ...previous };
+        delete copy[selectedPartialOffsetKey];
+        return copy;
+      }
+      return { ...previous, [selectedPartialOffsetKey]: next };
+    });
+  };
+
+  const resetSelectedPartialOffsets = () => {
+    setPartialTargetOffsets((previous) => {
+      const copy = { ...previous };
+      delete copy[selectedPartialOffsetKey];
+      return copy;
+    });
+  };
+
+  const saveActiveProfileSettings = (profile: InstrumentProfile): InstrumentProfile => ({
+    ...profile,
+    a4Ref,
+    scaleId: currentScale.id,
+    partialTargetOffsets,
+    customScale: PRESET_SCALES.some((scale) => scale.id === currentScale.id) ? undefined : currentScale,
+  });
+
+  const handleSelectScale = (scale: HandpanScale) => {
+    setCurrentScale(scale);
+    setInstrumentProfiles((previous) => previous.map((profile) => profile.id === activeInstrumentProfileId
+      ? { ...profile, scaleId: scale.id, customScale: undefined }
+      : profile));
+  };
+
+  const handleApplyCustomScale = (name: string, source: string): boolean => {
+    if (!activeInstrumentProfile) return false;
+    const scaleId = 'custom-' + activeInstrumentProfileId;
+    const parsed = parseCustomScale(name, source, scaleId);
+    if (!parsed) return false;
+    setCurrentScale(parsed);
+    setInstrumentProfiles((previous) => previous.map((profile) => profile.id === activeInstrumentProfileId
+      ? { ...saveActiveProfileSettings(profile), scaleId: parsed.id, customScale: parsed }
+      : profile));
+    setSelectedRole('fundamental');
+    return true;
+  };
+
+  const handleSelectInstrumentProfile = (profileId: string) => {
+    const profilesWithCurrentSettings = instrumentProfiles.map((profile) =>
+      profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
+    );
+    const nextProfile = profilesWithCurrentSettings.find((profile) => profile.id === profileId);
+    if (!nextProfile) return;
+    setInstrumentProfiles(profilesWithCurrentSettings);
+    setActiveInstrumentProfileId(nextProfile.id);
+    setA4Ref(nextProfile.a4Ref);
+    setCurrentScale(nextProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === nextProfile.scaleId) ?? PRESET_SCALES[0]);
+    setPartialTargetOffsets(nextProfile.partialTargetOffsets);
+    setSelectedRole('fundamental');
+  };
+
+  const handleCreateInstrumentProfile = (name: string) => {
+    const trimmedName = name.trim().slice(0, 80);
+    if (!trimmedName || !activeInstrumentProfile) return;
+    const id = 'instrument-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    const profilesWithCurrentSettings = instrumentProfiles.map((profile) =>
+      profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
+    );
+    const newProfile: InstrumentProfile = {
+      id,
+      name: trimmedName,
+      a4Ref,
+      scaleId: currentScale.id,
+      partialTargetOffsets: { ...partialTargetOffsets },
+      customScale: PRESET_SCALES.some((scale) => scale.id === currentScale.id) ? undefined : currentScale,
+    };
+    setInstrumentProfiles([...profilesWithCurrentSettings, newProfile]);
+    setActiveInstrumentProfileId(id);
+  };
+
+  const handleImportInstrumentProfiles = (backup: unknown): boolean => {
+    if (!activeInstrumentProfile) return false;
+    const imported = parseInstrumentProfileBackup(
+      backup,
+      PRESET_SCALES.map((scale) => scale.id),
+      { ...activeInstrumentProfile, id: '__bb_tuner_invalid_backup_fallback__', name: 'Import-validation fallback' },
+    );
+    if (!imported) return false;
+
+    const currentProfiles = instrumentProfiles.map((profile) =>
+      profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
+    );
+    const importedById = new Map(imported.map((profile) => [profile.id, profile]));
+    const currentIds = new Set(currentProfiles.map((profile) => profile.id));
+    const merged = currentProfiles.map((profile) => importedById.get(profile.id) ?? profile);
+    for (const profile of imported) {
+      if (!currentIds.has(profile.id)) merged.push(profile);
+    }
+
+    const nextProfile = merged.find((profile) => profile.id === activeInstrumentProfileId) ?? merged[0];
+    setInstrumentProfiles(merged);
+    setActiveInstrumentProfileId(nextProfile.id);
+    setA4Ref(nextProfile.a4Ref);
+    setCurrentScale(nextProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === nextProfile.scaleId) ?? PRESET_SCALES[0]);
+    setPartialTargetOffsets(nextProfile.partialTargetOffsets);
+    setSelectedRole('fundamental');
+    return true;
+  };
+
+  const handleRenameInstrumentProfile = (profileId: string, name: string) => {
+    const trimmedName = name.trim().slice(0, 80);
+    if (!trimmedName) return;
+    setInstrumentProfiles((previous) => previous.map((profile) =>
+      profile.id === profileId ? { ...profile, name: trimmedName } : profile,
+    ));
+  };
+
+  const handleDeleteInstrumentProfile = (profileId: string) => {
+    if (instrumentProfiles.length <= 1) return;
+    const profilesWithCurrentSettings = instrumentProfiles.map((profile) =>
+      profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
+    );
+    const remaining = profilesWithCurrentSettings.filter((profile) => profile.id !== profileId);
+    if (remaining.length === profilesWithCurrentSettings.length) return;
+    setInstrumentProfiles(remaining);
+    if (profileId === activeInstrumentProfileId) {
+      const nextProfile = remaining[0];
+      setActiveInstrumentProfileId(nextProfile.id);
+      setA4Ref(nextProfile.a4Ref);
+      setCurrentScale(nextProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === nextProfile.scaleId) ?? PRESET_SCALES[0]);
+      setPartialTargetOffsets(nextProfile.partialTargetOffsets);
+      setSelectedRole('fundamental');
+    }
+  };
 
   // Note names for the 3 resonances of the selected note
   const resonanceNoteNames = useMemo(() => {
@@ -202,16 +426,33 @@ export default function App() {
   }, [logs]);
 
   useEffect(() => {
+    const currentProfile = instrumentProfiles.find((profile) => profile.id === activeInstrumentProfileId);
+    const customScale = PRESET_SCALES.some((scale) => scale.id === currentScale.id) ? undefined : currentScale;
+    const profileMatchesState = currentProfile &&
+      currentProfile.a4Ref === a4Ref &&
+      currentProfile.scaleId === currentScale.id &&
+      JSON.stringify(currentProfile.partialTargetOffsets) === JSON.stringify(partialTargetOffsets) &&
+      JSON.stringify(currentProfile.customScale) === JSON.stringify(customScale);
+    const profilesToSave = profileMatchesState
+      ? instrumentProfiles
+      : instrumentProfiles.map((profile) => profile.id === activeInstrumentProfileId
+        ? { ...profile, a4Ref, scaleId: currentScale.id, partialTargetOffsets, customScale }
+        : profile);
+
+    if (!profileMatchesState && currentProfile) setInstrumentProfiles(profilesToSave);
     try {
       localStorage.setItem('bb-tuner-preferences-v1', JSON.stringify({
         a4Ref,
         scaleId: currentScale.id,
         autoDetect,
+        partialTargetOffsets,
+        instrumentProfiles: profilesToSave,
+        activeInstrumentProfileId,
       }));
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale.id, autoDetect]);
+  }, [a4Ref, currentScale, autoDetect, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
 
   // Audio Analysis Loop (~30 Hz)
   useEffect(() => {
@@ -313,12 +554,20 @@ export default function App() {
       id: `log_${Date.now()}`,
       timestamp: Date.now(),
       noteName: selectedNote.noteName,
+      scaleId: currentScale.id,
+      instrumentProfileId: activeInstrumentProfileId,
+      instrumentProfileName: activeInstrumentProfile?.name ?? 'Handpan',
+      audioSampleRateHz: bbAudioEngine.getSampleRate(),
+      inputLevelDbfs: inputLevelDb,
       fundamentalHz: alap.measuredHz!,
       fundamentalCents: alap.deviationCents!,
       fifthHz: kvint.measuredHz!,
       fifthCents: kvint.deviationCents!,
       octaveHz: oktav.measuredHz!,
       octaveCents: oktav.deviationCents!,
+      fundamentalTargetHz: alap.targetHz ?? selectedNote.frequency,
+      fifthTargetHz: kvint.targetHz ?? selectedNote.fifthFreq,
+      octaveTargetHz: oktav.targetHz ?? selectedNote.octaveFreq,
       overallInTune:
         isWithinTuningTolerance(alap.deviationCents, alap.targetHz) &&
         isWithinTuningTolerance(kvint.deviationCents, kvint.targetHz) &&
@@ -575,6 +824,10 @@ export default function App() {
           <div className="flex-1 flex flex-col">
             <BBMeresekView
               logs={logs}
+              selectedScaleId={currentScale.id}
+              selectedNoteName={selectedNote.noteName}
+              selectedInstrumentProfileId={activeInstrumentProfileId}
+              selectedInstrumentProfileName={activeInstrumentProfile?.name ?? 'Handpan'}
               onClearLogs={() => setLogs([])}
               onCapture={handleCaptureSnapshot}
               canCapture={[alap, kvint, oktav].every((m) => m.status === 'valid' && m.measuredHz !== null && m.deviationCents !== null)}
@@ -656,12 +909,25 @@ export default function App() {
         <BBSettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
+          instrumentProfiles={instrumentProfiles}
+          activeInstrumentProfileId={activeInstrumentProfileId}
+          onSelectInstrumentProfile={handleSelectInstrumentProfile}
+          onCreateInstrumentProfile={handleCreateInstrumentProfile}
+          onRenameInstrumentProfile={handleRenameInstrumentProfile}
+          onDeleteInstrumentProfile={handleDeleteInstrumentProfile}
+          onImportInstrumentProfiles={handleImportInstrumentProfiles}
           a4Ref={a4Ref}
           onChangeA4={(value) => {
             if (Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
           }}
           selectedScaleId={currentScale.id}
-          onSelectScale={setCurrentScale}
+          onSelectScale={handleSelectScale}
+          onApplyCustomScale={handleApplyCustomScale}
+          selectedNoteName={selectedNote.noteName}
+          selectedNoteFundamentalHz={selectedNote.frequency}
+          partialTargetOffsets={selectedPartialOffsets}
+          onChangePartialTargetOffset={updateSelectedPartialOffset}
+          onResetPartialTargetOffsets={resetSelectedPartialOffsets}
           sampleRateKhz={sampleRateKhz}
           isListening={isListening}
         />
