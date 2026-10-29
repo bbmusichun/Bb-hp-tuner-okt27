@@ -58,7 +58,7 @@ export class BBAudioEngine {
   private toneGain: GainNode | null = null;
   private toneSilenceGain: GainNode | null = null;
 
-  public async startMicrophone(): Promise<boolean> {
+  public async startMicrophone(deviceId?: string | null): Promise<boolean> {
     try {
       if (this.micState === 'active' && this.microphoneStream) return true;
       if (this.inputMode === 'tone') this.stopTone();
@@ -80,15 +80,15 @@ export class BBAudioEngine {
       this.sampleRate = this.audioCtx.sampleRate;
 
       // Request raw, unadulterated microphone audio without telecom filtering
-      this.microphoneStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          // Ask the browser/OS to normalize microphone level for quiet strikes.
-          // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
-          autoGainControl: true,
-        },
-      });
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: false,
+        noiseSuppression: false,
+        // Ask the browser/OS to normalize microphone level for quiet strikes.
+        // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
+        autoGainControl: true,
+        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      };
+      this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       const microphoneTrack = this.microphoneStream.getAudioTracks()[0];
       const trackSettings = typeof microphoneTrack?.getSettings === 'function'
         ? microphoneTrack.getSettings()
@@ -131,6 +131,37 @@ export class BBAudioEngine {
         : err instanceof Error ? err.message : 'Nem sikerült hozzáférni a mikrofonhoz';
       return false;
     }
+  }
+
+  /** Route Web Audio output to an explicitly selected audio output when the browser supports it. */
+  public async setOutputDevice(deviceId: string | null): Promise<boolean> {
+    try {
+      if (!this.audioCtx) {
+        const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
+      }
+      const contextWithSink = this.audioCtx as AudioContext & { setSinkId?: (sinkId: string) => Promise<void> };
+      if (typeof contextWithSink.setSinkId !== 'function') {
+        this.errorMessage = 'Ez a böngésző nem támogatja a Web Audio kimeneti eszközének választását.';
+        return false;
+      }
+      await contextWithSink.setSinkId(deviceId || 'default');
+      this.errorMessage = '';
+      return true;
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : 'A kimeneti eszköz nem választható ki.';
+      return false;
+    }
+  }
+
+  public supportsOutputDeviceSelection(): boolean {
+    if (this.audioCtx) {
+      return typeof (this.audioCtx as AudioContext & { setSinkId?: unknown }).setSinkId === 'function';
+    }
+    try {
+      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      return typeof (AudioCtxClass.prototype as AudioContext & { setSinkId?: unknown }).setSinkId === 'function';
+    } catch { return false; }
   }
 
   /**
