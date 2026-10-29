@@ -329,16 +329,6 @@ export default function App() {
       localStorage.setItem('hangoal-audio-output-device-v1', selectedAudioOutputDeviceId);
     } catch { /* Device choices remain active for this session. */ }
   }, [selectedAudioInputDeviceId, selectedAudioOutputDeviceId]);
-  useEffect(() => {
-    const handleBandPitchPipeToggle = (event: Event) => {
-      const mode = (event as CustomEvent<{ mode?: unknown }>).detail?.mode;
-      // A continuous pitch pipe is also an internal, silent analysis source;
-      // keep the analyser loop active while the oscillator feeds its input.
-      setIsReferenceTonePlaying(mode === 'continuous');
-    };
-    window.addEventListener('hangoal-band-pitch-pipe-toggle', handleBandPitchPipeToggle);
-    return () => window.removeEventListener('hangoal-band-pitch-pipe-toggle', handleBandPitchPipeToggle);
-  }, []);
   const [customTuningView, setCustomTuningView] = useState(loadTuningViewPreferences);
   const [isTuningPanelPickerOpen, setIsTuningPanelPickerOpen] = useState(false);
   const shouldShowTuningPanel = (panel: TuningViewPanelId) => !customTuningView.enabled || customTuningView.panels.includes(panel);
