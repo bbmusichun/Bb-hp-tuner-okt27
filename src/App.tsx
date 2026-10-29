@@ -1,5 +1,5 @@
 /**
- * BB Tuner – Handpan tuning analyzer
+ * BB Tuner – Handpan hangoló és felhangelemző
  * Pixel-perfect implementation of the functional specification and visual design.
  */
 
@@ -40,6 +40,7 @@ import {
   normalizeInstrumentProfiles,
   resolveActiveInstrumentProfileId,
   parseCustomScale,
+  parseInstrumentProfileBackup,
   type InstrumentProfile,
 } from './audio/instrumentProfiles';
 
@@ -273,6 +274,35 @@ export default function App() {
     };
     setInstrumentProfiles([...profilesWithCurrentSettings, newProfile]);
     setActiveInstrumentProfileId(id);
+  };
+
+  const handleImportInstrumentProfiles = (backup: unknown): boolean => {
+    if (!activeInstrumentProfile) return false;
+    const imported = parseInstrumentProfileBackup(
+      backup,
+      PRESET_SCALES.map((scale) => scale.id),
+      { ...activeInstrumentProfile, id: '__bb_tuner_invalid_backup_fallback__', name: 'Import-validation fallback' },
+    );
+    if (!imported) return false;
+
+    const currentProfiles = instrumentProfiles.map((profile) =>
+      profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
+    );
+    const importedById = new Map(imported.map((profile) => [profile.id, profile]));
+    const currentIds = new Set(currentProfiles.map((profile) => profile.id));
+    const merged = currentProfiles.map((profile) => importedById.get(profile.id) ?? profile);
+    for (const profile of imported) {
+      if (!currentIds.has(profile.id)) merged.push(profile);
+    }
+
+    const nextProfile = merged.find((profile) => profile.id === activeInstrumentProfileId) ?? merged[0];
+    setInstrumentProfiles(merged);
+    setActiveInstrumentProfileId(nextProfile.id);
+    setA4Ref(nextProfile.a4Ref);
+    setCurrentScale(nextProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === nextProfile.scaleId) ?? PRESET_SCALES[0]);
+    setPartialTargetOffsets(nextProfile.partialTargetOffsets);
+    setSelectedRole('fundamental');
+    return true;
   };
 
   const handleRenameInstrumentProfile = (profileId: string, name: string) => {
@@ -885,6 +915,7 @@ export default function App() {
           onCreateInstrumentProfile={handleCreateInstrumentProfile}
           onRenameInstrumentProfile={handleRenameInstrumentProfile}
           onDeleteInstrumentProfile={handleDeleteInstrumentProfile}
+          onImportInstrumentProfiles={handleImportInstrumentProfiles}
           a4Ref={a4Ref}
           onChangeA4={(value) => {
             if (Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
