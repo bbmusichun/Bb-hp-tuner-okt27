@@ -56,6 +56,7 @@ export class BBAudioEngine {
   // Tone generator for audio reference
   private toneOsc: OscillatorNode | null = null;
   private toneGain: GainNode | null = null;
+  private toneSilenceGain: GainNode | null = null;
 
   public async startMicrophone(): Promise<boolean> {
     try {
@@ -158,6 +159,10 @@ export class BBAudioEngine {
       this.analyser.smoothingTimeConstant = 0.05;
       this.analyser.minDecibels = -100;
       this.analyser.maxDecibels = 0;
+      this.toneSilenceGain = this.audioCtx.createGain();
+      this.toneSilenceGain.gain.setValueAtTime(0, now);
+      this.analyser.connect(this.toneSilenceGain);
+      this.toneSilenceGain.connect(this.audioCtx.destination);
       this.timeData = new Float32Array(this.analyser.fftSize);
       this.freqData = new Float32Array(this.analyser.frequencyBinCount);
 
@@ -651,6 +656,8 @@ export class BBAudioEngine {
     if (toneWasAnalysisInput) {
       // Stop the common analysis loop from reading a stale tone frame immediately.
       this.analyser = null;
+      this.toneSilenceGain?.disconnect();
+      this.toneSilenceGain = null;
       this.inputMode = 'inactive';
       this.micState = 'inactive';
       this.inputLevelDb = -100;
