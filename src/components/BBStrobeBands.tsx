@@ -81,6 +81,8 @@ export const BBStrobeBands: React.FC<Props> = ({
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const [pitchPipeModes, setPitchPipeModes] = useState<Record<string, PitchPipeMode>>(loadPitchPipeModes);
+  const pitchPipeModesRef = useRef(pitchPipeModes);
+  pitchPipeModesRef.current = pitchPipeModes;
   const continuousPitchTargetsRef = useRef<Record<string, number>>({});
   const previousTransientRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -176,6 +178,16 @@ export const BBStrobeBands: React.FC<Props> = ({
     try { localStorage.setItem(PITCH_PIPE_STORAGE_KEY, JSON.stringify(pitchPipeModes)); }
     catch { /* Pitch-pipe controls remain usable when storage is disabled. */ }
   }, [pitchPipeModes]);
+
+  useEffect(() => {
+    // The strobe component is unmounted on other tabs; stop its voices rather than leaving stale pitches sounding.
+    return () => {
+      Object.keys(pitchPipeModesRef.current).forEach((id) => {
+        bbAudioEngine.stopPitchPipeTone(pitchPipeVoiceId(id));
+      });
+      continuousPitchTargetsRef.current = {};
+    };
+  }, []);
 
   useEffect(() => {
     let animationId = 0;
