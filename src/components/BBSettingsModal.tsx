@@ -8,6 +8,8 @@ import type { InstrumentProfile } from '../audio/instrumentProfiles';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
 import { describeScalaReference, parseScalaScl, scalaReferenceToA4, scalaToCustomScaleText } from '../audio/scala';
 
+type AudioDeviceOption = { deviceId: string; label: string };
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -25,6 +27,16 @@ interface Props {
   sampleRateKhz: number | null;
   isListening: boolean;
   freezeTargetSettings?: boolean;
+  audioInputDevices: AudioDeviceOption[];
+  selectedAudioInputDeviceId: string;
+  onSelectAudioInputDevice: (deviceId: string) => void;
+  audioOutputDevices: AudioDeviceOption[];
+  selectedAudioOutputDeviceId: string;
+  onSelectAudioOutputDevice: (deviceId: string) => void;
+  onRefreshAudioDevices: () => void;
+  isRefreshingAudioDevices: boolean;
+  audioOutputSelectionSupported: boolean;
+  audioIoMessage: string;
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
   onSelectInstrumentProfile: (profileId: string) => void;
@@ -53,6 +65,16 @@ export const BBSettingsModal: React.FC<Props> = ({
   sampleRateKhz,
   isListening,
   freezeTargetSettings = false,
+  audioInputDevices,
+  selectedAudioInputDeviceId,
+  onSelectAudioInputDevice,
+  audioOutputDevices,
+  selectedAudioOutputDeviceId,
+  onSelectAudioOutputDevice,
+  onRefreshAudioDevices,
+  isRefreshingAudioDevices,
+  audioOutputSelectionSupported,
+  audioIoMessage,
   instrumentProfiles,
   activeInstrumentProfileId,
   onSelectInstrumentProfile,
@@ -292,6 +314,46 @@ export const BBSettingsModal: React.FC<Props> = ({
               </label>
             </div>
             {backupMessage && <p role="status" className="text-[10px] leading-relaxed text-slate-400">{backupMessage}</p>}
+          </section>
+
+          {/* Audio I/O device selection */}
+          <section className="rounded-xl border border-white/5 bg-[#080b0f] p-3 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-semibold text-slate-200">Hangbemenet és -kimenet</h3>
+                <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">Mikrofon, külső hangkártya vagy támogatott fejhallgató-kimenet választható.</p>
+              </div>
+              <button type="button" onClick={onRefreshAudioDevices} disabled={isRefreshingAudioDevices}
+                className="shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-[10px] font-semibold text-slate-300 disabled:opacity-40">
+                {isRefreshingAudioDevices ? 'Frissítés…' : 'Frissítés'}
+              </button>
+            </div>
+            <label className="block text-[10px] text-slate-400">Mikrofon / hangbemenet
+              <select aria-label="Hangbemenet kiválasztása" value={selectedAudioInputDeviceId}
+                onChange={(event) => onSelectAudioInputDevice(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-white">
+                <option value="">Automatikus / alapértelmezett bemenet</option>
+                {selectedAudioInputDeviceId && !audioInputDevices.some((device) => device.deviceId === selectedAudioInputDeviceId) &&
+                  <option value={selectedAudioInputDeviceId}>Mentett bemenet (jelenleg nem található)</option>}
+                {audioInputDevices.filter((device) => device.deviceId).map((device, index) =>
+                  <option key={device.deviceId} value={device.deviceId}>{device.label || 'Mikrofon ' + (index + 1)}</option>)}
+              </select>
+            </label>
+            <label className="block text-[10px] text-slate-400">Hangszóró / fejhallgató-kimenet
+              <select aria-label="Hangkimenet kiválasztása" value={selectedAudioOutputDeviceId}
+                disabled={!audioOutputSelectionSupported}
+                onChange={(event) => { void onSelectAudioOutputDevice(event.target.value); }}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-white disabled:cursor-not-allowed disabled:opacity-40">
+                <option value="">Rendszer alapértelmezett kimenete</option>
+                {selectedAudioOutputDeviceId && !audioOutputDevices.some((device) => device.deviceId === selectedAudioOutputDeviceId) &&
+                  <option value={selectedAudioOutputDeviceId}>Mentett kimenet (jelenleg nem található)</option>}
+                {audioOutputDevices.filter((device) => device.deviceId).map((device, index) =>
+                  <option key={device.deviceId} value={device.deviceId}>{device.label || 'Hangkimenet ' + (index + 1)}</option>)}
+              </select>
+            </label>
+            {!audioOutputSelectionSupported && <p className="text-[10px] leading-relaxed text-amber-300/80">A böngésző nem kínál külön Web Audio kimenetválasztást ezen az eszközön; a rendszer kimenete használatos.</p>}
+            {audioInputDevices.length === 0 && <p className="text-[10px] leading-relaxed text-slate-500">Ha nincs bemenet a listában, indíts egy mikrofonos mérést, majd frissítsd az eszközöket. A név elrejtése a böngésző adatvédelmi szabálya lehet.</p>}
+            {audioIoMessage && <p role="status" className="text-[10px] leading-relaxed text-slate-400">{audioIoMessage}</p>}
           </section>
 
           {/* A4 Reference */}
