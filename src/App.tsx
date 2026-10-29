@@ -1468,6 +1468,11 @@ export default function App() {
                   ? 'Csak a kipipált elemek jelennek meg a Hangolás fülön. A választásod automatikusan mentődik.'
                   : 'Egyéni nézet kikapcsolva: minden panel megjelenik. A kijelölésed megmarad, ha újra bekapcsolod.'}
               </p>
+              {customTuningView.enabled && customTuningView.panels.length === 0 && (
+                <p role="status" className="mt-2 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2 text-[10px] leading-relaxed text-amber-200">
+                  Nincs kijelölt panel. Nyisd meg a „Panelek” listát, és jelöld be a szükséges eszközöket, vagy válaszd a „Kompakt alapnézet” lehetőséget.
+                </p>
+              )}
               {isTuningPanelPickerOpen && (
                 <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
