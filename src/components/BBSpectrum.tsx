@@ -189,8 +189,19 @@ export const BBSpectrum: React.FC<Props> = ({
         const x = X(hz), bin = Math.max(0, Math.min(data.length - 1, Math.round(hz / binWidth)));
         const db = s.hasSignal && Number.isFinite(data[bin]) ? data[bin] : -75;
         const y = Y(db);
-        ctx.save(); ctx.setLineDash([6, 5]); ctx.strokeStyle = p.color; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(x, T - 3); ctx.lineTo(x, y); ctx.stroke(); ctx.restore();
+        // Static target line mirrors the reference peak-spectrum guide; the colored dot below is the measured peak.
+        const targetX = X(target);
+        ctx.save();
+        ctx.setLineDash([3, 4]);
+        ctx.strokeStyle = p.color;
+        ctx.globalAlpha = 0.6;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(targetX, T); ctx.lineTo(targetX, T + ph); ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([6, 5]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(x, T - 3); ctx.lineTo(x, y); ctx.stroke();
+        ctx.restore();
         const cw = 118, ch = 64, cx = Math.max(4, Math.min(w - cw - 4, x - cw / 2)), cy = 5 + (i === 1 ? 4 : 0);
         ctx.fillStyle = '#0a1320'; ctx.strokeStyle = p.color; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.roundRect(cx, cy, cw, ch, 12); ctx.fill(); ctx.stroke();
@@ -199,8 +210,12 @@ export const BBSpectrum: React.FC<Props> = ({
         ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 15px ui-monospace';
         ctx.fillText(s.hasSignal && p.m.measuredHz !== null ? p.m.measuredHz.toFixed(2) + ' Hz' : target.toFixed(2) + ' Hz', cx + cw / 2, cy + 37);
         const cents = p.m.deviationCents;
-        ctx.fillStyle = cents === null ? '#94a3b8' : isWithinTuningTolerance(cents, target, s.toleranceOverrideCents, s.toleranceMode) ? '#34d399' : '#fbbf24';
-        ctx.font = 'bold 14px ui-monospace'; ctx.fillText(cents === null ? '— cent' : (cents > 0 ? '+' : '') + cents.toFixed(1) + ' c', cx + cw / 2, cy + 54);
+        const isCurrentValidReading = p.m.status === 'valid' && s.hasSignal;
+        ctx.fillStyle = !isCurrentValidReading || cents === null
+          ? '#94a3b8'
+          : isWithinTuningTolerance(cents, target, s.toleranceOverrideCents, s.toleranceMode) ? '#34d399' : '#fbbf24';
+        ctx.font = 'bold 14px ui-monospace';
+        ctx.fillText(!isCurrentValidReading || cents === null ? '— cent' : (cents > 0 ? '+' : '') + cents.toFixed(1) + ' c', cx + cw / 2, cy + 54);
         ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.fill();
       });
       raf = requestAnimationFrame(draw);
