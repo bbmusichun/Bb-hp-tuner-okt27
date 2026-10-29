@@ -503,7 +503,7 @@ export const BBSettingsModal: React.FC<Props> = ({
               <p className="text-[10px] text-emerald-300">Aktív egyedi mező: {activeProfile.customScale.name} · {activeProfile.customScale.noteCount} hang</p>
             )}
             {customScaleMessage && (
-              <p role="status" className={customScaleMessage.startsWith('Az egyedi') ? 'text-[10px] text-emerald-300' : 'text-[10px] text-amber-300'}>
+              <p role="status" className={(['Az egyedi', 'A beépített skála betöltve', 'A Scala-skála beolvasva'].some((prefix) => customScaleMessage.startsWith(prefix))) ? 'text-[10px] text-emerald-300' : 'text-[10px] text-amber-300'}>
                 {customScaleMessage}
               </p>
             )}
