@@ -104,6 +104,7 @@ export const BBStrobeBands: React.FC<Props> = ({
           phase: phasesRef.current.alap,
           stripeWidth: 20, // Fine stripes for Alaphang
           cents: smoothCentsRef.current.alap,
+          rawCents: measurement.alap.deviationCents,
           targetHz: measurement.alap.targetHz ?? measurement.alap.measuredHz ?? 146.83,
           amplitudeDb: measurement.alap.amplitudeDb,
           timestampMs: measurement.alap.timestampMs,
@@ -118,6 +119,7 @@ export const BBStrobeBands: React.FC<Props> = ({
           phase: phasesRef.current.kvint,
           stripeWidth: 34, // Medium stripes for Kvint
           cents: smoothCentsRef.current.kvint,
+          rawCents: measurement.kvint.deviationCents,
           targetHz: measurement.kvint.targetHz ?? measurement.kvint.measuredHz ?? 440.50,
           amplitudeDb: measurement.kvint.amplitudeDb,
           timestampMs: measurement.kvint.timestampMs,
@@ -132,6 +134,7 @@ export const BBStrobeBands: React.FC<Props> = ({
           phase: phasesRef.current.oktav,
           stripeWidth: 54, // Wide block stripes for Oktáv
           cents: smoothCentsRef.current.oktav,
+          rawCents: measurement.oktav.deviationCents,
           targetHz: measurement.oktav.targetHz ?? measurement.oktav.measuredHz ?? 293.66,
           amplitudeDb: measurement.oktav.amplitudeDb,
           timestampMs: measurement.oktav.timestampMs,
@@ -149,8 +152,8 @@ export const BBStrobeBands: React.FC<Props> = ({
           stabilitySampleTimestampRef.current[key] = -1;
         }
         stabilityTargetHzRef.current[key] = row.targetHz;
-        if (row.isValid && Number.isFinite(row.cents) && row.timestampMs !== stabilitySampleTimestampRef.current[key]) {
-          stabilitySamples.push(row.cents);
+        if (row.isValid && row.rawCents !== null && Number.isFinite(row.rawCents) && row.timestampMs !== stabilitySampleTimestampRef.current[key]) {
+          stabilitySamples.push(row.rawCents);
           if (stabilitySamples.length > 15) stabilitySamples.shift();
           stabilitySampleTimestampRef.current[key] = row.timestampMs;
         } else if (!row.isValid && currentTime - lastMeasurementTimeRef.current[key] > 1000) {
