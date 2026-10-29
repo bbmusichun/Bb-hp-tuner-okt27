@@ -71,6 +71,7 @@ export function parseHangoalFullConfiguration(
 
   if (typeof settings.autoDetect !== 'boolean') return null;
   if (settings.autoDetectionMode !== 'continuous' && settings.autoDetectionMode !== 'single-shot' && settings.autoDetectionMode !== 'off') return null;
+  if (settings.autoDetect !== (settings.autoDetectionMode !== 'off')) return null;
   if (settings.readoutMode !== 'hz' && settings.readoutMode !== 'cents' && settings.readoutMode !== 'note' && settings.readoutMode !== 'ratio') return null;
   if (settings.referenceToneMode !== 'continuous' && settings.referenceToneMode !== 'strike' && settings.referenceToneMode !== 'off') return null;
   if (!(settings.toleranceOverrideCents === null ||
