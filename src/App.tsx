@@ -138,6 +138,8 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
     (entry.octaveTargetHz === undefined || (typeof entry.octaveTargetHz === 'number' && Number.isFinite(entry.octaveTargetHz) && entry.octaveTargetHz > 0)) &&
     (entry.audioSampleRateHz === undefined || (typeof entry.audioSampleRateHz === 'number' && Number.isFinite(entry.audioSampleRateHz) && entry.audioSampleRateHz > 0)) &&
     (entry.inputLevelDbfs === undefined || (typeof entry.inputLevelDbfs === 'number' && Number.isFinite(entry.inputLevelDbfs) && entry.inputLevelDbfs >= -160 && entry.inputLevelDbfs <= 0)) &&
+    (entry.toleranceOverrideCents === undefined || entry.toleranceOverrideCents === null ||
+      (typeof entry.toleranceOverrideCents === 'number' && Number.isFinite(entry.toleranceOverrideCents) && entry.toleranceOverrideCents >= 0.5 && entry.toleranceOverrideCents <= 20)) &&
     (entry.instrumentProfileId === undefined || typeof entry.instrumentProfileId === 'string') &&
     (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string');
 }
@@ -571,6 +573,7 @@ export default function App() {
       instrumentProfileName: activeInstrumentProfile?.name ?? 'Handpan',
       audioSampleRateHz: bbAudioEngine.getSampleRate(),
       inputLevelDbfs: inputLevelDb,
+      toleranceOverrideCents,
       fundamentalHz: alap.measuredHz!,
       fundamentalCents: alap.deviationCents!,
       fifthHz: kvint.measuredHz!,
