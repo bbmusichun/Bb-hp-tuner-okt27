@@ -14,7 +14,7 @@ export function normalizeDisabledToneNotes(value: unknown): Record<string, strin
 
 /** Keep at least one target selectable even if old or corrupt settings disable every current note. */
 export function getEnabledToneNotes<T extends { id: string }>(
-  notes: T[],
+  notes: readonly T[],
   disabledIds: readonly string[],
 ): T[] {
   const disabled = new Set(disabledIds);
