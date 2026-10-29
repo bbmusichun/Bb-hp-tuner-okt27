@@ -23,6 +23,7 @@ import { buildChromaticTargetNote, midiFromFrequency } from './audio/chromaticPi
 import { transposeFrequencyBySemitones } from './audio/transposition';
 import { normalizeTuningReadoutMode, type TuningReadoutMode } from './audio/readoutModes';
 import { isDetectionArmed, nextAutoDetectionMode, normalizeAutoDetectionMode, type AutoDetectionMode } from './audio/detectionModes';
+import { isEditableKeyboardTarget, resolveHangoalKeyboardAction } from './audio/keyboardShortcuts';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
@@ -182,6 +183,7 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
 export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isKeyboardHelpOpen, setIsKeyboardHelpOpen] = useState(false);
   const [autoDetectionMode, setAutoDetectionMode] = useState<AutoDetectionMode>(() => loadTuningPreferences().autoDetectionMode);
   const [singleShotCaptured, setSingleShotCaptured] = useState(false);
   const autoDetect = autoDetectionMode !== 'off';
@@ -820,6 +822,90 @@ export default function App() {
     ? '(kissé magas)'
     : '(kissé mély)';
 
+  const keyboardActionsRef = useRef({
+    handleToggleMic,
+    handleSelectToneFieldNote,
+    handleToggleReferenceTone,
+  });
+  keyboardActionsRef.current = {
+    handleToggleMic,
+    handleSelectToneFieldNote,
+    handleToggleReferenceTone,
+  };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.shiftKey && event.key !== '?') return;
+      const target = event.target as HTMLElement | null;
+      if (isEditableKeyboardTarget(target?.tagName, target?.isContentEditable)) return;
+      if (isSettingsOpen) return;
+
+      const action = resolveHangoalKeyboardAction(event.key, event.code);
+      if (!action) return;
+      event.preventDefault();
+
+      switch (action) {
+        case 'previous-note':
+        case 'next-note': {
+          if (enabledToneNotes.length === 0) return;
+          const currentIndex = enabledToneNotes.findIndex((note) => note.id === selectedNote.id);
+          const nextIndex = currentIndex < 0
+            ? action === 'next-note' ? 0 : enabledToneNotes.length - 1
+            : (currentIndex + (action === 'next-note' ? 1 : -1) + enabledToneNotes.length) % enabledToneNotes.length;
+          keyboardActionsRef.current.handleSelectToneFieldNote(enabledToneNotes[nextIndex]);
+          setSelectedRole('fundamental');
+          return;
+        }
+        case 'previous-resonance':
+        case 'next-resonance': {
+          const roles = ['fundamental', 'fifth', 'octave'] as const;
+          const index = roles.indexOf(selectedRole);
+          const delta = action === 'next-resonance' ? 1 : -1;
+          setSelectedRole(roles[(index + delta + roles.length) % roles.length]);
+          return;
+        }
+        case 'toggle-microphone':
+          void keyboardActionsRef.current.handleToggleMic();
+          return;
+        case 'cycle-detection': {
+          if (autoDetectionMode === 'single-shot' && singleShotCaptured) {
+            setSingleShotCaptured(false);
+            autoDetectionRef.current = null;
+            return;
+          }
+          const next = nextAutoDetectionMode(autoDetectionMode);
+          setAutoDetectionMode(next);
+          setSingleShotCaptured(false);
+          autoDetectionRef.current = null;
+          if (next !== 'off' && chromaticTargetMidi !== null) setChromaticTargetMidi(null);
+          return;
+        }
+        case 'toggle-reference-tone':
+          if (referenceToneMode === 'continuous' && !isListening) keyboardActionsRef.current.handleToggleReferenceTone();
+          return;
+        case 'show-shortcuts':
+          setIsKeyboardHelpOpen((open) => !open);
+          return;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    enabledToneNotes,
+    selectedNote.id,
+    selectedNote.frequency,
+    referenceToneHz,
+    selectedRole,
+    isListening,
+    isSettingsOpen,
+    autoDetectionMode,
+    singleShotCaptured,
+    chromaticTargetMidi,
+    referenceToneMode,
+  ]);
+
   return (
     <div className="min-h-screen bg-[#070a0e] text-[#f1f5f9] flex flex-col items-center justify-start antialiased selection:bg-[#f59e0b]/30">
       {/* Mobile container constrained to smartphone frame width */}
@@ -1134,6 +1220,32 @@ export default function App() {
               toleranceOverrideCents={toleranceOverrideCents}
               standardDeviationCents={standardDeviationCents}
             />
+
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setIsKeyboardHelpOpen((open) => !open)}
+                aria-expanded={isKeyboardHelpOpen}
+                className="w-full rounded-lg border border-white/10 bg-slate-900/50 px-3 py-2 text-left text-[11px] font-semibold text-slate-300 hover:border-amber-400/30 hover:text-white"
+              >
+                Billentyűzetes vezérlés · ? {isKeyboardHelpOpen ? '−' : '+'}
+              </button>
+              {isKeyboardHelpOpen && (
+                <div className="mt-2 rounded-xl border border-white/10 bg-[#0b111b] p-3">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">← / →</kbd><p className="mt-1 text-slate-400">Előző/következő aktív hangmező</p></div>
+                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">↑ / ↓</kbd><p className="mt-1 text-slate-400">Rezonanciacsatorna váltása</p></div>
+                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">Space</kbd><p className="mt-1 text-slate-400">Mikrofonmérés indítása/leállítása</p></div>
+                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">D</kbd><p className="mt-1 text-slate-400">Detektálási mód váltása/újraélesítés</p></div>
+                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">R</kbd><p className="mt-1 text-slate-400">Referenciahang (folyamatos mód, mikrofon leállítva)</p></div>
+                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">Shift + /</kbd><p className="mt-1 text-slate-400">Súgó megjelenítése/elrejtése</p></div>
+                  </div>
+                  <p className="mt-3 border-t border-white/5 pt-2 text-[10px] leading-relaxed text-slate-500">
+                    A gyorsbillentyűk nem aktívak a beállításablakban, illetve szövegmezőre, gombra vagy más interaktív elemre fókuszálva.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
