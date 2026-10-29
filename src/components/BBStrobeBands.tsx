@@ -108,7 +108,6 @@ export const BBStrobeBands: React.FC<Props> = ({
     const voiceId = pitchPipeVoiceId(id);
     // Each band owns an output-only voice; other continuous pitch pipes are unaffected.
     bbAudioEngine.stopPitchPipeTone(voiceId);
-    window.dispatchEvent(new CustomEvent('hangoal-band-pitch-pipe-toggle', { detail: { mode: nextMode, id } }));
     setPitchPipeModes((previous) => ({ ...previous, [id]: nextMode }));
     const targetHz = targetForPipe(id) ?? fallbackHz;
     if (nextMode === 'continuous' && Number.isFinite(targetHz) && targetHz > 0) {
