@@ -64,6 +64,8 @@ export interface TuningLogEntry {
   /** Capture conditions, optional for older saved logs. */
   audioSampleRateHz?: number;
   inputLevelDbfs?: number;
+  /** Tolerance policy used when calculating overallInTune; null means adaptive Auto. */
+  toleranceOverrideCents?: number | null;
   /** Measured frequencies. */
   fundamentalHz: number;
   fundamentalCents: number;
