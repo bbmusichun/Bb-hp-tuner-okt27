@@ -1,3 +1,5 @@
+export const MAX_CUSTOM_STROBE_BANDS = 32;
+
 export type StrobeBandSource = 'fundamental' | 'fifth' | 'octave' | 'custom';
 export type StrobeBandTargetMode = 'absolute' | 'ratio' | 'cents';
 
