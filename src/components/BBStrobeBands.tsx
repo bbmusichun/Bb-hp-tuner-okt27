@@ -37,6 +37,7 @@ interface Props {
   hasSignal: boolean;
   active?: boolean;
   transientHoldoff?: boolean;
+  freezeTargetSettings?: boolean;
   baseFrequencyHz?: number;
   toleranceOverrideCents?: number | null;
   toleranceMode?: TuningToleranceMode;
@@ -69,7 +70,7 @@ function formatCents(cents: number | null): string {
 }
 
 export const BBStrobeBands: React.FC<Props> = ({
-  alap, kvint, oktav, hasSignal, active = false, transientHoldoff = false,
+  alap, kvint, oktav, hasSignal, active = false, transientHoldoff = false, freezeTargetSettings = false,
   baseFrequencyHz = 146.832384,
   toleranceOverrideCents = null, toleranceMode = 'auto', selectedRole, onSelectRole,
   strobeSensitivity = 1, onChangeStrobeSensitivity, onZoomTargetHz,
@@ -266,11 +267,12 @@ export const BBStrobeBands: React.FC<Props> = ({
   }, [canvasHeight]);
 
   const updateBand = (id: string, patch: Partial<StrobeBandConfig>) => {
+    if (freezeTargetSettings && ('targetHz' in patch || 'targetMode' in patch || 'targetValue' in patch || 'centsOffset' in patch)) return;
     setCustomBands((previous) => normalizeStrobeBands(previous.map((band) => band.id === id ? { ...band, ...patch } : band))
       .filter((band) => band.source === 'custom').slice(0, MAX_CUSTOM_BANDS));
   };
   const addBand = () => {
-    if (customBands.length >= MAX_CUSTOM_BANDS) return;
+    if (freezeTargetSettings || customBands.length >= MAX_CUSTOM_BANDS) return;
     setCustomBands((previous) => [...previous, {
       id: createBandId(), name: 'Egyedi sáv ' + (previous.length + 1), source: 'custom',
       targetHz: Math.max(20, Math.min(20000, baseFrequencyHz * 1.5)), centsOffset: 0, enabled: true,
@@ -278,6 +280,7 @@ export const BBStrobeBands: React.FC<Props> = ({
     setIsEditorOpen(true);
   };
   const deleteBand = (id: string) => {
+    if (freezeTargetSettings) return;
     setCustomBands((previous) => previous.filter((band) => band.id !== id));
     setReadings((previous) => { const next = { ...previous }; delete next[id]; return next; });
   };
@@ -400,7 +403,7 @@ export const BBStrobeBands: React.FC<Props> = ({
               <h4 className="text-xs font-bold text-white">Sávok szerkesztése</h4>
               <p className="mt-1 text-[10px] leading-relaxed text-slate-400">A három alap sáv állandó. Az új sávok az alap alá kerülnek, és ugyanebben a stroboszkópban jelennek meg.</p>
             </div>
-            <button type="button" onClick={addBand} disabled={customBands.length >= MAX_CUSTOM_BANDS}
+            <button type="button" onClick={addBand} disabled={freezeTargetSettings || customBands.length >= MAX_CUSTOM_BANDS}
               className="shrink-0 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-xs font-semibold text-amber-200 disabled:opacity-40">+ Új sáv</button>
           </div>
           {customBands.length === 0 ? (
@@ -425,13 +428,14 @@ export const BBStrobeBands: React.FC<Props> = ({
                     <input aria-label={band.name + ' bekapcsolása'} type="checkbox" checked={band.enabled}
                       onChange={(event) => updateBand(band.id, { enabled: event.target.checked })} className="accent-amber-400" />Aktív
                   </label>
-                  <button type="button" onClick={() => deleteBand(band.id)} aria-label={band.name + ' törlése'}
+                  <button type="button" onClick={() => deleteBand(band.id)} disabled={freezeTargetSettings} aria-label={band.name + ' törlése'}
                     className="rounded-md px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/10">Törlés</button>
                 </div>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   <label className="min-w-0 text-[10px] text-slate-400">Cél (Hz / arány / cent)
                     <input aria-label="Célfrekvencia vagy arány" type="text" inputMode="decimal"
                       value={targetDrafts[band.id] ?? formatStrobeTargetExpression(band)}
+                      disabled={freezeTargetSettings}
                       onChange={(event) => {
                         const draft = event.target.value;
                         setTargetDrafts((previous) => ({ ...previous, [band.id]: draft }));
@@ -445,6 +449,7 @@ export const BBStrobeBands: React.FC<Props> = ({
                   </label>
                   <label className="min-w-0 text-[10px] text-slate-400">Korrekció (cent)
                     <input aria-label="Centkorrekció" type="number" min={-1200} max={1200} step="0.1" value={band.centsOffset}
+                      disabled={freezeTargetSettings}
                       onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= -1200 && value <= 1200) updateBand(band.id, { centsOffset: value }); }}
                       className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs text-white outline-none focus:border-amber-400" />
                   </label>
@@ -455,6 +460,18 @@ export const BBStrobeBands: React.FC<Props> = ({
                   <span className={valid ? (inTolerance ? 'text-emerald-300' : 'text-amber-300') : 'text-slate-500'}>
                     {valid ? formatCents(cents) : active && transientHoldoff ? 'Ütés utáni várakozás' : active && hasSignal ? 'Nincs megbízható csúcs' : 'Mérésre vár'}
                   </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <button type="button" disabled={freezeTargetSettings || !valid || cents === null}
+                    onClick={() => {
+                      if (cents === null || !Number.isFinite(cents)) return;
+                      const nextOffset = Math.max(-1200, Math.min(1200, band.centsOffset + cents));
+                      updateBand(band.id, { centsOffset: nextOffset });
+                    }}
+                    className="rounded-md border border-emerald-400/30 bg-emerald-400/5 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40">
+                    Kalibrálás a mért hangra
+                  </button>
+                  <span className="text-[9px] text-slate-500">Csak a cél-offsetet módosítja, a mért frekvenciát nem.</span>
                 </div>
                 {valid && reading?.amplitudeDb !== null && reading?.amplitudeDb !== undefined && <div className="mt-1 text-right text-[10px] text-slate-500">Csúcs: {reading.amplitudeDb.toFixed(1)} dB (FFT-becslés)</div>}
               </div>
