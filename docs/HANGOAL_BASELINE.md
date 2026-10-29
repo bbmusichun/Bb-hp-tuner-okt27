@@ -18,7 +18,7 @@ This document defines the functional baseline for the Hangoal handpan tuner from
 | Continuous / strike-triggered / off reference tone | Partial: target sine tone exists; per-band three-state modes remain to implement. |
 | Base frequency, cents offset, concert reference | Partial: A4 calibration and per-note 2x/3x offsets exist; full global base/transposition model remains. |
 | Pitch dial with note and octave selection | Added a 12-semitone chromatic dial with octave 1–6; out-of-scale notes can become the tuning target and use the active A4 reference plus that note's stored partial calibration. Global transposition and modal note enable/disable remain open. |
-| Modal note enable/disable and transposition | Not yet implemented to acceptance level. |
+| Modal note enable/disable and transposition | Per-scale enable/disable is implemented for the handpan tone field and automatic detection, with local persistence and protection against disabling the last active note. Global transposition remains to implement. |
 | Automatic pitch detection and single-shot/continuous modes | Partial: microphone detection exists; interaction semantics need acceptance tests. |
 | Exact peak spectrum, peak hover values, noise-floor suppression, doubled-peak inspection | Full spectrum/waterfall and live diagnostic panel are present. The panel estimates the median noise floor and flags possible near-target double peaks without changing the tuning result; heuristic and physical-device validation remain open. |
 | Hz / cents / note / just-ratio readout modes | Partial: Hz and cents are present; configurable ratio and note-name display modes remain. |
