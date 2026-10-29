@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
 import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
+import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
 
 interface Props {
   alap: ResonanceMeasurement;
@@ -11,6 +12,8 @@ interface Props {
   toleranceOverrideCents?: number | null;
   selectedRole?: string;
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
+  strobeSensitivity?: number;
+  onChangeStrobeSensitivity?: (value: number) => void;
 }
 
 export const BBStrobeBands: React.FC<Props> = ({
@@ -21,10 +24,12 @@ export const BBStrobeBands: React.FC<Props> = ({
   selectedRole,
   onSelectRole,
   toleranceOverrideCents = null,
+  strobeSensitivity = 1,
+  onChangeStrobeSensitivity,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestMeasurementsRef = useRef({ alap, kvint, oktav, hasSignal, toleranceOverrideCents });
-  latestMeasurementsRef.current = { alap, kvint, oktav, hasSignal, toleranceOverrideCents };
+  const latestMeasurementsRef = useRef({ alap, kvint, oktav, hasSignal, toleranceOverrideCents, strobeSensitivity });
+  latestMeasurementsRef.current = { alap, kvint, oktav, hasSignal, toleranceOverrideCents, strobeSensitivity };
 
   // Time-integrated phases for each band
   const phasesRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
@@ -79,7 +84,7 @@ export const BBStrobeBands: React.FC<Props> = ({
       const integrate = (valid: boolean, lastTime: number, cents: number, targetHz: number, key: 'alap' | 'kvint' | 'oktav') => {
         if (!valid && currentTime - lastTime > 250) return;
         const deltaHz = targetHz * (Math.pow(2, cents / 1200) - 1);
-        const speed = Math.max(-220, Math.min(220, deltaHz * 65));
+        const speed = Math.max(-220, Math.min(220, deltaHz * 65 * measurement.strobeSensitivity));
         phasesRef.current[key] += speed * dt;
       };
       integrate(validAlap, lastMeasurementTimeRef.current.alap, smoothCentsRef.current.alap, measurement.alap.targetHz ?? 146.83, 'alap');
@@ -252,6 +257,7 @@ export const BBStrobeBands: React.FC<Props> = ({
   ];
 
   return (
+    <>
     <div className="w-full flex items-stretch gap-2.5 my-1">
       {/* Left Labels Column */}
       <div className="flex flex-col justify-between py-1 shrink-0 w-12 text-left select-none">
@@ -279,5 +285,29 @@ export const BBStrobeBands: React.FC<Props> = ({
         />
       </div>
     </div>
+    <section className="mt-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor="hangoal-strobe-sensitivity" className="text-[11px] font-semibold text-slate-200">
+          Stroboszkóp sodródási érzékenysége
+        </label>
+        <span className="shrink-0 font-mono text-[11px] text-amber-200">{strobeSensitivity.toFixed(2)}×</span>
+      </div>
+      <input
+        id="hangoal-strobe-sensitivity"
+        aria-label="Stroboszkóp sodródási érzékenysége"
+        type="range"
+        min={MIN_STROBE_SENSITIVITY}
+        max={MAX_STROBE_SENSITIVITY}
+        step="0.25"
+        value={strobeSensitivity}
+        onChange={(event) => onChangeStrobeSensitivity?.(Number(event.target.value))}
+        className="mt-2 w-full cursor-pointer accent-amber-400"
+      />
+      <div className="flex justify-between text-[9px] text-slate-500">
+        <span>Finomabb mozgás</span>
+        <span>Gyorsabb mozgás</span>
+      </div>
+    </section>
+    </>
   );
 };

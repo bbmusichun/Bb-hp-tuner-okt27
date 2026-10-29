@@ -27,6 +27,7 @@ import { isEditableKeyboardTarget, resolveHangoalKeyboardAction } from './audio/
 import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
 import { recordAnalysisFrame } from './audio/analysisRate';
 import { normalizeStrobeBands } from './audio/strobeBands';
+import { normalizeStrobeSensitivity } from './audio/strobeSensitivity';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
@@ -69,6 +70,7 @@ function loadTuningPreferences(): {
   activeInstrumentProfileId: string;
   toleranceOverrideCents: number | null;
   transposeSemitones: number;
+  strobeSensitivity: number;
   readoutMode: TuningReadoutMode;
   referenceToneMode: ReferenceToneMode;
   scale: HandpanScale;
@@ -90,6 +92,7 @@ function loadTuningPreferences(): {
     activeInstrumentProfileId: defaultProfile.id,
     toleranceOverrideCents: null,
     transposeSemitones: 0,
+    strobeSensitivity: 1,
     readoutMode: 'hz' as TuningReadoutMode,
     referenceToneMode: 'continuous' as ReferenceToneMode,
     scale: PRESET_SCALES[0],
@@ -109,6 +112,7 @@ function loadTuningPreferences(): {
       activeInstrumentProfileId?: unknown;
       toleranceOverrideCents?: unknown;
       transposeSemitones?: unknown;
+      strobeSensitivity?: unknown;
       readoutMode?: unknown;
       referenceToneMode?: unknown;
     };
@@ -143,6 +147,7 @@ function loadTuningPreferences(): {
         ? prefs.toleranceOverrideCents : null,
       transposeSemitones: typeof prefs.transposeSemitones === 'number' && Number.isInteger(prefs.transposeSemitones) && prefs.transposeSemitones >= -12 && prefs.transposeSemitones <= 12
         ? prefs.transposeSemitones : 0,
+      strobeSensitivity: normalizeStrobeSensitivity(prefs.strobeSensitivity),
       readoutMode: normalizeTuningReadoutMode(prefs.readoutMode),
       referenceToneMode: normalizeReferenceToneMode(prefs.referenceToneMode),
       scale: activeProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId) ?? PRESET_SCALES[0],
@@ -195,6 +200,7 @@ export default function App() {
   );
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
   const [transposeSemitones, setTransposeSemitones] = useState<number>(() => loadTuningPreferences().transposeSemitones);
+  const [strobeSensitivity, setStrobeSensitivity] = useState<number>(() => loadTuningPreferences().strobeSensitivity);
   const [readoutMode, setReadoutMode] = useState<TuningReadoutMode>(() => loadTuningPreferences().readoutMode);
   const [referenceToneMode, setReferenceToneMode] = useState<ReferenceToneMode>(() => loadTuningPreferences().referenceToneMode);
 
@@ -471,6 +477,7 @@ export default function App() {
           autoDetectionMode,
           toleranceOverrideCents,
           transposeSemitones,
+          strobeSensitivity,
           readoutMode,
           referenceToneMode,
           activeInstrumentProfileId,
@@ -533,6 +540,7 @@ export default function App() {
       setSingleShotCaptured(false);
       setToleranceOverrideCents(parsed.settings.toleranceOverrideCents);
       setTransposeSemitones(parsed.settings.transposeSemitones);
+      setStrobeSensitivity(parsed.settings.strobeSensitivity);
       setReadoutMode(parsed.settings.readoutMode);
       setReferenceToneMode(parsed.settings.referenceToneMode);
       setDisabledToneNotesByScale(parsed.disabledToneNotesByScale);
@@ -694,6 +702,7 @@ export default function App() {
         autoDetectionMode,
         toleranceOverrideCents,
         transposeSemitones,
+        strobeSensitivity,
         readoutMode,
         referenceToneMode,
         partialTargetOffsets,
@@ -703,7 +712,7 @@ export default function App() {
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale, autoDetect, autoDetectionMode, toleranceOverrideCents, transposeSemitones, readoutMode, referenceToneMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+  }, [a4Ref, currentScale, autoDetect, autoDetectionMode, toleranceOverrideCents, transposeSemitones, strobeSensitivity, readoutMode, referenceToneMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
 
   useEffect(() => {
     try {
@@ -1284,6 +1293,8 @@ export default function App() {
                 selectedRole={selectedRole}
                 onSelectRole={setSelectedRole}
                 toleranceOverrideCents={toleranceOverrideCents}
+                strobeSensitivity={strobeSensitivity}
+                onChangeStrobeSensitivity={setStrobeSensitivity}
               />
               <BBConfigurableStrobeBands
                 active={isListening}
@@ -1291,6 +1302,7 @@ export default function App() {
                 transientHoldoff={transientHoldoff}
                 toleranceOverrideCents={toleranceOverrideCents}
                 baseFrequencyHz={selectedNote.frequency}
+                strobeSensitivity={strobeSensitivity}
               />
             </div>
 
