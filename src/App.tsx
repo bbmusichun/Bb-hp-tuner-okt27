@@ -2336,6 +2336,8 @@ export default function App() {
           onChangePartialTargetOffset={updateSelectedPartialOffset}
           onResetPartialTargetOffsets={resetSelectedPartialOffsets}
           sampleRateKhz={sampleRateKhz}
+          fftSize={bbAudioEngine.getFFTSize()}
+          autoGainControlStatus={autoGainControlStatus}
           isListening={isListening}
         />
       </div>
