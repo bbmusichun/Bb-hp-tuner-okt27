@@ -67,6 +67,60 @@ export const BBSettingsModal: React.FC<Props> = ({
     activeProfile?.customScale?.notes.map((note) => `${note.name}, ${note.frequencyHz?.toFixed(3) ?? ''}`).join('\n') ?? '',
   );
   const [customScaleMessage, setCustomScaleMessage] = React.useState('');
+  const [bundledScalaAssets, setBundledScalaAssets] = React.useState<Array<{ path: string; category: string; name: string }>>([]);
+  const [selectedBundledScalaPath, setSelectedBundledScalaPath] = React.useState('');
+  const [isLoadingBundledScala, setIsLoadingBundledScala] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isOpen || bundledScalaAssets.length > 0) return;
+    let cancelled = false;
+    fetch('/scales/catalog.json')
+      .then((response) => {
+        if (!response.ok) throw new Error('Scala catalog unavailable');
+        return response.json();
+      })
+      .then((value: unknown) => {
+        if (cancelled || !Array.isArray(value)) return;
+        const assets = value.filter((item): item is { path: string; category: string; name: string } =>
+          !!item && typeof item === 'object' &&
+          typeof (item as { path?: unknown }).path === 'string' &&
+          typeof (item as { category?: unknown }).category === 'string' &&
+          typeof (item as { name?: unknown }).name === 'string'
+        );
+        setBundledScalaAssets(assets);
+        if (assets.length) setSelectedBundledScalaPath(assets[0].path);
+      })
+      .catch(() => {
+        if (!cancelled) setCustomScaleMessage('A beépített Scala-könyvtár nem tölthető be.');
+      });
+    return () => { cancelled = true; };
+  }, [isOpen, bundledScalaAssets.length]);
+
+  const loadBundledScala = async () => {
+    const asset = bundledScalaAssets.find((item) => item.path === selectedBundledScalaPath);
+    if (!asset) return;
+    setIsLoadingBundledScala(true);
+    try {
+      const response = await fetch(asset.path);
+      if (!response.ok) throw new Error('Scala asset unavailable');
+      const source = await response.text();
+      const parsed = parseScalaScl(source);
+      const converted = parsed
+        ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
+        : null;
+      if (!converted) {
+        setCustomScaleMessage('Ez a Scala-fájl nem alakítható át biztonságosan a kiválasztott hanghoz.');
+        return;
+      }
+      setCustomScaleNameDraft(asset.name);
+      setCustomScaleTextDraft(converted);
+      setCustomScaleMessage('A beépített skála betöltve. Ellenőrizd, majd alkalmazd az egyedi hangmezőt.');
+    } catch {
+      setCustomScaleMessage('A beépített Scala-fájl nem olvasható.');
+    } finally {
+      setIsLoadingBundledScala(false);
+    }
+  };
   const [backupMessage, setBackupMessage] = React.useState('');
   const [octaveDraft, setOctaveDraft] = React.useState(String(partialTargetOffsets.octaveCents));
   const [thirdPartialDraft, setThirdPartialDraft] = React.useState(String(partialTargetOffsets.thirdPartialCents));
@@ -352,6 +406,32 @@ export const BBSettingsModal: React.FC<Props> = ({
             <p className="text-[10px] leading-relaxed text-slate-400">
               Készítői méréshez itt minden hang saját Hz-célértéket kap. Soronként egy hang: hangnév, frekvencia Hz-ben. 2–24 sor, 20–2000 Hz.
             </p>
+            <div className="space-y-2 rounded-lg border border-white/5 bg-slate-900/60 p-3">
+              <label className="block text-xs font-semibold text-slate-200" htmlFor="bundled-scala-select">Beépített Scala-könyvtár · {bundledScalaAssets.length} skála</label>
+              <select
+                id="bundled-scala-select"
+                value={selectedBundledScalaPath}
+                onChange={(event) => setSelectedBundledScalaPath(event.target.value)}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-xs text-white"
+              >
+                {Object.entries(bundledScalaAssets.reduce<Record<string, typeof bundledScalaAssets>>((groups, asset) => {
+                  (groups[asset.category] ??= []).push(asset);
+                  return groups;
+                }, {})).map(([category, assets]) => (
+                  <optgroup key={category} label={category}>
+                    {assets.map((asset) => <option key={asset.path} value={asset.path}>{asset.name}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={loadBundledScala}
+                disabled={!selectedBundledScalaPath || isLoadingBundledScala}
+                className="w-full rounded-lg border border-[#f59e0b]/50 px-3 py-2 text-[11px] font-bold text-[#fbbf24] disabled:opacity-40"
+              >
+                {isLoadingBundledScala ? 'Betöltés…' : 'Beépített skála betöltése'}
+              </button>
+            </div>
             <label className="block rounded-lg border border-dashed border-slate-700 px-3 py-2 text-xs text-slate-300 cursor-pointer hover:border-[#f59e0b]">
               Scala .scl importálása
               <span className="block text-[10px] text-slate-500 mt-1">A kiválasztott hang ({selectedNoteName}, {selectedNoteFundamentalHz.toFixed(2)} Hz) lesz az alaphang. A Scala-fájl hangközeit pontos frekvenciákká alakítja.</span>
