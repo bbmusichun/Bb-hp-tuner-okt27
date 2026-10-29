@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { bbAudioEngine } from './audio/audioEngine';
 import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
-import { isWithinTuningTolerance } from './audio/tuningTolerance';
+import { isWithinTuningTolerance, normalizeTuningToleranceMode, type TuningToleranceMode } from './audio/tuningTolerance';
 import { buildChromaticTargetNote, midiFromFrequency } from './audio/chromaticPitch';
 import { transposeFrequencyBySemitones } from './audio/transposition';
 import { normalizeTuningReadoutMode, type TuningReadoutMode } from './audio/readoutModes';
@@ -26,12 +26,16 @@ import { isDetectionArmed, nextAutoDetectionMode, normalizeAutoDetectionMode, ty
 import { isEditableKeyboardTarget, resolveHangoalKeyboardAction } from './audio/keyboardShortcuts';
 import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
 import { recordAnalysisFrame } from './audio/analysisRate';
-import { normalizeStrobeBands } from './audio/strobeBands';
+import { getStrobeBandTargetHz, normalizeStrobeBands, type StrobeBandConfig } from './audio/strobeBands';
 import { normalizeStrobeSensitivity } from './audio/strobeSensitivity';
+import { normalizePitchPipeModes } from './audio/pitchPipeModes';
+import { createWindowSyncRequest, createWindowSyncState, normalizeWindowSyncMessage, type WindowSyncMode } from './audio/windowSync';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
+import { rotateEnabledMode } from './audio/scaleMode';
 import {
   DEFAULT_PARTIAL_TARGET_OFFSET,
+  calibratePartialTargetOffset,
   normalizePartialTargetOffsets,
   partialTargetFrequency,
   partialTargetOffsetKey,
@@ -167,10 +171,81 @@ function loadOwnDVolumePreference(): number {
   }
 }
 
+function loadTuningToleranceMode(): TuningToleranceMode {
+  try { return normalizeTuningToleranceMode(localStorage.getItem('hangoal-tolerance-mode-v1')); }
+  catch { return 'auto'; }
+}
+
+function loadFreezeTargetsPreference(): boolean {
+  try { return localStorage.getItem('hangoal-freeze-targets-v1') === 'true'; }
+  catch { return false; }
+}
+
+function loadWindowSyncMode(): WindowSyncMode {
+  try {
+    const value = sessionStorage.getItem('hangoal-window-sync-mode-v1');
+    return value === 'master' || value === 'slave' ? value : 'off';
+  } catch { return 'off'; }
+}
+
+function createWindowSyncPeerId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  } catch { /* Fall through to a non-cryptographic tab identifier. */ }
+  return 'hangoal-tab-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
 function formatAudioTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const totalSeconds = Math.floor(seconds);
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
+}
+
+function loadCustomStrobeBandsForSpectrum(): StrobeBandConfig[] {
+  try {
+    const raw = localStorage.getItem('hangoal-custom-strobe-bands-v1');
+    if (!raw) return [];
+    return normalizeStrobeBands(JSON.parse(raw)).filter((band) => band.source === 'custom');
+  } catch { return []; }
+}
+
+type AudioDeviceChoice = { deviceId: string; label: string };
+
+function loadAudioDevicePreference(key: string): string {
+  try { return localStorage.getItem(key) ?? ''; } catch { return ''; }
+}
+
+const TUNING_VIEW_PANELS = [
+  { id: 'samplePlayback', label: 'Saját handpan-felvétel', description: '3 másodperces minta, loop és hangerő' },
+  { id: 'recordingAnalysis', label: 'Felvétel-elemzés és kalibrálás', description: 'Hangfelismerés, felhangarány és kalibrálás' },
+  { id: 'pitchReadout', label: 'Hangmagasság és eltérés', description: 'Hangnév, Hz és centeltérés' },
+  { id: 'referenceTone', label: 'Referencia-szinusz', description: 'Célfrekvencia, lejátszás és ütésjelzés módja' },
+  { id: 'pitchDial', label: 'Kromatikus pitch tárcsa', description: 'Közvetlen célhang-kiválasztás' },
+  { id: 'transposition', label: 'Transzponálás', description: 'Skála eltolása félhangonként' },
+  { id: 'stroboscope', label: 'Stroboszkóp · 1× / 2× / 3×', description: 'Alaphang, oktáv és 3. parciális' },
+  { id: 'spectrum', label: 'Spektrum', description: 'Mért frekvencia-összetevők vizsgálata' },
+  { id: 'diagnostics', label: 'Mérési diagnosztika', description: 'Jelszint, tranziensvédelem és mérési állapot' },
+  { id: 'measurementCards', label: 'Mérési kártyák', description: 'Hz, cent, hangnév vagy frekvenciaarány' },
+  { id: 'stabilityGraph', label: 'Stabilitásgrafikon', description: 'Hangmagasság-ingadozás' },
+  { id: 'keyboardShortcuts', label: 'Billentyűzetes súgó', description: 'Gyorsbillentyűk és vezérlés' },
+] as const;
+type TuningViewPanelId = (typeof TUNING_VIEW_PANELS)[number]['id'];
+const DEFAULT_TUNING_VIEW_PANELS: TuningViewPanelId[] = ['pitchReadout', 'referenceTone', 'stroboscope', 'measurementCards'];
+
+function loadTuningViewPreferences(): { enabled: boolean; panels: TuningViewPanelId[] } {
+  const defaults = { enabled: true, panels: [...DEFAULT_TUNING_VIEW_PANELS] };
+  try {
+    const raw = localStorage.getItem('hangoal-custom-tuning-view-v1');
+    if (!raw) return defaults;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return defaults;
+    const value = parsed as { enabled?: unknown; panels?: unknown };
+    const panels = Array.isArray(value.panels)
+      ? value.panels.filter((panel): panel is TuningViewPanelId =>
+          typeof panel === 'string' && TUNING_VIEW_PANELS.some((item) => item.id === panel))
+      : [...DEFAULT_TUNING_VIEW_PANELS];
+    return { enabled: typeof value.enabled === 'boolean' ? value.enabled : true, panels };
+  } catch { return defaults; }
 }
 
 function loadDisabledToneNotesByScale(): Record<string, string[]> {
@@ -209,12 +284,93 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isKeyboardHelpOpen, setIsKeyboardHelpOpen] = useState(false);
+  const [customStrobeBands, setCustomStrobeBands] = useState<StrobeBandConfig[]>(loadCustomStrobeBandsForSpectrum);
+  useEffect(() => {
+    const refreshBands = () => setCustomStrobeBands(loadCustomStrobeBandsForSpectrum());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'hangoal-custom-strobe-bands-v1') refreshBands();
+    };
+    window.addEventListener('hangoal-custom-strobe-bands-changed', refreshBands);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('hangoal-custom-strobe-bands-changed', refreshBands);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+  const [audioInputDevices, setAudioInputDevices] = useState<AudioDeviceChoice[]>([]);
+  const [audioOutputDevices, setAudioOutputDevices] = useState<AudioDeviceChoice[]>([]);
+  const [selectedAudioInputDeviceId, setSelectedAudioInputDeviceId] = useState(() => loadAudioDevicePreference('hangoal-audio-input-device-v1'));
+  const [selectedAudioOutputDeviceId, setSelectedAudioOutputDeviceId] = useState(() => loadAudioDevicePreference('hangoal-audio-output-device-v1'));
+  const [audioIoMessage, setAudioIoMessage] = useState('');
+  const [isRefreshingAudioDevices, setIsRefreshingAudioDevices] = useState(false);
+  const [audioOutputSelectionSupported, setAudioOutputSelectionSupported] = useState(false);
+
+  const refreshAudioDevices = useCallback(async () => {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function') {
+      setAudioIoMessage('Ez a böngésző nem biztosít hangbemenet-listázást.');
+      return;
+    }
+    setIsRefreshingAudioDevices(true);
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setAudioInputDevices(devices.filter((device) => device.kind === 'audioinput').map((device, index) => ({
+        deviceId: device.deviceId,
+        label: device.label || 'Mikrofon ' + (index + 1),
+      })));
+      setAudioOutputDevices(devices.filter((device) => device.kind === 'audiooutput').map((device, index) => ({
+        deviceId: device.deviceId,
+        label: device.label || 'Hangkimenet ' + (index + 1),
+      })));
+      setAudioOutputSelectionSupported(bbAudioEngine.supportsOutputDeviceSelection());
+      setAudioIoMessage(devices.some((device) => device.kind.startsWith('audio') && !device.label)
+        ? 'Az eszközneveket a böngésző a mikrofonengedély megadása után mutathatja meg.'
+        : 'A hangbemenetek és -kimenetek listája frissült.');
+    } catch (error) {
+      setAudioIoMessage(error instanceof Error ? error.message : 'Nem sikerült felsorolni a hang-eszközöket.');
+    } finally {
+      setIsRefreshingAudioDevices(false);
+    }
+  }, []);
+  useEffect(() => {
+    void refreshAudioDevices();
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices || typeof mediaDevices.addEventListener !== 'function') return;
+    const onDeviceChange = () => { void refreshAudioDevices(); };
+    mediaDevices.addEventListener('devicechange', onDeviceChange);
+    return () => mediaDevices.removeEventListener('devicechange', onDeviceChange);
+  }, [refreshAudioDevices]);
+  useEffect(() => {
+    bbAudioEngine.setPreferredOutputDeviceId(selectedAudioOutputDeviceId || null);
+    try {
+      localStorage.setItem('hangoal-audio-input-device-v1', selectedAudioInputDeviceId);
+      localStorage.setItem('hangoal-audio-output-device-v1', selectedAudioOutputDeviceId);
+    } catch { /* Device choices remain active for this session. */ }
+  }, [selectedAudioInputDeviceId, selectedAudioOutputDeviceId]);
+  const [customTuningView, setCustomTuningView] = useState(loadTuningViewPreferences);
+  const [isTuningPanelPickerOpen, setIsTuningPanelPickerOpen] = useState(false);
+  const shouldShowTuningPanel = (panel: TuningViewPanelId) => !customTuningView.enabled || customTuningView.panels.includes(panel);
   const [autoDetectionMode, setAutoDetectionMode] = useState<AutoDetectionMode>(() => loadTuningPreferences().autoDetectionMode);
   const [singleShotCaptured, setSingleShotCaptured] = useState(false);
   const autoDetect = autoDetectionMode !== 'off';
   const [toleranceOverrideCents, setToleranceOverrideCents] = useState<number | null>(
     () => loadTuningPreferences().toleranceOverrideCents,
   );
+  const [toleranceMode, setToleranceMode] = useState<TuningToleranceMode>(loadTuningToleranceMode);
+  const [freezeTargets, setFreezeTargets] = useState<boolean>(loadFreezeTargetsPreference);
+  useEffect(() => {
+    try { localStorage.setItem('hangoal-freeze-targets-v1', String(freezeTargets)); }
+    catch { /* Target locks remain available for this session. */ }
+  }, [freezeTargets]);
+  const [windowSyncMode, setWindowSyncMode] = useState<WindowSyncMode>(loadWindowSyncMode);
+  const [windowSyncStatus, setWindowSyncStatus] = useState<'idle' | 'master' | 'waiting' | 'connected' | 'unsupported' | 'error'>('idle');
+  useEffect(() => {
+    try { sessionStorage.setItem('hangoal-window-sync-mode-v1', windowSyncMode); }
+    catch { /* Sync mode remains available for the current tab. */ }
+  }, [windowSyncMode]);
+  useEffect(() => {
+    try { localStorage.setItem('hangoal-tolerance-mode-v1', toleranceMode); }
+    catch { /* The current session remains usable if storage is disabled. */ }
+  }, [toleranceMode]);
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
   const [transposeSemitones, setTransposeSemitones] = useState<number>(() => loadTuningPreferences().transposeSemitones);
   const [strobeSensitivity, setStrobeSensitivity] = useState<number>(() => loadTuningPreferences().strobeSensitivity);
@@ -238,6 +394,11 @@ export default function App() {
 
   // Selected resonance focus for the main display and stability graph
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
+  const handleSelectResonanceRole = (role: 'fundamental' | 'fifth' | 'octave') => {
+    if (windowSyncMode === 'slave') return;
+    setSelectedRole(role);
+  };
+  const [spectrumZoomTargetHz, setSpectrumZoomTargetHz] = useState<number | null>(null);
   const [isReferenceTonePlaying, setIsReferenceTonePlaying] = useState(false);
   const ownDPlayerRef = useRef<HTMLAudioElement | null>(null);
   const [ownDLoop, setOwnDLoop] = useState(() => {
@@ -260,6 +421,10 @@ export default function App() {
   const previousTransientHoldoffRef = useRef(false);
 
   const [disabledToneNotesByScale, setDisabledToneNotesByScale] = useState<Record<string, string[]>>(loadDisabledToneNotesByScale);
+  useEffect(() => {
+    try { localStorage.setItem('hangoal-custom-tuning-view-v1', JSON.stringify(customTuningView)); }
+    catch { /* Keep custom view usable when browser storage is unavailable. */ }
+  }, [customTuningView]);
 
   // Compute tone field notes with current A4
   const toneNotes: ToneFieldNote[] = useMemo(() => {
@@ -267,14 +432,14 @@ export default function App() {
       const sourceFrequency = typeof n.frequencyHz === 'number' && Number.isFinite(n.frequencyHz) && n.frequencyHz > 0
         ? n.frequencyHz
         : midiToFreq(n.midi, a4Ref);
-      const f0 = transposeFrequencyBySemitones(sourceFrequency, transposeSemitones);
-      const displayNoteName = freqToNoteAndCents(f0, a4Ref).note;
+      const transposedFrequency = transposeFrequencyBySemitones(sourceFrequency, transposeSemitones);
       // Handpan acoustic resonances:
-      // Fundamental: f0 (e.g. D3 = 146.83 Hz)
-      // Traditional handpan partials: fundamental (1x), octave (2x), compound fifth (3x).
-      // The third partial is not the ordinary 1.5x musical fifth.
+      // Fundamental: 1x. Octave: 2x. Compound fifth: 3x (not the ordinary 1.5x fifth).
+      // Each note has independently persisted base/partial offsets for real instrument calibration.
       const key = partialTargetOffsetKey(currentScale.id, n.name);
       const offsets = partialTargetOffsets[key] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
+      const f0 = transposedFrequency * Math.pow(2, (offsets.fundamentalCents ?? 0) / 1200);
+      const displayNoteName = freqToNoteAndCents(f0, a4Ref).note;
       return {
         id: `note_${idx}_${n.name}`,
         noteName: displayNoteName,
@@ -304,8 +469,37 @@ export default function App() {
   const [selectedNote, setSelectedNote] = useState<ToneFieldNote>(toneNotes[0]);
   const [chromaticTargetMidi, setChromaticTargetMidi] = useState<number | null>(null);
   const [isPitchDialOpen, setIsPitchDialOpen] = useState(false);
+  const windowSyncPeerIdRef = useRef<string>('');
+  if (!windowSyncPeerIdRef.current) windowSyncPeerIdRef.current = createWindowSyncPeerId();
+  const windowSyncSequenceRef = useRef(0);
+  const windowSyncChannelRef = useRef<BroadcastChannel | null>(null);
+  const latestWindowSyncStateRef = useRef({
+    target: selectedNote,
+    a4Ref,
+    transposeSemitones,
+    selectedRole,
+    toleranceOverrideCents,
+    toleranceMode,
+    strobeSensitivity,
+  });
+  latestWindowSyncStateRef.current = {
+    target: selectedNote,
+    a4Ref,
+    transposeSemitones,
+    selectedRole,
+    toleranceOverrideCents,
+    toleranceMode,
+    strobeSensitivity,
+  };
 
   useEffect(() => {
+    // A zoom belongs to the previous target band; reset the view when the target note changes.
+    setSpectrumZoomTargetHz(null);
+  }, [selectedNote.id, selectedNote.frequency]);
+
+  useEffect(() => {
+    // A slave uses the master's exact target frequencies instead of re-deriving them from its local scale.
+    if (windowSyncMode === 'slave') return;
     if (chromaticTargetMidi !== null) {
       const chromaticTarget = buildChromaticTargetNote(chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets);
       if (chromaticTarget) setSelectedNote(chromaticTarget);
@@ -314,11 +508,89 @@ export default function App() {
     if (toneNotes.length > 0) {
       setSelectedNote((previous) => enabledToneNotes.find((note) => note.id === previous.id) ?? enabledToneNotes[0] ?? toneNotes[0]);
     }
-  }, [toneNotes, enabledToneNotes, chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets]);
+  }, [toneNotes, enabledToneNotes, chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets, windowSyncMode]);
+
+  useEffect(() => {
+    if (windowSyncMode === 'off') {
+      setWindowSyncStatus('idle');
+      return;
+    }
+    if (typeof BroadcastChannel === 'undefined') {
+      setWindowSyncStatus('unsupported');
+      return;
+    }
+
+    let channel: BroadcastChannel;
+    try {
+      channel = new BroadcastChannel('hangoal-strobe-sync-v1');
+    } catch {
+      setWindowSyncStatus('unsupported');
+      return;
+    }
+    windowSyncChannelRef.current = channel;
+    let lastSenderId: string | null = null;
+    let lastSequence = -1;
+
+    const sendCurrentState = () => {
+      const current = latestWindowSyncStateRef.current;
+      const message = createWindowSyncState(windowSyncPeerIdRef.current, ++windowSyncSequenceRef.current, current);
+      if (message) channel.postMessage(message);
+    };
+
+    const onMessage = (event: MessageEvent<unknown>) => {
+      const message = normalizeWindowSyncMessage(event.data);
+      if (!message || message.senderId === windowSyncPeerIdRef.current) return;
+
+      if (windowSyncMode === 'master') {
+        if (message.type === 'request-state') sendCurrentState();
+        return;
+      }
+
+      if (message.type !== 'state') return;
+      if (message.senderId === lastSenderId && message.sequence <= lastSequence) return;
+      lastSenderId = message.senderId;
+      lastSequence = message.sequence;
+      setWindowSyncStatus('connected');
+      setSelectedNote({ ...message.target });
+      setChromaticTargetMidi(null);
+      setA4Ref(message.a4Ref);
+      setTransposeSemitones(message.transposeSemitones);
+      setSelectedRole(message.selectedRole);
+      setToleranceOverrideCents(message.toleranceOverrideCents);
+      setToleranceMode(message.toleranceMode);
+      setStrobeSensitivity(message.strobeSensitivity);
+    };
+
+    channel.addEventListener('message', onMessage);
+    if (windowSyncMode === 'master') {
+      setWindowSyncStatus('master');
+      sendCurrentState();
+    } else {
+      setWindowSyncStatus('waiting');
+      const request = createWindowSyncRequest(windowSyncPeerIdRef.current);
+      if (request) channel.postMessage(request);
+    }
+
+    return () => {
+      channel.removeEventListener('message', onMessage);
+      channel.close();
+      if (windowSyncChannelRef.current === channel) windowSyncChannelRef.current = null;
+    };
+  }, [windowSyncMode]);
+
+  useEffect(() => {
+    if (windowSyncMode !== 'master') return;
+    const channel = windowSyncChannelRef.current;
+    if (!channel) return;
+    const current = latestWindowSyncStateRef.current;
+    const message = createWindowSyncState(windowSyncPeerIdRef.current, ++windowSyncSequenceRef.current, current);
+    if (message) channel.postMessage(message);
+  }, [windowSyncMode, selectedNote, a4Ref, transposeSemitones, selectedRole, toleranceOverrideCents, toleranceMode, strobeSensitivity]);
 
   const selectedMidi = useMemo(() => midiFromFrequency(selectedNote.frequency, a4Ref), [selectedNote.frequency, a4Ref]);
 
   const handleSetTranspose = (value: number) => {
+    if (freezeTargets || windowSyncMode === 'slave') return;
     const next = Math.max(-12, Math.min(12, Math.round(value)));
     setTransposeSemitones(next);
     setChromaticTargetMidi(null);
@@ -326,6 +598,7 @@ export default function App() {
   };
 
   const handleSelectChromaticMidi = (midi: number) => {
+    if (windowSyncMode === 'slave') return;
     const target = buildChromaticTargetNote(midi, a4Ref, currentScale.id, partialTargetOffsets);
     if (!target) return;
     autoDetectionRef.current = null;
@@ -337,12 +610,37 @@ export default function App() {
   };
 
   const handleSelectToneFieldNote = (note: ToneFieldNote) => {
+    if (windowSyncMode === 'slave') return;
     setChromaticTargetMidi(null);
     autoDetectionRef.current = null;
     setSelectedNote(note);
   };
 
+  const handleRotateToneMode = (steps: number) => {
+    if (windowSyncMode === 'slave' || toneNotes.length < 2 || !Number.isFinite(steps)) return;
+    const noteIds = toneNotes.map((note) => note.id);
+    const rotatedEnabledIds = new Set(rotateEnabledMode(noteIds, [...enabledToneNoteIds], steps));
+    if (rotatedEnabledIds.size === 0) return;
+    const nextDisabledIds = noteIds.filter((id) => !rotatedEnabledIds.has(id));
+    const nextEnabledNotes = getEnabledToneNotes(toneNotes, nextDisabledIds);
+    if (nextEnabledNotes.length === 0) return;
+
+    setDisabledToneNotesByScale((previous) => {
+      const next = { ...previous };
+      if (nextDisabledIds.length > 0) next[currentScale.id] = nextDisabledIds;
+      else delete next[currentScale.id];
+      return next;
+    });
+
+    if (!rotatedEnabledIds.has(selectedNote.id)) {
+      setChromaticTargetMidi(null);
+      setSelectedNote(nextEnabledNotes[0]);
+      setSelectedRole('fundamental');
+    }
+  };
+
   const handleToggleToneNote = (noteId: string) => {
+    if (windowSyncMode === 'slave') return;
     const isCurrentlyDisabled = disabledToneNoteIds.has(noteId);
     if (!isCurrentlyDisabled && enabledToneNotes.length <= 1) return;
 
@@ -373,10 +671,11 @@ export default function App() {
   const selectedPartialOffsets = partialTargetOffsets[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
 
   const updateSelectedPartialOffset = (field: PartialTargetOffsetField, value: number) => {
+    if (freezeTargets || windowSyncMode === 'slave') return;
     setPartialTargetOffsets((previous) => {
       const current = previous[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
       const next: PartialTargetOffset = { ...current, [field]: value };
-      if (next.octaveCents === 0 && next.thirdPartialCents === 0) {
+      if ((next.fundamentalCents ?? 0) === 0 && next.octaveCents === 0 && next.thirdPartialCents === 0) {
         const copy = { ...previous };
         delete copy[selectedPartialOffsetKey];
         return copy;
@@ -385,7 +684,19 @@ export default function App() {
     });
   };
 
+
+  const handleCalibrateBuiltInRole = (role: 'fundamental' | 'fifth' | 'octave', targetHz: number, measuredHz: number) => {
+    if (freezeTargets || windowSyncMode === 'slave') return;
+    const field: PartialTargetOffsetField = role === 'fundamental'
+      ? 'fundamentalCents'
+      : role === 'fifth' ? 'thirdPartialCents' : 'octaveCents';
+    const currentOffset = selectedPartialOffsets[field] ?? 0;
+    const corrected = calibratePartialTargetOffset(currentOffset, targetHz, measuredHz);
+    if (corrected !== null) updateSelectedPartialOffset(field, corrected);
+  };
+
   const resetSelectedPartialOffsets = () => {
+    if (freezeTargets || windowSyncMode === 'slave') return;
     setPartialTargetOffsets((previous) => {
       const copy = { ...previous };
       delete copy[selectedPartialOffsetKey];
@@ -402,6 +713,7 @@ export default function App() {
   });
 
   const handleSelectScale = (scale: HandpanScale) => {
+    if (windowSyncMode === 'slave') return;
     setChromaticTargetMidi(null);
     setCurrentScale(scale);
     setInstrumentProfiles((previous) => previous.map((profile) => profile.id === activeInstrumentProfileId
@@ -410,7 +722,7 @@ export default function App() {
   };
 
   const handleApplyCustomScale = (name: string, source: string): boolean => {
-    if (!activeInstrumentProfile) return false;
+    if (windowSyncMode === 'slave' || !activeInstrumentProfile) return false;
     const scaleId = 'custom-' + activeInstrumentProfileId;
     const parsed = parseCustomScale(name, source, scaleId);
     if (!parsed) return false;
@@ -424,6 +736,7 @@ export default function App() {
   };
 
   const handleSelectInstrumentProfile = (profileId: string) => {
+    if (windowSyncMode === 'slave') return;
     setChromaticTargetMidi(null);
     const profilesWithCurrentSettings = instrumentProfiles.map((profile) =>
       profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
@@ -439,6 +752,7 @@ export default function App() {
   };
 
   const handleCreateInstrumentProfile = (name: string) => {
+    if (windowSyncMode === 'slave') return;
     const trimmedName = name.trim().slice(0, 80);
     if (!trimmedName || !activeInstrumentProfile) return;
     const id = 'instrument-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
@@ -458,7 +772,7 @@ export default function App() {
   };
 
   const handleImportInstrumentProfiles = (backup: unknown): boolean => {
-    if (!activeInstrumentProfile) return false;
+    if (windowSyncMode === 'slave' || !activeInstrumentProfile) return false;
     const imported = parseInstrumentProfileBackup(
       backup,
       PRESET_SCALES.map((scale) => scale.id),
@@ -503,6 +817,21 @@ export default function App() {
           throw new Error('Egy vagy több egyedi sávbeállítás érvénytelen.');
         }
       }
+      const rawPitchPipeModes = localStorage.getItem('hangoal-strobe-pitch-pipe-modes-v1');
+      let pitchPipeModes: ReturnType<typeof normalizePitchPipeModes> = {};
+      if (rawPitchPipeModes) {
+        const storedPitchPipeModes: unknown = JSON.parse(rawPitchPipeModes);
+        if (!storedPitchPipeModes || typeof storedPitchPipeModes !== 'object' || Array.isArray(storedPitchPipeModes)) {
+          throw new Error('A sávonkénti referenciahang beállítás sérült.');
+        }
+        pitchPipeModes = normalizePitchPipeModes(storedPitchPipeModes);
+        if (Object.keys(pitchPipeModes).length !== Object.keys(storedPitchPipeModes).length) {
+          throw new Error('Egy vagy több sávonkénti referenciahang-beállítás érvénytelen.');
+        }
+      }
+      const configuredPipeIds = new Set(['fundamental', 'fifth', 'octave', ...customStrobeBands.map((band) => band.id)]);
+      pitchPipeModes = Object.fromEntries(Object.entries(pitchPipeModes).filter(([id]) => configuredPipeIds.has(id)));
+
       const backup = {
         schemaVersion: 2,
         exportedAt: new Date().toISOString(),
@@ -510,6 +839,8 @@ export default function App() {
           autoDetect: autoDetectionMode !== 'off',
           autoDetectionMode,
           toleranceOverrideCents,
+          toleranceMode,
+          freezeTargets,
           transposeSemitones,
           strobeSensitivity,
           readoutMode,
@@ -519,6 +850,7 @@ export default function App() {
         },
         disabledToneNotesByScale,
         customStrobeBands,
+        pitchPipeModes,
         measurements: logs,
       };
       const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' }));
@@ -537,6 +869,7 @@ export default function App() {
   };
 
   const handleImportConfiguration = (value: unknown): boolean => {
+    if (windowSyncMode === 'slave') return false;
     if (value && typeof value === 'object' && !Array.isArray(value) &&
       (value as Record<string, unknown>).schemaVersion === 2) {
       const currentProfile = instrumentProfiles.find((profile) => profile.id === activeInstrumentProfileId);
@@ -556,11 +889,31 @@ export default function App() {
         PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId);
       if (!selectedScale) return false;
 
-      // Write cross-component state before updating React state; if storage fails, reject without a partial restore.
+      // Validate and persist every cross-panel preference before applying React state.
+      const storageEntries: Array<[string, string]> = [
+        ['hangoal-custom-strobe-bands-v1', JSON.stringify(parsed.customStrobeBands)],
+        ['hangoal-strobe-pitch-pipe-modes-v1', JSON.stringify(parsed.pitchPipeModes)],
+        ['hangoal-freeze-targets-v1', String(parsed.settings.freezeTargets)],
+        ['hangoal-tolerance-mode-v1', parsed.settings.toleranceMode],
+      ];
+      let previousStorage: Array<[string, string | null]>;
       try {
-        localStorage.setItem('hangoal-custom-strobe-bands-v1', JSON.stringify(parsed.customStrobeBands));
+        previousStorage = storageEntries.map(([key]) => [key, localStorage.getItem(key)]);
       } catch (error) {
-        console.warn('Nem sikerült menteni az importált egyedi stroboszkópsávokat:', error);
+        console.warn('Nem sikerült ellenőrizni a helyi konfigurációs tárhelyet:', error);
+        return false;
+      }
+      try {
+        storageEntries.forEach(([key, storedValue]) => localStorage.setItem(key, storedValue));
+      } catch (error) {
+        // Roll back every key when persistence is unavailable; do not leave a partly imported configuration.
+        previousStorage.forEach(([key, previous]) => {
+          try {
+            if (previous === null) localStorage.removeItem(key);
+            else localStorage.setItem(key, previous);
+          } catch { /* Keep best-effort rollback silent; no React state has changed yet. */ }
+        });
+        console.warn('Nem sikerült menteni a teljes importált Hangoal-konfigurációt:', error);
         return false;
       }
 
@@ -573,6 +926,8 @@ export default function App() {
       setAutoDetectionMode(parsed.settings.autoDetectionMode);
       setSingleShotCaptured(false);
       setToleranceOverrideCents(parsed.settings.toleranceOverrideCents);
+      setToleranceMode(parsed.settings.toleranceMode);
+      setFreezeTargets(parsed.settings.freezeTargets);
       setTransposeSemitones(parsed.settings.transposeSemitones);
       setStrobeSensitivity(parsed.settings.strobeSensitivity);
       setReadoutMode(parsed.settings.readoutMode);
@@ -582,6 +937,8 @@ export default function App() {
       setSelectedRole('fundamental');
       autoDetectionRef.current = null;
       window.dispatchEvent(new Event('hangoal-custom-strobe-bands-updated'));
+      window.dispatchEvent(new Event('hangoal-custom-strobe-bands-changed'));
+      window.dispatchEvent(new Event('hangoal-strobe-pitch-pipe-modes-updated'));
       return true;
     }
 
@@ -590,6 +947,7 @@ export default function App() {
   };
 
   const handleRenameInstrumentProfile = (profileId: string, name: string) => {
+    if (windowSyncMode === 'slave') return;
     const trimmedName = name.trim().slice(0, 80);
     if (!trimmedName) return;
     setInstrumentProfiles((previous) => previous.map((profile) =>
@@ -598,7 +956,7 @@ export default function App() {
   };
 
   const handleDeleteInstrumentProfile = (profileId: string) => {
-    if (instrumentProfiles.length <= 1) return;
+    if (windowSyncMode === 'slave' || instrumentProfiles.length <= 1) return;
     const profilesWithCurrentSettings = instrumentProfiles.map((profile) =>
       profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
     );
@@ -771,7 +1129,7 @@ export default function App() {
         analysisRateWindowRef.current = rateSample.window;
         if (rateSample.fps !== null) setAnalysisFps(rateSample.fps);
 
-        if (!isReferenceTonePlaying && isDetectionArmed(autoDetectionMode, singleShotCaptured) && chromaticTargetMidi === null) {
+        if (windowSyncMode !== 'slave' && !isReferenceTonePlaying && isDetectionArmed(autoDetectionMode, singleShotCaptured) && chromaticTargetMidi === null) {
           const detected = bbAudioEngine.detectNote(
             enabledToneNotes.map((note) => ({ id: note.id, noteName: note.noteName, frequency: note.frequency }))
           );
@@ -831,7 +1189,49 @@ export default function App() {
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isSignalInputActive, isReferenceTonePlaying, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
+  }, [isSignalInputActive, isReferenceTonePlaying, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi, windowSyncMode]);
+
+  const handleSelectAudioInputDevice = useCallback(async (deviceId: string) => {
+    setSelectedAudioInputDeviceId(deviceId);
+    try { localStorage.setItem('hangoal-audio-input-device-v1', deviceId); } catch { /* Ignore storage failures. */ }
+    if (!isListening) {
+      setAudioIoMessage(deviceId ? 'A kiválasztott mikrofont a következő mérés indításakor használom.' : 'A mikrofonválasztás automatikus módra állítva.');
+      return;
+    }
+    bbAudioEngine.stopMicrophone();
+    setIsListening(false);
+    setHasSignal(false);
+    setInputLevelDb(-100);
+    const ok = await bbAudioEngine.startMicrophone(deviceId || null);
+    if (ok) {
+      setAutoGainControlStatus(bbAudioEngine.getAutoGainControlStatus());
+      setIsListening(true);
+      setMicError('');
+      setAudioIoMessage('A mikrofonváltás sikerült.');
+      void refreshAudioDevices();
+    } else {
+      setAutoGainControlStatus(null);
+      setMicError(bbAudioEngine.getErrorMessage() || 'A kiválasztott mikrofon nem indítható el.');
+      setAudioIoMessage('A mikrofonváltás nem sikerült. Válassz másik bemenetet, vagy állítsd automatikusra.');
+    }
+  }, [isListening, refreshAudioDevices]);
+
+  const handleSelectAudioOutputDevice = useCallback(async (deviceId: string) => {
+    if (!audioOutputSelectionSupported) {
+      setAudioIoMessage('A kimeneti eszköz külön választását ez a böngésző nem támogatja.');
+      return;
+    }
+    setAudioIoMessage('Kimeneti eszköz beállítása…');
+    const ok = await bbAudioEngine.setOutputDevice(deviceId || null);
+    if (ok) {
+      setSelectedAudioOutputDeviceId(deviceId);
+      try { localStorage.setItem('hangoal-audio-output-device-v1', deviceId); } catch { /* Ignore storage failures. */ }
+      setAudioIoMessage(deviceId ? 'A kiválasztott hangkimenet aktív.' : 'A rendszer alapértelmezett hangkimenete aktív.');
+    } else {
+      setAudioIoMessage(bbAudioEngine.getErrorMessage() || 'A kimeneti eszköz nem választható ki.');
+      void refreshAudioDevices();
+    }
+  }, [audioOutputSelectionSupported, refreshAudioDevices]);
 
   // Toggle microphone
   const handleToggleMic = async () => {
@@ -868,12 +1268,14 @@ export default function App() {
         setOwnDAudioCurrentTime(0);
         setIsOwnDPlaying(false);
       }
-      const ok = await bbAudioEngine.startMicrophone();
+      if (selectedAudioOutputDeviceId && audioOutputSelectionSupported) await bbAudioEngine.setOutputDevice(selectedAudioOutputDeviceId);
+      const ok = await bbAudioEngine.startMicrophone(selectedAudioInputDeviceId || null);
       if (ok) {
         analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
         setAnalysisFps(null);
         setAutoGainControlStatus(bbAudioEngine.getAutoGainControlStatus());
         setIsListening(true);
+        void refreshAudioDevices();
       } else {
         setAutoGainControlStatus(null);
         setMicError(bbAudioEngine.getErrorMessage() || 'A mikrofon nem indítható el. Ellenőrizd az engedélyeket.');
@@ -981,8 +1383,66 @@ export default function App() {
     setIsReferenceTonePlaying(true);
   };
 
+  /**
+   * One transport handler is shared by the Hangolás panel and the persistent
+   * controls shown on the other tabs. The audio node itself stays mounted above
+   * the tab switch, so changing views cannot break the analyser connection.
+   */
+  const handleToggleOwnDPlayback = () => {
+    const player = ownDPlayerRef.current;
+    if (!player) return;
+
+    if (isOwnDPlaying) {
+      player.pause();
+      player.currentTime = 0;
+      bbAudioEngine.stopAudioElementInput();
+      setIsFileInputActive(false);
+      setOwnDAudioCurrentTime(0);
+      setIsOwnDPlaying(false);
+      setHasSignal(false);
+      return;
+    }
+
+    if (isListening || isReferenceTonePlaying) return;
+    setOwnDAudioError('');
+
+    const startPlayback = async () => {
+      const playPromise = player.play();
+      const inputPromise = bbAudioEngine.startAudioElementInput(player);
+      const [, inputReady] = await Promise.all([playPromise, inputPromise]);
+      if (!inputReady) throw new Error('A hangfájl nem kapcsolható az elemzőhöz.');
+      analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
+      setAnalysisFps(null);
+      setIsFileInputActive(true);
+      setIsOwnDPlaying(true);
+    };
+
+    void startPlayback().catch((cause) => {
+      player.pause();
+      bbAudioEngine.stopAudioElementInput();
+      setIsFileInputActive(false);
+      setIsOwnDPlaying(false);
+      setHasSignal(false);
+      setOwnDAudioError(cause instanceof Error
+        ? cause.message
+        : 'A lejátszás nem indult el. Érintsd meg újra a Lejátszás gombot.');
+    });
+  };
+
+  const handleToggleOwnDLoop = () => {
+    setOwnDLoop((previous) => {
+      const next = !previous;
+      try {
+        localStorage.setItem('hangoal-own-d-loop-v1', String(next));
+      } catch {
+        // Keep playback usable when browser storage is unavailable.
+      }
+      return next;
+    });
+  };
+
   const activeCents = activeResonance.deviationCents;
-  const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz, toleranceOverrideCents);
+  const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz, toleranceOverrideCents, toleranceMode);
 
   // Textual assessment (e.g. "(kissé magas)", "(kissé mély)", "(pontos)")
   const isHeldReading = activeResonance.status === 'held' && activeCents !== null;
@@ -1030,7 +1490,7 @@ export default function App() {
             ? action === 'next-note' ? 0 : enabledToneNotes.length - 1
             : (currentIndex + (action === 'next-note' ? 1 : -1) + enabledToneNotes.length) % enabledToneNotes.length;
           keyboardActionsRef.current.handleSelectToneFieldNote(enabledToneNotes[nextIndex]);
-          setSelectedRole('fundamental');
+          if (windowSyncMode !== 'slave') setSelectedRole('fundamental');
           return;
         }
         case 'previous-resonance':
@@ -1038,13 +1498,14 @@ export default function App() {
           const roles = ['fundamental', 'fifth', 'octave'] as const;
           const index = roles.indexOf(selectedRole);
           const delta = action === 'next-resonance' ? 1 : -1;
-          setSelectedRole(roles[(index + delta + roles.length) % roles.length]);
+          if (windowSyncMode !== 'slave') setSelectedRole(roles[(index + delta + roles.length) % roles.length]);
           return;
         }
         case 'toggle-microphone':
           void keyboardActionsRef.current.handleToggleMic();
           return;
         case 'cycle-detection': {
+          if (windowSyncMode === 'slave') return;
           if (autoDetectionMode === 'single-shot' && singleShotCaptured) {
             setSingleShotCaptured(false);
             autoDetectionRef.current = null;
@@ -1080,6 +1541,7 @@ export default function App() {
     singleShotCaptured,
     chromaticTargetMidi,
     referenceToneMode,
+    windowSyncMode,
   ]);
 
   return (
@@ -1137,6 +1599,7 @@ export default function App() {
                   ? 'Egyszeri felismerés újraélesítése'
                   : 'Módváltás: folyamatos → egyszeri → ki. Egyszeri módban az első stabil felismerés után kattintással újraélesíthető.'}
                 aria-label={autoDetectionMode === 'single-shot' && singleShotCaptured ? 'Egyszeri felismerés újraélesítése' : 'Automatikus hangfelismerés módja'}
+                disabled={windowSyncMode === 'slave'}
               >
                 {autoDetectionMode === 'off'
                   ? 'AUTO KI'
@@ -1229,6 +1692,54 @@ export default function App() {
           </div>
         )}
 
+        {activeTab !== 'hangolas' && (
+          <section
+            aria-label="Közös hangforrás-vezérlés"
+            className="mb-3 rounded-xl border border-cyan-400/20 bg-cyan-950/20 px-3 py-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-white">Közös hangforrás</div>
+                <p className="mt-0.5 text-[10px] text-slate-400">
+                  {isOwnDPlaying ? 'A handpan-minta szól · az elemző aktív' : isReferenceTonePlaying ? 'A szinuszreferencia szól · az elemző aktív' : 'Indíts mintát: a minta minden fülön a közös elemzőt táplálja.'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleToggleOwnDPlayback}
+                  disabled={isListening || isReferenceTonePlaying}
+                  className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-200 disabled:opacity-40"
+                >
+                  {isOwnDPlaying ? 'Minta leállítása' : 'Minta lejátszása'}
+                </button>
+                <label className="flex items-center gap-1.5 text-[10px] text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={ownDLoop}
+                    onChange={handleToggleOwnDLoop}
+                    className="h-4 w-4 accent-amber-400"
+                  />
+                  Loop
+                </label>
+                {isReferenceTonePlaying && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      bbAudioEngine.stopTone();
+                      setIsReferenceTonePlaying(false);
+                    }}
+                    className="rounded-full border border-rose-400/30 px-3 py-2 text-[11px] font-semibold text-rose-200"
+                  >
+                    Szinusz leállítása
+                  </button>
+                )}
+              </div>
+            </div>
+            {ownDAudioError && <p role="alert" className="mt-2 text-[10px] text-rose-300">{ownDAudioError}</p>}
+          </section>
+        )}
+
               <audio
                 className="hidden"
                 aria-hidden="true"
@@ -1280,7 +1791,50 @@ export default function App() {
         {/* ================= TAB 1: MAIN TUNING SCREEN ================= */}
         {activeTab === 'hangolas' && (
           <div className="flex flex-col gap-1.5 flex-1 justify-between">
-            <section aria-label="Saját D handpan felvétele" className="mx-1 mb-2 rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-400/10 to-slate-900 px-3 py-3">
+            <section aria-label="Egyéni hangoló munkanézet" className="mx-1 mb-2 rounded-xl border border-cyan-400/25 bg-slate-900/70 px-3 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <label className="flex min-w-0 items-center gap-2 text-xs font-semibold text-white">
+                  <input type="checkbox" checked={customTuningView.enabled} onChange={(event) => setCustomTuningView((previous) => ({ ...previous, enabled: event.target.checked }))} className="h-4 w-4 shrink-0 accent-cyan-400" />
+                  <span>Egyéni nézet</span>
+                </label>
+                <button type="button" onClick={() => setIsTuningPanelPickerOpen((open) => !open)} aria-expanded={isTuningPanelPickerOpen} className="shrink-0 rounded-full border border-cyan-400/30 px-3 py-2 text-[10px] font-semibold text-cyan-200">
+                  Panelek · {customTuningView.panels.length}/{TUNING_VIEW_PANELS.length} {isTuningPanelPickerOpen ? '−' : '+'}
+                </button>
+              </div>
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+                {customTuningView.enabled ? 'Csak a kipipált elemek jelennek meg a Hangolás fülön. A választásod automatikusan mentődik.' : 'Egyéni nézet kikapcsolva: minden panel megjelenik. A kijelölésed megmarad, ha újra bekapcsolod.'}
+              </p>
+              {customTuningView.enabled && customTuningView.panels.length === 0 && (
+                <p role="status" className="mt-2 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2 text-[10px] leading-relaxed text-amber-200">
+                  Nincs kijelölt panel. Nyisd meg a „Panelek” listát, és jelöld be a szükséges eszközöket, vagy válaszd a „Kompakt alapnézet” lehetőséget.
+                </p>
+              )}
+              {isTuningPanelPickerOpen && (
+                <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
+                  <div className="grid max-h-[45vh] grid-cols-1 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2">
+                    {TUNING_VIEW_PANELS.map((panel) => (
+                      <label key={panel.id} className="flex min-w-0 items-start gap-2 rounded-lg border border-white/5 bg-black/15 px-2.5 py-2">
+                        <input type="checkbox" checked={customTuningView.panels.includes(panel.id)} onChange={(event) => setCustomTuningView((previous) => ({
+                          ...previous,
+                          panels: event.target.checked ? [...previous.panels.filter((item) => item !== panel.id), panel.id] : previous.panels.filter((item) => item !== panel.id),
+                        }))} className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400" />
+                        <span className="min-w-0">
+                          <span className="block text-[11px] font-semibold leading-tight text-slate-200">{panel.label}</span>
+                          <span className="mt-0.5 block text-[10px] leading-snug text-slate-500">{panel.description}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button type="button" onClick={() => setCustomTuningView({ enabled: true, panels: [...DEFAULT_TUNING_VIEW_PANELS] })} className="rounded-lg border border-cyan-400/25 px-3 py-2 text-[10px] font-semibold text-cyan-200">Kompakt alapnézet</button>
+                    <button type="button" onClick={() => setCustomTuningView({ enabled: true, panels: TUNING_VIEW_PANELS.map((panel) => panel.id) })} className="rounded-lg border border-slate-600 px-3 py-2 text-[10px] font-semibold text-slate-300">Mind kijelölése</button>
+                    <button type="button" onClick={() => setCustomTuningView((previous) => ({ ...previous, enabled: false }))} className="rounded-lg border border-slate-600 px-3 py-2 text-[10px] font-semibold text-slate-300">Minden panel megjelenítése</button>
+                  </div>
+                </div>
+              )}
+            </section>
+            {shouldShowTuningPanel('samplePlayback') && (
+<section aria-label="Saját D handpan felvétele" className="mx-1 mb-2 rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-400/10 to-slate-900 px-3 py-3">
 
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -1289,39 +1843,7 @@ export default function App() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    const player = ownDPlayerRef.current;
-                    if (!player) return;
-                    if (isOwnDPlaying) {
-                      player.pause();
-                      player.currentTime = 0;
-                      bbAudioEngine.stopAudioElementInput();
-                      setIsFileInputActive(false);
-                      setOwnDAudioCurrentTime(0);
-                      setIsOwnDPlaying(false);
-                    } else if (!isListening && !isReferenceTonePlaying) {
-                      setOwnDAudioError('');
-                      const startPlayback = async () => {
-                        const playPromise = player.play();
-                        const inputPromise = bbAudioEngine.startAudioElementInput(player);
-                        const [, inputReady] = await Promise.all([playPromise, inputPromise]);
-                        if (!inputReady) throw new Error('A hangfájl nem kapcsolható az elemzőhöz.');
-                        analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
-                        setAnalysisFps(null);
-                        setIsFileInputActive(true);
-                        setIsOwnDPlaying(true);
-                      };
-                      void startPlayback().catch((error) => {
-                        player.pause();
-                        bbAudioEngine.stopAudioElementInput();
-                        setIsFileInputActive(false);
-                        setIsOwnDPlaying(false);
-                        setOwnDAudioError(error instanceof Error
-                          ? error.message
-                          : 'A lejátszás nem indult el. Érintsd meg újra a Lejátszás gombot.');
-                      });
-                    }
-                  }}
+                  onClick={handleToggleOwnDPlayback}
                   className="shrink-0 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20"
                   aria-label={isOwnDPlaying ? "Saját D leállítása" : "Saját D lejátszása"}
                   disabled={isListening || isReferenceTonePlaying}
@@ -1384,20 +1906,14 @@ export default function App() {
                 <input
                   type="checkbox"
                   checked={ownDLoop}
-                  onChange={(event) => {
-                    const nextLoop = event.target.checked;
-                    setOwnDLoop(nextLoop);
-                    try {
-                      localStorage.setItem('hangoal-own-d-loop-v1', String(nextLoop));
-                    } catch {
-                      // Keep playback usable when browser storage is unavailable.
-                    }
-                  }}
+                  onChange={handleToggleOwnDLoop}
                   className="h-4 w-4 accent-amber-400"
                 />
                 Loopolva (folyamatos ismétlés)
               </label>
             </section>
+              )}
+{shouldShowTuningPanel('recordingAnalysis') && (
             <OwnDRecordingAnalysis
               audioRef={ownDPlayerRef}
               noteCandidates={enabledToneNotes.map((note) => ({
@@ -1411,9 +1927,11 @@ export default function App() {
                 updateSelectedPartialOffset('thirdPartialCents', thirdPartialCents);
               }}
             />
+              )}
             {/* ================= SECTION B: MAIN PITCH & STROBE BANDS ================= */}
             <div>
               {/* Main Pitch Row (Large D3, +2.3 cent, Alaphang dropdown) */}
+{shouldShowTuningPanel('pitchReadout') && (
               <div className="flex items-start justify-between px-1 pt-1 pb-1">
                 {/* Note Name & Frequency */}
                 <div className="flex flex-col">
@@ -1442,10 +1960,12 @@ export default function App() {
                 {/* Resonance Role Selector Pill */}
                 <button
                   onClick={() => {
+                    if (windowSyncMode === 'slave') return;
                     const roles: ('fundamental' | 'fifth' | 'octave')[] = ['fundamental', 'fifth', 'octave'];
                     const nextIdx = (roles.indexOf(selectedRole) + 1) % roles.length;
                     setSelectedRole(roles[nextIdx]);
                   }}
+                  disabled={windowSyncMode === 'slave'}
                   className="px-2.5 py-1.5 rounded-full border border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#f59e0b] text-xs font-medium flex items-center gap-1 hover:bg-[#f59e0b]/20 transition"
                 >
                   <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}</span>
@@ -1453,6 +1973,9 @@ export default function App() {
                 </button>
               </div>
 
+
+              )}{shouldShowTuningPanel('referenceTone') && (
+              <>
               <div className="mb-1 flex items-center justify-between gap-2 px-1">
                 <span className="text-[10px] text-slate-500">
                   Célreferencia · {referenceToneHz.toFixed(3)} Hz
@@ -1494,6 +2017,10 @@ export default function App() {
                 </p>
               )}
 
+
+              </>
+              )}{shouldShowTuningPanel('pitchDial') && (
+              <>
               <div className="mb-1 flex justify-end px-1">
                 <button
                   type="button"
@@ -1505,7 +2032,10 @@ export default function App() {
                 </button>
               </div>
               {isPitchDialOpen && <BBPitchDial selectedMidi={selectedMidi} onSelectMidi={handleSelectChromaticMidi} />}
+              </>
+              )}
 
+{shouldShowTuningPanel('transposition') && (
               <section className="my-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -1513,15 +2043,74 @@ export default function App() {
                     <div className="mt-0.5 text-[10px] text-slate-400">Félhangok · a kromatikus tárcsa közvetlen célhangját nem módosítja</div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <button type="button" aria-label="Transzponálás egy félhanggal lejjebb" onClick={() => handleSetTranspose(transposeSemitones - 1)} disabled={transposeSemitones <= -12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">−</button>
+                    <button type="button" aria-label="Transzponálás egy félhanggal lejjebb" onClick={() => handleSetTranspose(transposeSemitones - 1)} disabled={freezeTargets || transposeSemitones <= -12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">−</button>
                     <span className="min-w-[54px] text-center font-mono text-xs font-semibold text-amber-200">{transposeSemitones > 0 ? '+' : ''}{transposeSemitones} st</span>
-                    <button type="button" aria-label="Transzponálás egy félhanggal feljebb" onClick={() => handleSetTranspose(transposeSemitones + 1)} disabled={transposeSemitones >= 12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">+</button>
-                    <button type="button" onClick={() => handleSetTranspose(0)} disabled={transposeSemitones === 0} className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-400 disabled:opacity-30">Nullázás</button>
+                    <button type="button" aria-label="Transzponálás egy félhanggal feljebb" onClick={() => handleSetTranspose(transposeSemitones + 1)} disabled={freezeTargets || transposeSemitones >= 12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">+</button>
+                    <button type="button" onClick={() => handleSetTranspose(0)} disabled={freezeTargets || windowSyncMode === 'slave' || transposeSemitones === 0} className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-400 disabled:opacity-30">Nullázás</button>
                   </div>
                 </div>
               </section>
+              )}
 
               {/* Three Stroboscope Bands (Alap, Kvint, Oktáv) */}
+              <section aria-label="Hangolási toleranciamód" className="my-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white">Stroboszkóp toleranciája</div>
+                    <p className="mt-0.5 text-[10px] leading-relaxed text-slate-400">Csak a színjelzést módosítja, a mért Hz- és centértékeket nem.</p>
+                  </div>
+                  <select aria-label="Stroboszkóp tolerancia módja" value={toleranceMode} onChange={(event) => setToleranceMode(normalizeTuningToleranceMode(event.target.value))} disabled={windowSyncMode === 'slave'} className="max-w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-[11px] text-white">
+                    <option value="auto">Automatikus / rögzített cent</option>
+                    <option value="any">Mindig elfogadott (mindig zöld)</option>
+                    <option value="off">Soha ne legyen zöld</option>
+                  </select>
+                </div>
+                <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-300">
+                  <input type="checkbox" checked={freezeTargets} onChange={(event) => setFreezeTargets(event.target.checked)} className="h-4 w-4 accent-cyan-400" />
+                  <span>{freezeTargets ? 'Célértékek befagyasztva: referenciafrekvencia, transzponálás és felhangkorrekció' : 'Célértékek befagyasztása (freeze)'}</span>
+                </label>
+              </section>
+
+              <section aria-label="Master/slave hangolóablak-szinkron" className="my-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white">Többablakos Master / Slave</div>
+                    <p className="mt-0.5 text-[10px] leading-relaxed text-slate-400">Azonos eredetű Hangoal-ablakok között szinkronizálja a hangot, az A4-referenciát, a transzponálást és az 1×/2×/3× célfrekvenciákat.</p>
+                  </div>
+                  <select
+                    aria-label="Master/slave szinkronmód"
+                    value={windowSyncMode}
+                    onChange={(event) => {
+                      const nextMode = event.target.value as WindowSyncMode;
+                      if (nextMode !== 'off' && typeof BroadcastChannel === 'undefined') {
+                        setWindowSyncStatus('unsupported');
+                        return;
+                      }
+                      setWindowSyncMode(nextMode);
+                    }}
+                    className="max-w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-[11px] text-white"
+                  >
+                    <option value="off">Kikapcsolva</option>
+                    <option value="master">Master · vezérlő</option>
+                    <option value="slave">Slave · követő</option>
+                  </select>
+                </div>
+                {(windowSyncMode !== 'off' || windowSyncStatus === 'unsupported') && (
+                  <p role="status" className={'mt-2 text-[10px] ' + (windowSyncStatus === 'connected' || windowSyncStatus === 'master' ? 'text-emerald-300' : windowSyncStatus === 'unsupported' || windowSyncStatus === 'error' ? 'text-rose-300' : 'text-amber-200')}>
+                    {windowSyncStatus === 'master'
+                      ? 'Ez az ablak a Master; a követő ablakok kérésre megkapják az aktuális célhangot.'
+                      : windowSyncStatus === 'connected'
+                        ? 'Kapcsolódva a Masterhez; a célhang és a mérési beállítások szinkronban vannak.'
+                        : windowSyncStatus === 'unsupported'
+                          ? 'Ez a böngésző nem támogatja a többablakos szinkront; válaszd a Kikapcsolva módot.'
+                          : windowSyncStatus === 'error'
+                            ? 'A szinkroncsatorna nem indítható el ebben az ablakban.'
+                            : 'Master ablak keresése… nyisd meg egy másik Hangoal-ablakban a Master módot.'}
+                  </p>
+                )}
+              </section>
+
+{shouldShowTuningPanel('stroboscope') && (
               <BBStrobeBands
                 alap={alap}
                 kvint={kvint}
@@ -1529,25 +2118,38 @@ export default function App() {
                 hasSignal={hasSignal}
                 active={isSignalInputActive}
                 transientHoldoff={transientHoldoff}
+                freezeTargetSettings={freezeTargets || windowSyncMode === 'slave'}
                 baseFrequencyHz={selectedNote.frequency}
                 selectedRole={selectedRole}
-                onSelectRole={setSelectedRole}
+                onSelectRole={handleSelectResonanceRole}
                 toleranceOverrideCents={toleranceOverrideCents}
+                toleranceMode={toleranceMode}
                 strobeSensitivity={strobeSensitivity}
-                onChangeStrobeSensitivity={setStrobeSensitivity}
+                onChangeStrobeSensitivity={(value) => { if (windowSyncMode !== 'slave') setStrobeSensitivity(value); }}
+                onZoomTargetHz={setSpectrumZoomTargetHz}
+                onCalibrateBuiltInRole={handleCalibrateBuiltInRole}
               />
+              )}
             </div>
 
             {/* ================= SECTION C: FREQUENCY SPECTRUM ================= */}
+{shouldShowTuningPanel('spectrum') && (
             <BBSpectrum
               alap={alap}
               kvint={kvint}
               oktav={oktav}
               hasSignal={hasSignal}
               toleranceOverrideCents={toleranceOverrideCents}
-              onSelectPeak={setSelectedRole}
+              toleranceMode={toleranceMode}
+              onSelectPeak={handleSelectResonanceRole}
+              onZoomTargetHz={setSpectrumZoomTargetHz}
+              zoomTargetHz={spectrumZoomTargetHz}
+              customStrobeBands={customStrobeBands}
+              onClearZoom={() => setSpectrumZoomTargetHz(null)}
             />
+              )}
 
+{shouldShowTuningPanel('diagnostics') && (
             <BBSpectrumDiagnostics
               active={isSignalInputActive}
               hasSignal={hasSignal}
@@ -1556,7 +2158,10 @@ export default function App() {
               oktav={oktav}
               kvint={kvint}
             />
+              )}
 
+{shouldShowTuningPanel('measurementCards') && (
+              <>
             <div className="my-1 flex items-center justify-between gap-3 px-1">
               <label htmlFor="hangoal-readout-mode" className="text-[11px] text-slate-400">Mérési kártyák kijelzése</label>
               <select
@@ -1581,11 +2186,15 @@ export default function App() {
               selectedRole={selectedRole}
               onSelectRole={setSelectedRole}
               toleranceOverrideCents={toleranceOverrideCents}
+              toleranceMode={toleranceMode}
               readoutMode={readoutMode}
               a4Ref={a4Ref}
             />
 
-            {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
+
+              </>
+              )}            {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
+{shouldShowTuningPanel('stabilityGraph') && (
             <BBStabilityGraph
               roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
               hasSignal={hasSignal}
@@ -1594,7 +2203,9 @@ export default function App() {
               toleranceOverrideCents={toleranceOverrideCents}
               standardDeviationCents={standardDeviationCents}
             />
+              )}
 
+{shouldShowTuningPanel('keyboardShortcuts') && (
             <div className="mt-2">
               <button
                 type="button"
@@ -1620,6 +2231,7 @@ export default function App() {
                 </div>
               )}
             </div>
+            )}
           </div>
         )}
 
@@ -1628,17 +2240,17 @@ export default function App() {
           <div className="flex-1 flex flex-col gap-2 py-1 min-h-0">
             <BBSpectrumWaterfall active={isSignalInputActive} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
             <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
-              <button onClick={() => setSelectedRole('fundamental')} className={`rounded-lg border p-2 text-left ${selectedRole === 'fundamental' ? 'border-amber-400/60 bg-amber-400/10' : 'border-white/10 bg-slate-900/50'}`}>
+              <button disabled={windowSyncMode === 'slave'} onClick={() => handleSelectResonanceRole('fundamental')} className={`rounded-lg border p-2 text-left disabled:opacity-70 ${selectedRole === 'fundamental' ? 'border-amber-400/60 bg-amber-400/10' : 'border-white/10 bg-slate-900/50'}`}>
                 <div className="font-sans font-semibold text-amber-400">1× Alaphang</div>
                 <div className="text-white">{alap.measuredHz !== null ? alap.measuredHz.toFixed(2) + ' Hz' : '--'}</div>
                 <div className="text-slate-400">{alap.deviationCents !== null ? (alap.deviationCents > 0 ? '+' : '') + alap.deviationCents.toFixed(1) + ' cent' : '--'}</div>
               </button>
-              <button onClick={() => setSelectedRole('octave')} className={`rounded-lg border p-2 text-left ${selectedRole === 'octave' ? 'border-cyan-400/60 bg-cyan-400/10' : 'border-white/10 bg-slate-900/50'}`}>
+              <button disabled={windowSyncMode === 'slave'} onClick={() => handleSelectResonanceRole('octave')} className={`rounded-lg border p-2 text-left disabled:opacity-70 ${selectedRole === 'octave' ? 'border-cyan-400/60 bg-cyan-400/10' : 'border-white/10 bg-slate-900/50'}`}>
                 <div className="font-sans font-semibold text-cyan-400">2× Oktáv</div>
                 <div className="text-white">{oktav.measuredHz !== null ? oktav.measuredHz.toFixed(2) + ' Hz' : '--'}</div>
                 <div className="text-slate-400">{oktav.deviationCents !== null ? (oktav.deviationCents > 0 ? '+' : '') + oktav.deviationCents.toFixed(1) + ' cent' : '--'}</div>
               </button>
-              <button onClick={() => setSelectedRole('fifth')} className={`rounded-lg border p-2 text-left ${selectedRole === 'fifth' ? 'border-purple-400/60 bg-purple-400/10' : 'border-white/10 bg-slate-900/50'}`}>
+              <button disabled={windowSyncMode === 'slave'} onClick={() => handleSelectResonanceRole('fifth')} className={`rounded-lg border p-2 text-left disabled:opacity-70 ${selectedRole === 'fifth' ? 'border-purple-400/60 bg-purple-400/10' : 'border-white/10 bg-slate-900/50'}`}>
                 <div className="font-sans font-semibold text-purple-400">3× Kvint</div>
                 <div className="text-white">{kvint.measuredHz !== null ? kvint.measuredHz.toFixed(2) + ' Hz' : '--'}</div>
                 <div className="text-slate-400">{kvint.deviationCents !== null ? (kvint.deviationCents > 0 ? '+' : '') + kvint.deviationCents.toFixed(1) + ' cent' : '--'}</div>
@@ -1663,6 +2275,8 @@ export default function App() {
               notes={toneNotes}
               enabledNoteIds={enabledToneNoteIds}
               onToggleNote={handleToggleToneNote}
+              onRotateMode={handleRotateToneMode}
+              readOnly={windowSyncMode === 'slave'}
             />
           </div>
         )}
@@ -1767,9 +2381,20 @@ export default function App() {
           onExportFullConfiguration={handleExportFullConfiguration}
           a4Ref={a4Ref}
           toleranceOverrideCents={toleranceOverrideCents}
-          onChangeToleranceOverrideCents={setToleranceOverrideCents}
+          onChangeToleranceOverrideCents={(value) => { if (windowSyncMode !== 'slave') setToleranceOverrideCents(value); }}
+          freezeTargetSettings={freezeTargets || windowSyncMode === 'slave'}
+          audioInputDevices={audioInputDevices}
+          selectedAudioInputDeviceId={selectedAudioInputDeviceId}
+          onSelectAudioInputDevice={(deviceId) => { void handleSelectAudioInputDevice(deviceId); }}
+          audioOutputDevices={audioOutputDevices}
+          selectedAudioOutputDeviceId={selectedAudioOutputDeviceId}
+          onSelectAudioOutputDevice={(deviceId) => { void handleSelectAudioOutputDevice(deviceId); }}
+          onRefreshAudioDevices={() => { void refreshAudioDevices(); }}
+          isRefreshingAudioDevices={isRefreshingAudioDevices}
+          audioOutputSelectionSupported={audioOutputSelectionSupported}
+          audioIoMessage={audioIoMessage}
           onChangeA4={(value) => {
-            if (Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
+            if (!freezeTargets && windowSyncMode !== 'slave' && Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
           }}
           selectedScaleId={currentScale.id}
           onSelectScale={handleSelectScale}
@@ -1780,6 +2405,8 @@ export default function App() {
           onChangePartialTargetOffset={updateSelectedPartialOffset}
           onResetPartialTargetOffsets={resetSelectedPartialOffsets}
           sampleRateKhz={sampleRateKhz}
+          fftSize={bbAudioEngine.getFFTSize()}
+          autoGainControlStatus={autoGainControlStatus}
           isListening={isListening}
         />
       </div>

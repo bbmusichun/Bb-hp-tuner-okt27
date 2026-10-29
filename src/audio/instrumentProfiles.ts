@@ -29,7 +29,12 @@ export function parseCustomScale(name: string, source: string, id: string): Hand
     const fields = line.split(/[,\t;]/).map((field) => field.trim());
     if (fields.length !== 2) return null;
     const [noteName, rawFrequency] = fields;
-    if (!/^[A-Ga-g](?:#|b)?-?\d{1,2}(?:[+-]\d+c)?(?:\s+\(f\d+\))?$/.test(noteName)) return null;
+    const isPitchNotation = /^[A-Ga-g](?:#|b)?-?\d{1,2}(?:[+-]\d+c)?(?:\s+\(f\d+\))?$/.test(noteName);
+    // Exact-frequency Scala imports may supply user-facing degree labels such as D,
+    // F♯, "Neutral third" or solfege. Accept safe single-field labels as well as
+    // the traditional note-octave form; frequency remains the authoritative target.
+    const isSafeCustomLabel = /^[\p{L}\p{N}][\p{L}\p{N}\p{M}\s♯♭𝄫𝄪↑↓#b+\-()._]{0,63}$/u.test(noteName) && noteName.trim().length <= 64;
+    if (!isPitchNotation && !isSafeCustomLabel) return null;
     const uniquenessKey = noteName.toLowerCase();
     if (seenNames.has(uniquenessKey)) return null;
     const frequencyHz = Number(rawFrequency);

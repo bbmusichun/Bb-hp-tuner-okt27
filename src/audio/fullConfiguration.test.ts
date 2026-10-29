@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseHangoalFullConfiguration } from './fullConfiguration';
+import { MAX_CUSTOM_STROBE_BANDS } from './strobeBands';
 import type { InstrumentProfile } from './instrumentProfiles';
 
 const fallbackProfile: InstrumentProfile = {
@@ -36,6 +37,8 @@ const validBackup = () => ({
     autoDetect: true,
     autoDetectionMode: 'single-shot',
     toleranceOverrideCents: 2,
+    toleranceMode: 'off',
+    freezeTargets: true,
     transposeSemitones: -3,
     strobeSensitivity: 1.25,
     readoutMode: 'ratio',
@@ -47,6 +50,7 @@ const validBackup = () => ({
   customStrobeBands: [
     { id: 'custom-440', name: '440 Hz', source: 'custom', targetHz: 440, centsOffset: 0, enabled: true },
   ],
+  pitchPipeModes: { fundamental: 'continuous', octave: 'strike', 'custom-440': 'off' },
   measurements: [{ ...validEntry }],
 });
 
@@ -55,12 +59,15 @@ test('parses a complete validated bundle and preserves its settings', () => {
   assert.ok(result);
   assert.equal(result.settings.autoDetectionMode, 'single-shot');
   assert.equal(result.settings.transposeSemitones, -3);
+  assert.equal(result.settings.toleranceMode, 'off');
+  assert.equal(result.settings.freezeTargets, true);
   assert.equal(result.settings.strobeSensitivity, 1.25);
   assert.equal(result.settings.readoutMode, 'ratio');
   assert.equal(result.settings.referenceToneMode, 'off');
   assert.equal(result.settings.activeInstrumentProfileId, 'instrument-default');
   assert.deepEqual(result.disabledToneNotesByScale, { 'd-kurd-9': ['note-1'] });
   assert.equal(result.customStrobeBands[0].targetHz, 440);
+  assert.deepEqual(result.pitchPipeModes, { fundamental: 'continuous', octave: 'strike', 'custom-440': 'off' });
   assert.equal(result.measurements.length, 1);
 });
 
@@ -90,6 +97,35 @@ test('rejects invalid tuning values, mode names and non-custom bands', () => {
   assert.equal(parseHangoalFullConfiguration(wrongBand, ['d-kurd-9'], fallbackProfile), null);
 });
 
+
+test('keeps older schema-v2 backups compatible when tolerance, freeze and pitch-pipe modes are absent', () => {
+  const backup = validBackup() as unknown as Record<string, unknown>;
+  const settings = { ...(backup.settings as Record<string, unknown>) };
+  delete settings.toleranceMode;
+  delete settings.freezeTargets;
+  delete backup.pitchPipeModes;
+  backup.settings = settings;
+  const result = parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile);
+  assert.ok(result);
+  assert.equal(result.settings.toleranceMode, 'auto');
+  assert.equal(result.settings.freezeTargets, false);
+  assert.deepEqual(result.pitchPipeModes, {});
+});
+
+test('rejects invalid tolerance, freeze or pitch-pipe backup settings atomically', () => {
+  const invalidTolerance = validBackup();
+  invalidTolerance.settings.toleranceMode = 'loose';
+  assert.equal(parseHangoalFullConfiguration(invalidTolerance, ['d-kurd-9'], fallbackProfile), null);
+
+  const invalidFreeze = validBackup();
+  (invalidFreeze.settings as unknown as Record<string, unknown>).freezeTargets = 'true';
+  assert.equal(parseHangoalFullConfiguration(invalidFreeze, ['d-kurd-9'], fallbackProfile), null);
+
+  const invalidPipes = validBackup() as unknown as Record<string, unknown>;
+  invalidPipes.pitchPipeModes = { fundamental: 'continuous', broken: 'beep' };
+  assert.equal(parseHangoalFullConfiguration(invalidPipes, ['d-kurd-9'], fallbackProfile), null);
+});
+
 test('rejects malformed log entries and duplicate log ids', () => {
   const malformed = validBackup();
   malformed.measurements[0].fundamentalHz = -10;
@@ -112,4 +148,25 @@ test('rejects a strobe sensitivity outside the supported range', () => {
   const backup = validBackup();
   backup.settings.strobeSensitivity = 9;
   assert.equal(parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile), null);
+});
+
+
+test('supports the expanded custom strobe-band capacity in portable configuration backups', () => {
+  const makeBands = (count: number) => Array.from({ length: count }, (_unused, index) => ({
+    id: 'custom-' + index,
+    name: 'Custom ' + index,
+    source: 'custom' as const,
+    targetHz: 100 + index,
+    centsOffset: 0,
+    enabled: true,
+  }));
+  const backup = validBackup() as unknown as Record<string, unknown>;
+  backup.customStrobeBands = makeBands(MAX_CUSTOM_STROBE_BANDS);
+  const result = parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile);
+  assert.ok(result);
+  assert.equal(result.customStrobeBands.length, MAX_CUSTOM_STROBE_BANDS);
+
+  const oversized = validBackup() as unknown as Record<string, unknown>;
+  oversized.customStrobeBands = makeBands(MAX_CUSTOM_STROBE_BANDS + 1);
+  assert.equal(parseHangoalFullConfiguration(oversized, ['d-kurd-9'], fallbackProfile), null);
 });

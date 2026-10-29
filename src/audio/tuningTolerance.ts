@@ -1,9 +1,19 @@
 /**
- * Product tuning tolerance policy.
+ * Tuning tolerance and visual acceptance policy.
  *
- * This is an explicit, smooth UI threshold for the tuner; it is not a claim about
- * psychoacoustic just-noticeable differences. It should be calibrated with instrument
- * recordings and listening tests before being marketed as a perceptual model.
+ * Tolerance changes only the UI "in tune" indication. It never alters measured
+ * frequencies or cent offsets.
+ */
+export type TuningToleranceMode = 'auto' | 'any' | 'off';
+
+export function normalizeTuningToleranceMode(value: unknown): TuningToleranceMode {
+  return value === 'any' || value === 'off' || value === 'auto' ? value : 'auto';
+}
+
+/**
+ * Auto uses a calibrated adaptive threshold or a caller-specified fixed
+ * threshold. "Any" always accepts a valid measurement; "off" never paints it
+ * green. Null/invalid values are never treated as measurements.
  */
 export function tuningToleranceCents(targetHz: number, overrideCents?: number | null): number {
   if (typeof overrideCents === 'number' && Number.isFinite(overrideCents) && overrideCents >= 0.5 && overrideCents <= 20) {
@@ -19,11 +29,11 @@ export function isWithinTuningTolerance(
   cents: number | null,
   targetHz: number | null,
   overrideCents?: number | null,
+  mode: TuningToleranceMode = 'auto',
 ): boolean {
-  return cents !== null &&
-    Number.isFinite(cents) &&
-    targetHz !== null &&
-    Number.isFinite(targetHz) &&
-    targetHz > 0 &&
-    Math.abs(cents) <= tuningToleranceCents(targetHz, overrideCents);
+  if (cents === null || !Number.isFinite(cents) ||
+      targetHz === null || !Number.isFinite(targetHz) || targetHz <= 0) return false;
+  if (mode === 'off') return false;
+  if (mode === 'any') return true;
+  return Math.abs(cents) <= tuningToleranceCents(targetHz, overrideCents);
 }

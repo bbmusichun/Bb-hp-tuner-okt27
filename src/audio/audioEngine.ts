@@ -57,8 +57,10 @@ export class BBAudioEngine {
   private toneOsc: OscillatorNode | null = null;
   private toneGain: GainNode | null = null;
   private toneSilenceGain: GainNode | null = null;
+  private preferredOutputDeviceId: string | null = null;
+  private pitchPipeVoices = new Map<string, { oscillator: OscillatorNode; gain: GainNode }>();
 
-  public async startMicrophone(): Promise<boolean> {
+  public async startMicrophone(deviceId?: string | null): Promise<boolean> {
     try {
       if (this.micState === 'active' && this.microphoneStream) return true;
       if (this.inputMode === 'tone') this.stopTone();
@@ -76,19 +78,20 @@ export class BBAudioEngine {
       if (this.audioCtx.state === 'suspended') {
         await this.audioCtx.resume();
       }
+      await this.applyPreferredOutputDevice();
 
       this.sampleRate = this.audioCtx.sampleRate;
 
       // Request raw, unadulterated microphone audio without telecom filtering
-      this.microphoneStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          // Ask the browser/OS to normalize microphone level for quiet strikes.
-          // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
-          autoGainControl: true,
-        },
-      });
+      const audioConstraints: MediaTrackConstraints = {
+        echoCancellation: false,
+        noiseSuppression: false,
+        // Ask the browser/OS to normalize microphone level for quiet strikes.
+        // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
+        autoGainControl: true,
+        ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      };
+      this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
       const microphoneTrack = this.microphoneStream.getAudioTracks()[0];
       const trackSettings = typeof microphoneTrack?.getSettings === 'function'
         ? microphoneTrack.getSettings()
@@ -133,6 +136,50 @@ export class BBAudioEngine {
     }
   }
 
+  public setPreferredOutputDeviceId(deviceId: string | null): void {
+    this.preferredOutputDeviceId = deviceId && deviceId.trim() ? deviceId : null;
+  }
+
+  private async applyPreferredOutputDevice(): Promise<void> {
+    if (!this.preferredOutputDeviceId || !this.audioCtx) return;
+    const contextWithSink = this.audioCtx as AudioContext & { setSinkId?: (sinkId: string) => Promise<void> };
+    if (typeof contextWithSink.setSinkId !== 'function') return;
+    try { await contextWithSink.setSinkId(this.preferredOutputDeviceId); }
+    catch (error) { this.errorMessage = error instanceof Error ? error.message : 'A mentett hangkimenet nem érhető el.'; }
+  }
+
+  /** Route Web Audio output to an explicitly selected audio output when the browser supports it. */
+  public async setOutputDevice(deviceId: string | null): Promise<boolean> {
+    this.setPreferredOutputDeviceId(deviceId);
+    try {
+      if (!this.audioCtx) {
+        const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
+      }
+      const contextWithSink = this.audioCtx as AudioContext & { setSinkId?: (sinkId: string) => Promise<void> };
+      if (typeof contextWithSink.setSinkId !== 'function') {
+        this.errorMessage = 'Ez a böngésző nem támogatja a Web Audio kimeneti eszközének választását.';
+        return false;
+      }
+      await contextWithSink.setSinkId(deviceId || 'default');
+      this.errorMessage = '';
+      return true;
+    } catch (error) {
+      this.errorMessage = error instanceof Error ? error.message : 'A kimeneti eszköz nem választható ki.';
+      return false;
+    }
+  }
+
+  public supportsOutputDeviceSelection(): boolean {
+    if (this.audioCtx) {
+      return typeof (this.audioCtx as AudioContext & { setSinkId?: unknown }).setSinkId === 'function';
+    }
+    try {
+      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      return typeof (AudioCtxClass.prototype as AudioContext & { setSinkId?: unknown }).setSinkId === 'function';
+    } catch { return false; }
+  }
+
   /**
    * Routes an HTML audio element through the same analyser used by microphone input.
    * This powers a short prerecorded test without requesting microphone permissions.
@@ -145,6 +192,7 @@ export class BBAudioEngine {
         this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
       }
       if (this.audioCtx.state === 'suspended') await this.audioCtx.resume();
+      await this.applyPreferredOutputDevice();
       this.sampleRate = this.audioCtx.sampleRate;
 
       if (this.microphoneStream) {
@@ -250,6 +298,11 @@ export class BBAudioEngine {
 
   public getSampleRate(): number {
     return this.sampleRate;
+  }
+
+  /** Returns the configured FFT window length used by all active analyser paths. */
+  public getFFTSize(): number {
+    return this.fftSize;
   }
 
   /** Returns the reported state of browser-managed mic AGC, or null if unavailable. */
@@ -580,6 +633,80 @@ export class BBAudioEngine {
     };
   }
 
+  /**
+   * Play a strobe pitch-pipe voice without routing it back into the measurement analyser.
+   * Independent ids allow several target bands to sound at once, as in a multi-band pitch pipe.
+   * Passing durationMs plays a short output-only cue for strike-trigger mode.
+   */
+  public playPitchPipeTone(id: string, freqHz: number, durationMs?: number): void {
+    if (typeof id !== 'string' || !id.trim() || id.length > 100 ||
+        !Number.isFinite(freqHz) || freqHz <= 0 || freqHz > 20000) return;
+    this.stopPitchPipeTone(id);
+    if (!this.audioCtx) {
+      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
+    }
+    const context = this.audioCtx;
+    if (context.state === 'suspended') void context.resume();
+    void this.applyPreferredOutputDevice();
+
+    const now = context.currentTime;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.07, now + 0.025);
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(freqHz, now);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+
+    const voice = { oscillator, gain };
+    this.pitchPipeVoices.set(id, voice);
+    oscillator.onended = () => {
+      if (this.pitchPipeVoices.get(id) === voice) this.pitchPipeVoices.delete(id);
+      oscillator.disconnect();
+      gain.disconnect();
+    };
+
+    if (typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs > 0) {
+      const endAt = now + Math.max(0.06, durationMs / 1000);
+      gain.gain.setValueAtTime(0.07, Math.max(now + 0.025, endAt - 0.03));
+      gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
+      oscillator.start(now);
+      oscillator.stop(endAt + 0.01);
+    } else {
+      oscillator.start(now);
+    }
+  }
+
+  /** Whether a continuous or short-lived pitch-pipe voice is currently allocated for this band id. */
+  public hasPitchPipeTone(id: string): boolean {
+    return this.pitchPipeVoices.has(id);
+  }
+
+  /** Stop only the selected pitch-pipe voice; other active bands keep sounding. */
+  public stopPitchPipeTone(id: string): void {
+    const voice = this.pitchPipeVoices.get(id);
+    if (!voice) return;
+    this.pitchPipeVoices.delete(id);
+    const context = this.audioCtx;
+    if (!context) {
+      try { voice.oscillator.stop(); } catch { /* oscillator may already have stopped */ }
+      voice.oscillator.disconnect();
+      voice.gain.disconnect();
+      return;
+    }
+    const now = context.currentTime;
+    try {
+      voice.gain.gain.cancelScheduledValues(now);
+      voice.gain.gain.setValueAtTime(Math.max(0.0001, voice.gain.gain.value), now);
+      voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+      voice.oscillator.stop(now + 0.04);
+    } catch {
+      // The cue may already be scheduled to finish, or the context may be closing.
+    }
+  }
+
   // Reference tone generator. When no microphone/file source is active, feed the
   // generated sine into the shared analyser as well as the speaker so every view uses
   // the same live measurement state. Strike cues during microphone measurement remain
@@ -594,6 +721,7 @@ export class BBAudioEngine {
     if (this.audioCtx.state === 'suspended') {
       void this.audioCtx.resume();
     }
+    void this.applyPreferredOutputDevice();
     const now = this.audioCtx.currentTime;
     const useToneAsAnalysisInput = this.inputMode === 'inactive';
 

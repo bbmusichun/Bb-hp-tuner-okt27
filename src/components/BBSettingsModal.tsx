@@ -6,7 +6,9 @@ import { MAX_PARTIAL_TARGET_OFFSET_CENTS, partialTargetFrequency } from '../audi
 import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/partialTargets';
 import type { InstrumentProfile } from '../audio/instrumentProfiles';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
-import { parseScalaScl, scalaToCustomScaleText } from '../audio/scala';
+import { describeScalaReference, parseScalaScl, scalaReferenceToA4, scalaToCustomScaleText } from '../audio/scala';
+
+type AudioDeviceOption = { deviceId: string; label: string };
 
 interface Props {
   isOpen: boolean;
@@ -23,7 +25,20 @@ interface Props {
   onChangePartialTargetOffset: (field: PartialTargetOffsetField, value: number) => void;
   onResetPartialTargetOffsets: () => void;
   sampleRateKhz: number | null;
+  fftSize: number;
+  autoGainControlStatus: boolean | null;
   isListening: boolean;
+  freezeTargetSettings?: boolean;
+  audioInputDevices: AudioDeviceOption[];
+  selectedAudioInputDeviceId: string;
+  onSelectAudioInputDevice: (deviceId: string) => void;
+  audioOutputDevices: AudioDeviceOption[];
+  selectedAudioOutputDeviceId: string;
+  onSelectAudioOutputDevice: (deviceId: string) => void;
+  onRefreshAudioDevices: () => void;
+  isRefreshingAudioDevices: boolean;
+  audioOutputSelectionSupported: boolean;
+  audioIoMessage: string;
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
   onSelectInstrumentProfile: (profileId: string) => void;
@@ -50,7 +65,20 @@ export const BBSettingsModal: React.FC<Props> = ({
   onChangePartialTargetOffset,
   onResetPartialTargetOffsets,
   sampleRateKhz,
+  fftSize,
+  autoGainControlStatus,
   isListening,
+  freezeTargetSettings = false,
+  audioInputDevices,
+  selectedAudioInputDeviceId,
+  onSelectAudioInputDevice,
+  audioOutputDevices,
+  selectedAudioOutputDeviceId,
+  onSelectAudioOutputDevice,
+  onRefreshAudioDevices,
+  isRefreshingAudioDevices,
+  audioOutputSelectionSupported,
+  audioIoMessage,
   instrumentProfiles,
   activeInstrumentProfileId,
   onSelectInstrumentProfile,
@@ -69,6 +97,8 @@ export const BBSettingsModal: React.FC<Props> = ({
     activeProfile?.customScale?.notes.map((note) => `${note.name}, ${note.frequencyHz?.toFixed(3) ?? ''}`).join('\n') ?? '',
   );
   const [customScaleMessage, setCustomScaleMessage] = React.useState('');
+  const [pendingScalaA4, setPendingScalaA4] = React.useState<number | null>(null);
+  const [pendingScalaReference, setPendingScalaReference] = React.useState<string | null>(null);
   const [bundledScalaAssets, setBundledScalaAssets] = React.useState<Array<{ path: string; category: string; name: string }>>([]);
   const [selectedBundledScalaPath, setSelectedBundledScalaPath] = React.useState('');
   const [isLoadingBundledScala, setIsLoadingBundledScala] = React.useState(false);
@@ -110,13 +140,15 @@ export const BBSettingsModal: React.FC<Props> = ({
       const converted = parsed
         ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
         : null;
-      if (!converted) {
+      if (!parsed || !converted) {
         setCustomScaleMessage('Ez a Scala-fájl nem alakítható át biztonságosan a kiválasztott hanghoz.');
         return;
       }
       setCustomScaleNameDraft(asset.name);
       setCustomScaleTextDraft(converted);
-      setCustomScaleMessage('A beépített skála betöltve. Ellenőrizd, majd alkalmazd az egyedi hangmezőt.');
+      setPendingScalaA4(scalaReferenceToA4(parsed));
+      setPendingScalaReference(describeScalaReference(parsed));
+      setCustomScaleMessage('A beépített skála betöltve (' + describeScalaReference(parsed) + '). Ellenőrizd, majd alkalmazd az egyedi hangmezőt.');
     } catch {
       setCustomScaleMessage('A beépített Scala-fájl nem olvasható.');
     } finally {
@@ -124,13 +156,15 @@ export const BBSettingsModal: React.FC<Props> = ({
     }
   };
   const [backupMessage, setBackupMessage] = React.useState('');
+  const [fundamentalDraft, setFundamentalDraft] = React.useState(String(partialTargetOffsets.fundamentalCents ?? 0));
   const [octaveDraft, setOctaveDraft] = React.useState(String(partialTargetOffsets.octaveCents));
   const [thirdPartialDraft, setThirdPartialDraft] = React.useState(String(partialTargetOffsets.thirdPartialCents));
 
   React.useEffect(() => {
+    setFundamentalDraft(String(partialTargetOffsets.fundamentalCents ?? 0));
     setOctaveDraft(String(partialTargetOffsets.octaveCents));
     setThirdPartialDraft(String(partialTargetOffsets.thirdPartialCents));
-  }, [selectedNoteName, partialTargetOffsets.octaveCents, partialTargetOffsets.thirdPartialCents]);
+  }, [selectedNoteName, partialTargetOffsets.fundamentalCents, partialTargetOffsets.octaveCents, partialTargetOffsets.thirdPartialCents]);
 
   React.useEffect(() => {
     setRenameProfileDraft(activeProfile?.name ?? '');
@@ -146,10 +180,12 @@ export const BBSettingsModal: React.FC<Props> = ({
     if (Number.isFinite(parsed)) {
       const value = Math.max(-MAX_PARTIAL_TARGET_OFFSET_CENTS, Math.min(MAX_PARTIAL_TARGET_OFFSET_CENTS, parsed));
       onChangePartialTargetOffset(field, value);
-      if (field === 'octaveCents') setOctaveDraft(String(value));
+      if (field === 'fundamentalCents') setFundamentalDraft(String(value));
+      else if (field === 'octaveCents') setOctaveDraft(String(value));
       else setThirdPartialDraft(String(value));
     } else {
-      if (field === 'octaveCents') setOctaveDraft(String(partialTargetOffsets.octaveCents));
+      if (field === 'fundamentalCents') setFundamentalDraft(String(partialTargetOffsets.fundamentalCents ?? 0));
+      else if (field === 'octaveCents') setOctaveDraft(String(partialTargetOffsets.octaveCents));
       else setThirdPartialDraft(String(partialTargetOffsets.thirdPartialCents));
     }
   };
@@ -288,6 +324,46 @@ export const BBSettingsModal: React.FC<Props> = ({
             {backupMessage && <p role="status" className="text-[10px] leading-relaxed text-slate-400">{backupMessage}</p>}
           </section>
 
+          {/* Audio I/O device selection */}
+          <section className="rounded-xl border border-white/5 bg-[#080b0f] p-3 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-semibold text-slate-200">Hangbemenet és -kimenet</h3>
+                <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">Mikrofon, külső hangkártya vagy támogatott fejhallgató-kimenet választható.</p>
+              </div>
+              <button type="button" onClick={onRefreshAudioDevices} disabled={isRefreshingAudioDevices}
+                className="shrink-0 rounded-lg border border-white/10 px-2.5 py-2 text-[10px] font-semibold text-slate-300 disabled:opacity-40">
+                {isRefreshingAudioDevices ? 'Frissítés…' : 'Frissítés'}
+              </button>
+            </div>
+            <label className="block text-[10px] text-slate-400">Mikrofon / hangbemenet
+              <select aria-label="Hangbemenet kiválasztása" value={selectedAudioInputDeviceId}
+                onChange={(event) => onSelectAudioInputDevice(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-white">
+                <option value="">Automatikus / alapértelmezett bemenet</option>
+                {selectedAudioInputDeviceId && !audioInputDevices.some((device) => device.deviceId === selectedAudioInputDeviceId) &&
+                  <option value={selectedAudioInputDeviceId}>Mentett bemenet (jelenleg nem található)</option>}
+                {audioInputDevices.filter((device) => device.deviceId).map((device, index) =>
+                  <option key={device.deviceId} value={device.deviceId}>{device.label || 'Mikrofon ' + (index + 1)}</option>)}
+              </select>
+            </label>
+            <label className="block text-[10px] text-slate-400">Hangszóró / fejhallgató-kimenet
+              <select aria-label="Hangkimenet kiválasztása" value={selectedAudioOutputDeviceId}
+                disabled={!audioOutputSelectionSupported}
+                onChange={(event) => { void onSelectAudioOutputDevice(event.target.value); }}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-white disabled:cursor-not-allowed disabled:opacity-40">
+                <option value="">Rendszer alapértelmezett kimenete</option>
+                {selectedAudioOutputDeviceId && !audioOutputDevices.some((device) => device.deviceId === selectedAudioOutputDeviceId) &&
+                  <option value={selectedAudioOutputDeviceId}>Mentett kimenet (jelenleg nem található)</option>}
+                {audioOutputDevices.filter((device) => device.deviceId).map((device, index) =>
+                  <option key={device.deviceId} value={device.deviceId}>{device.label || 'Hangkimenet ' + (index + 1)}</option>)}
+              </select>
+            </label>
+            {!audioOutputSelectionSupported && <p className="text-[10px] leading-relaxed text-amber-300/80">A böngésző nem kínál külön Web Audio kimenetválasztást ezen az eszközön; a rendszer kimenete használatos.</p>}
+            {audioInputDevices.length === 0 && <p className="text-[10px] leading-relaxed text-slate-500">Ha nincs bemenet a listában, indíts egy mikrofonos mérést, majd frissítsd az eszközöket. A név elrejtése a böngésző adatvédelmi szabálya lehet.</p>}
+            {audioIoMessage && <p role="status" className="text-[10px] leading-relaxed text-slate-400">{audioIoMessage}</p>}
+          </section>
+
           {/* A4 Reference */}
           <div className="p-3 rounded-xl bg-[#080b0f] border border-white/5">
             <div className="flex items-center justify-between font-semibold mb-2">
@@ -300,7 +376,8 @@ export const BBSettingsModal: React.FC<Props> = ({
                 <button
                   key={f}
                   onClick={() => onChangeA4(f)}
-                  className={`py-1.5 rounded-lg font-mono text-xs font-semibold border transition ${
+                  disabled={freezeTargetSettings}
+                  className={`py-1.5 rounded-lg font-mono text-xs font-semibold border transition disabled:cursor-not-allowed disabled:opacity-40 ${
                     a4Ref === f
                       ? 'bg-[#f59e0b] text-slate-950 border-[#f59e0b]'
                       : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-700'
@@ -318,7 +395,8 @@ export const BBSettingsModal: React.FC<Props> = ({
               step="0.5"
               value={a4Ref}
               onChange={(e) => onChangeA4(parseFloat(e.target.value))}
-              className="w-full accent-[#f59e0b] h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              disabled={freezeTargetSettings}
+              className="w-full accent-[#f59e0b] h-1.5 bg-slate-700 rounded-lg cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
             />
           </div>
 
@@ -438,13 +516,15 @@ export const BBSettingsModal: React.FC<Props> = ({
                     const converted = parsed
                       ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
                       : null;
-                    if (!converted) {
+                    if (!parsed || !converted) {
                       setCustomScaleMessage('A Scala-fájl hibás, vagy a skála több mint 24 használható hangot tartalmaz.');
                       return;
                     }
                     setCustomScaleNameDraft(file.name.replace(/\.scl$/i, ''));
                     setCustomScaleTextDraft(converted);
-                    setCustomScaleMessage('A Scala-skála beolvasva. Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.');
+                    setPendingScalaA4(scalaReferenceToA4(parsed));
+                    setPendingScalaReference(describeScalaReference(parsed));
+                    setCustomScaleMessage('A Scala-skála beolvasva (' + describeScalaReference(parsed) + '). Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.');
                   } catch {
                     setCustomScaleMessage('A Scala-fájl nem olvasható.');
                   } finally {
@@ -464,7 +544,7 @@ export const BBSettingsModal: React.FC<Props> = ({
             <textarea
               aria-label="Egyedi hangmező frekvencia-lista"
               value={customScaleTextDraft}
-              onChange={(event) => setCustomScaleTextDraft(event.target.value)}
+              onChange={(event) => { setCustomScaleTextDraft(event.target.value); setPendingScalaA4(null); setPendingScalaReference(null); }}
               placeholder={"D3, 146.832\nA3, 220.000\nBb3, 233.082"}
               rows={5}
               spellCheck={false}
@@ -474,9 +554,20 @@ export const BBSettingsModal: React.FC<Props> = ({
               type="button"
               onClick={() => {
                 const applied = onApplyCustomScale(customScaleNameDraft, customScaleTextDraft);
-                setCustomScaleMessage(applied
-                  ? 'Az egyedi hangmező alkalmazva és a hangszerprofilhoz mentve.'
-                  : 'Hibás adatok. Ellenőrizd a hangneveket, a duplikációkat és a 20–2000 Hz közötti célfrekvenciákat.');
+                if (applied) {
+                  if (pendingScalaA4 !== null && !freezeTargetSettings && pendingScalaA4 >= 420 && pendingScalaA4 <= 450) {
+                    onChangeA4(pendingScalaA4);
+                    setCustomScaleMessage('Az egyedi hangmező alkalmazva. A Scala-referencia alapján az A4 is beállítva: ' + pendingScalaA4.toFixed(2) + ' Hz.');
+                  } else if (pendingScalaA4 !== null && freezeTargetSettings) {
+                    setCustomScaleMessage('Az egyedi hangmező alkalmazva; az A4 referencia változatlan maradt a freeze mód miatt.');
+                  } else if (pendingScalaA4 !== null && (pendingScalaA4 < 420 || pendingScalaA4 > 450)) {
+                    setCustomScaleMessage('Az egyedi hangmező alkalmazva; a Scala által számított A4 (' + pendingScalaA4.toFixed(2) + ' Hz) kívül esik a Hangoal 420–450 Hz-es beállítási tartományán, ezért nem módosítottam.');
+                  } else {
+                    setCustomScaleMessage('Az egyedi hangmező alkalmazva és a hangszerprofilhoz mentve.');
+                  }
+                } else {
+                  setCustomScaleMessage('Hibás adatok. Ellenőrizd a hangneveket, a duplikációkat és a 20–2000 Hz közötti célfrekvenciákat.');
+                }
               }}
               disabled={!customScaleNameDraft.trim() || !customScaleTextDraft.trim()}
               className="w-full rounded-lg bg-[#f59e0b] px-3 py-2.5 text-[11px] font-bold text-slate-950 disabled:opacity-40"
@@ -496,34 +587,41 @@ export const BBSettingsModal: React.FC<Props> = ({
           {/* Independent partial targets */}
           <div className="p-3 rounded-xl bg-[#080b0f] border border-white/5 space-y-3">
             <div>
-              <div className="font-semibold text-slate-300">Egyedi felhangcélok</div>
+              <div className="font-semibold text-slate-300">Egyedi hangcélok és felhangkorrekciók</div>
               <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-                A(z) {selectedNoteName} hang mezőjének felhangjai külön is hangolhatók.
-                Az eltérések az ideális 2× és 3× frekvenciához képest értendők, és csak erre a hangra érvényesek.
+                A(z) {selectedNoteName} hang alaphangja (1×), oktávja (2×) és összetett kvintje (3×) külön kalibrálható.
+                A korrekció csak erre a hangra és hangszerprofilra érvényes.
               </p>
             </div>
             {([
+              { field: 'fundamentalCents', label: 'Alaphang (1×)', multiplier: null },
               { field: 'octaveCents', label: 'Oktáv (2×)', multiplier: 2 as const },
-              { field: 'thirdPartialCents', label: '3. parciális (3×)', multiplier: 3 as const },
+              { field: 'thirdPartialCents', label: 'Összetett kvint (3×)', multiplier: 3 as const },
             ] as const).map(({ field, label, multiplier }) => {
-              const offset = partialTargetOffsets[field];
-              const targetHz = partialTargetFrequency(selectedNoteFundamentalHz, multiplier, offset);
+              const offset = field === 'fundamentalCents' ? (partialTargetOffsets.fundamentalCents ?? 0) : partialTargetOffsets[field];
+              const targetHz = multiplier === null
+                ? selectedNoteFundamentalHz
+                : partialTargetFrequency(selectedNoteFundamentalHz, multiplier, offset);
+              const draft = field === 'fundamentalCents' ? fundamentalDraft
+                : field === 'octaveCents' ? octaveDraft : thirdPartialDraft;
               return (
                 <div key={field} className="grid grid-cols-[1fr_88px] gap-2 items-center">
                   <div>
-                    <label htmlFor={field} className="block text-[11px] text-slate-300">{label}</label>
+                    <label htmlFor={'partial-offset-' + field} className="block text-[11px] text-slate-300">{label}</label>
                     <div className="font-mono text-[10px] text-slate-500 mt-0.5">{targetHz.toFixed(3)} Hz célfrekvencia</div>
                   </div>
                   <div className="relative">
                     <input
-                      id={field}
+                      id={'partial-offset-' + field}
                       type="number"
                       min={-MAX_PARTIAL_TARGET_OFFSET_CENTS}
                       max={MAX_PARTIAL_TARGET_OFFSET_CENTS}
                       step="0.1"
-                      value={field === 'octaveCents' ? octaveDraft : thirdPartialDraft}
+                      value={draft}
+                      disabled={freezeTargetSettings}
                       onChange={(event) => {
-                        if (field === 'octaveCents') setOctaveDraft(event.target.value);
+                        if (field === 'fundamentalCents') setFundamentalDraft(event.target.value);
+                        else if (field === 'octaveCents') setOctaveDraft(event.target.value);
                         else setThirdPartialDraft(event.target.value);
                       }}
                       onBlur={(event) => commitOffset(field, event.target.value)}
@@ -537,9 +635,10 @@ export const BBSettingsModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={onResetPartialTargetOffsets}
-              className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-[11px] text-slate-300 hover:bg-slate-800"
+              disabled={freezeTargetSettings}
+              className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
             >
-              Felhangcélok visszaállítása (2× / 3×)
+              Minden célkorrekció visszaállítása (1× / 2× / 3×)
             </button>
           </div>
 
@@ -550,8 +649,9 @@ export const BBSettingsModal: React.FC<Props> = ({
               <span>Akusztikai Mérési Környezet</span>
             </div>
             <div>{isListening ? 'Aktuális mintavételezés' : 'Legutóbbi mintavételezés'}: <span className="font-mono text-white">{sampleRateKhz !== null ? `${sampleRateKhz} kHz (Web Audio API)` : '— (a mérés indításakor jelenik meg)'}</span></div>
-            <div>FFT felbontás: <span className="font-mono text-white">32768 pont + parabolikus csúcsinterpoláció</span></div>
-            <div>Zajcsökkentés / AGC: <span className="font-mono text-[#10b981]">Kikapcsolva (Nyers jel)</span></div>
+            <div>FFT-ablak: <span className="font-mono text-white">{fftSize.toLocaleString('hu-HU')} pont</span>{sampleRateKhz !== null && fftSize > 0 ? <span className="text-slate-500"> · nyers binlépés ≈ {(sampleRateKhz * 1000 / fftSize).toFixed(2)} Hz</span> : null} <span className="text-slate-500">· parabolikus csúcsinterpoláció</span></div>
+            <div>Echo cancellation / zajszűrés: <span className="font-mono text-emerald-300">kikapcsolás kérve</span></div>
+            <div>Automatikus mikrofonjelerősítés (AGC): <span className="font-mono text-white">{autoGainControlStatus === null ? 'nem jelezhető / nem aktív mikrofon' : autoGainControlStatus ? 'a böngésző szerint bekapcsolva' : 'a böngésző szerint kikapcsolva'}</span></div>
           </div>
         </div>
 

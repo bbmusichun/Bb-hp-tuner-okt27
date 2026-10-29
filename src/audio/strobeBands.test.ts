@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_STROBE_BANDS, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts } from './strobeBands';
+import { DEFAULT_STROBE_BANDS, calibrateStrobeBandToMeasuredFrequency, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts } from './strobeBands';
 
 describe('Hangoal configurable strobe band model', () => {
   it('provides three compatible default resonance bands', () => {
@@ -70,5 +70,33 @@ describe('custom strobe target expressions', () => {
     assert.equal(parseStrobeTargetExpression('2000c'), null);
     assert.equal(parseStrobeTargetExpression('440', 0), null);
     assert.ok(Math.abs((parseStrobeTargetExpression('3/2', 146.832384) ?? 0) - 220.248576) < 0.001);
+  });
+});
+
+describe('one-tap custom band calibration', () => {
+  it('moves only the target offset so the measured frequency becomes the new target', () => {
+    const band = { ...DEFAULT_STROBE_BANDS[0], source: 'custom' as const, targetHz: 440, centsOffset: 0 };
+    const measuredHz = 442;
+    const calibrated = calibrateStrobeBandToMeasuredFrequency(band, measuredHz, 146.8);
+    assert.ok(calibrated);
+    assert.ok(Math.abs(getStrobeBandTargetHz(calibrated!, 146.8) - measuredHz) < 0.001);
+    assert.equal(band.centsOffset, 0);
+    assert.notEqual(calibrated!.centsOffset, band.centsOffset);
+  });
+
+  it('keeps relative ratio targets coupled to the base after calibration', () => {
+    const band = { ...DEFAULT_STROBE_BANDS[0], source: 'custom' as const, targetHz: 220, centsOffset: 0, targetMode: 'ratio' as const, targetValue: 1.5 };
+    const baseHz = 146.832384;
+    const measuredHz = 221.3;
+    const calibrated = calibrateStrobeBandToMeasuredFrequency(band, measuredHz, baseHz);
+    assert.ok(calibrated);
+    assert.ok(Math.abs(getStrobeBandTargetHz(calibrated!, baseHz) - measuredHz) < 0.001);
+    assert.ok(Math.abs(getStrobeBandTargetHz(calibrated!, baseHz * 2) - measuredHz * 2) < 0.01);
+  });
+
+  it('rejects invalid frequencies or target offsets outside the supported range', () => {
+    const band = { ...DEFAULT_STROBE_BANDS[0], source: 'custom' as const, targetHz: 440, centsOffset: 1199 };
+    assert.equal(calibrateStrobeBandToMeasuredFrequency(band, 20000, 146.8), null);
+    assert.equal(calibrateStrobeBandToMeasuredFrequency(band, Number.NaN, 146.8), null);
   });
 });

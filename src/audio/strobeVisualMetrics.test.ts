@@ -1,8 +1,18 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { strobeContrastFromDb, strobeSharpnessFromCents } from './strobeVisualMetrics';
+import { isStrobeMeasurementLive, strobeContrastFromDb, strobeSharpnessFromCents } from './strobeVisualMetrics';
 
 describe('Hangoal-inspired strobe visual metrics', () => {
+
+  it('only marks a current valid frame as live for strobe rendering', () => {
+    assert.equal(isStrobeMeasurementLive(true, true, false, 'valid'), true);
+    assert.equal(isStrobeMeasurementLive(false, true, false, 'valid'), false);
+    assert.equal(isStrobeMeasurementLive(true, false, false, 'valid'), false);
+    assert.equal(isStrobeMeasurementLive(true, true, true, 'valid'), false);
+    assert.equal(isStrobeMeasurementLive(true, true, false, 'held'), false);
+    assert.equal(isStrobeMeasurementLive(true, true, false, 'no-signal'), false);
+  });
+
   it('maps dBFS peak levels to a bounded visual contrast range', () => {
     assert.equal(strobeContrastFromDb(null), 0);
     assert.equal(strobeContrastFromDb(Number.NaN), 0);

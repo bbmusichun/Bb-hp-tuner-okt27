@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
-import { isWithinTuningTolerance } from '../audio/tuningTolerance';
+import { isWithinTuningTolerance, type TuningToleranceMode } from '../audio/tuningTolerance';
 import { formatMeasurementReadout, type TuningReadoutMode } from '../audio/readoutModes';
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   selectedRole: 'fundamental' | 'fifth' | 'octave';
   onSelectRole: (role: 'fundamental' | 'fifth' | 'octave') => void;
   toleranceOverrideCents?: number | null;
+  toleranceMode?: TuningToleranceMode;
   readoutMode?: TuningReadoutMode;
   a4Ref?: number;
 }
@@ -23,6 +24,7 @@ export const BBCards: React.FC<Props> = ({
   selectedRole,
   onSelectRole,
   toleranceOverrideCents = null,
+  toleranceMode = 'auto',
   readoutMode = 'hz',
   a4Ref = 440,
 }) => {
@@ -75,7 +77,7 @@ export const BBCards: React.FC<Props> = ({
         const measuredStr = readout.primary;
         const targetStr = readout.target;
         const centsStr = cents !== null && (c.data.status === 'valid' || isHeld) ? `${cents > 0 ? '+' : ''}${cents.toFixed(1)} cent` : '— cent';
-        const inTune = c.data.status === 'valid' && isWithinTuningTolerance(cents, c.data.targetHz, toleranceOverrideCents);
+        const inTune = c.data.status === 'valid' && isWithinTuningTolerance(cents, c.data.targetHz, toleranceOverrideCents, toleranceMode);
 
         return (
           <button
