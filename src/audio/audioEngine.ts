@@ -300,6 +300,11 @@ export class BBAudioEngine {
     return this.sampleRate;
   }
 
+  /** Returns the configured FFT window length used by all active analyser paths. */
+  public getFFTSize(): number {
+    return this.fftSize;
+  }
+
   /** Returns the reported state of browser-managed mic AGC, or null if unavailable. */
   public getAutoGainControlStatus(): boolean | null {
     return this.autoGainControlStatus;
