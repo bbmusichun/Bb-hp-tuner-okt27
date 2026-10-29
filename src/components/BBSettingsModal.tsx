@@ -104,7 +104,7 @@ export const BBSettingsModal: React.FC<Props> = ({
       const response = await fetch(asset.path);
       if (!response.ok) throw new Error('Scala asset unavailable');
       const source = await response.text();
-      const parsed = parseScalaScl(source);
+      const parsed = parseScalaScl(source, { preserveSourceOrder: true });
       const converted = parsed
         ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
         : null;
