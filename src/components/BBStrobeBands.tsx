@@ -25,6 +25,7 @@ interface Props {
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
   strobeSensitivity?: number;
   onChangeStrobeSensitivity?: (value: number) => void;
+  onZoomTargetHz?: (targetHz: number) => void;
 }
 interface Reading { measuredHz: number | null; deviationCents: number | null; amplitudeDb: number | null; }
 interface Row {
@@ -52,7 +53,7 @@ export const BBStrobeBands: React.FC<Props> = ({
   alap, kvint, oktav, hasSignal, active = false, transientHoldoff = false,
   baseFrequencyHz = 146.832384,
   toleranceOverrideCents = null, selectedRole, onSelectRole,
-  strobeSensitivity = 1, onChangeStrobeSensitivity,
+  strobeSensitivity = 1, onChangeStrobeSensitivity, onZoomTargetHz,
 }) => {
   const [customBands, setCustomBands] = useState<StrobeBandConfig[]>(loadCustomBands);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -203,6 +204,18 @@ export const BBStrobeBands: React.FC<Props> = ({
     setReadings((previous) => { const next = { ...previous }; delete next[id]; return next; });
   };
 
+  const targetForRole = (role: 'fundamental' | 'fifth' | 'octave') => role === 'fifth'
+    ? (kvint.targetHz ?? baseFrequencyHz * 3)
+    : role === 'octave'
+      ? (oktav.targetHz ?? baseFrequencyHz * 2)
+      : (alap.targetHz ?? baseFrequencyHz);
+
+  const focusRole = (role: 'fundamental' | 'fifth' | 'octave') => {
+    onSelectRole?.(role);
+    const targetHz = targetForRole(role);
+    if (Number.isFinite(targetHz) && targetHz > 0) onZoomTargetHz?.(targetHz);
+  };
+
   const builtInLabels = [
     { id: 'fifth', name: 'Kvint · 3×', note: kvint.noteName || 'A4', color: '#c084fc', role: 'fifth' as const },
     { id: 'octave', name: 'Oktáv · 2×', note: oktav.noteName || 'D4', color: '#38bdf8', role: 'octave' as const },
@@ -225,23 +238,36 @@ export const BBStrobeBands: React.FC<Props> = ({
       <div className="flex w-full items-stretch gap-2">
         <div className="flex w-[78px] shrink-0 flex-col select-none" style={{ height: canvasHeight }}>
           {builtInLabels.map((row) => (
-            <button key={row.id} style={{ height: ROW_HEIGHT }} onClick={() => onSelectRole?.(row.role)}
+            <button key={row.id} type="button" style={{ height: ROW_HEIGHT }} onClick={() => focusRole(row.role)}
               className={'flex flex-col justify-center items-start leading-tight hover:opacity-80 transition ' + (selectedRole === row.role ? 'opacity-100' : 'opacity-90')}>
               <span className="text-[11px] font-semibold text-white/90">{row.name}</span>
               <span className="text-[10px] font-mono font-medium" style={{ color: row.color }}>{row.note}</span>
             </button>
           ))}
           {customBands.map((band, index) => (
-            <div key={band.id} style={{ height: ROW_HEIGHT }} className="flex flex-col justify-center leading-tight overflow-hidden">
+            <button key={band.id} type="button" style={{ height: ROW_HEIGHT }} onClick={() => onZoomTargetHz?.(getStrobeBandTargetHz(band, baseFrequencyHz))} className="flex flex-col justify-center leading-tight overflow-hidden text-left hover:opacity-80">
               <span className="truncate text-[11px] font-semibold text-white/80">{band.name || 'Egyedi sáv ' + (index + 1)}</span>
               <span className="truncate text-[10px] font-mono text-slate-400">{formatStrobeTargetExpression(band)}</span>
-            </div>
+            </button>
           ))}
         </div>
         <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-white/5 shadow-inner">
           <canvas ref={canvasRef} width={600} height={canvasHeight}
-            aria-label="A kvint, oktáv, alap és további frekvenciák egyetlen élő stroboszkópos nézetben"
-            className="block w-full" style={{ height: canvasHeight }} />
+            aria-label="A kvint, oktáv, alap és további frekvenciák egyetlen élő stroboszkópos nézetben; érintsd meg a sávot a spektrum nagyításához"
+            className="block w-full cursor-zoom-in" style={{ height: canvasHeight }}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              const y = (event.clientY - rect.top) * event.currentTarget.height / Math.max(1, rect.height);
+              const rowHeight = event.currentTarget.height / Math.max(1, 3 + customBands.length);
+              const rowIndex = Math.max(0, Math.min(2 + customBands.length, Math.floor(y / rowHeight)));
+              if (rowIndex === 0) focusRole('fifth');
+              else if (rowIndex === 1) focusRole('octave');
+              else if (rowIndex === 2) focusRole('fundamental');
+              else {
+                const band = customBands[rowIndex - 3];
+                if (band) onZoomTargetHz?.(getStrobeBandTargetHz(band, baseFrequencyHz));
+              }
+            }} />
         </div>
       </div>
 
