@@ -96,7 +96,7 @@ describe('one-tap custom band calibration', () => {
 
   it('rejects invalid frequencies or target offsets outside the supported range', () => {
     const band = { ...DEFAULT_STROBE_BANDS[0], source: 'custom' as const, targetHz: 440, centsOffset: 1199 };
-    assert.equal(calibrateStrobeBandToMeasuredFrequency(band, 20, 146.8), null);
+    assert.equal(calibrateStrobeBandToMeasuredFrequency(band, 20000, 146.8), null);
     assert.equal(calibrateStrobeBandToMeasuredFrequency(band, Number.NaN, 146.8), null);
   });
 });
