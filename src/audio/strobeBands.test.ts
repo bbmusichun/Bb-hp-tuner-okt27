@@ -13,13 +13,17 @@ describe('Hangoal configurable strobe band model', () => {
   it('normalizes valid persisted bands and rejects malformed entries', () => {
     const result = normalizeStrobeBands([
       { id: 'custom-a', name: 'Custom A', source: 'fundamental', targetHz: 220, centsOffset: 12, enabled: true },
+      { id: 'custom-ratio', name: 'Ratio target', source: 'custom', targetHz: 660, centsOffset: 0, enabled: true, targetMode: 'ratio', targetValue: 1.5 },
       { id: 'custom-a', name: 'Duplicate', source: 'fifth', targetHz: 440, centsOffset: 0, enabled: true },
       { id: 'bad', name: 'Bad Hz', source: 'octave', targetHz: -1, centsOffset: 0, enabled: true },
       { id: 'bad-source', name: 'Bad source', source: 'noise', targetHz: 440, centsOffset: 0, enabled: true },
     ]);
-    assert.equal(result.length, 1);
+    assert.equal(result.length, 2);
     assert.equal(result[0].id, 'custom-a');
     assert.equal(result[0].targetHz, 220);
+    assert.equal(result[0].targetMode, 'absolute');
+    assert.equal(result[1].targetMode, 'ratio');
+    assert.equal(result[1].targetValue, 1.5);
   });
 
   it('uses safe defaults when storage is missing or contains no valid entries', () => {
