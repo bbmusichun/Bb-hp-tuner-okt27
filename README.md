@@ -1,6 +1,6 @@
-# BB Tuner — Handpan Hangoló és Akusztikai Labor
+# Hangoal — Handpan hangoló és felhangelemző
 
-Mobilra optimalizált, böngészőben futó handpan-hangoló valós idejű spektrummal, három rezonancia-csatornával, hangszerprofilokkal és mérési naplóval.
+Mobilra optimalizált, böngészőben futó handpan-hangoló automatikus hangfelismeréssel, valós idejű spektrummal, három rezonancia-csatornával, hangszerprofilokkal és mérési naplóval.
 
 ## Funkciók
 
