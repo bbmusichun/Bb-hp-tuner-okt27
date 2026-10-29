@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ResonanceMeasurement } from '../types/tuner';
 import { bbAudioEngine } from '../audio/audioEngine';
 import { isWithinTuningTolerance, type TuningToleranceMode } from '../audio/tuningTolerance';
-import { findSignificantSpectralPeaks, type SignificantSpectralPeak } from '../audio/peakSpectrum';
+import { findPeakNearFrequency, findSignificantSpectralPeaks, type SignificantSpectralPeak } from '../audio/peakSpectrum';
 import { getStrobeBandTargetHz, type StrobeBandConfig } from '../audio/strobeBands';
 
 interface Props {
@@ -14,6 +14,7 @@ interface Props {
   toleranceMode?: TuningToleranceMode;
   customStrobeBands?: StrobeBandConfig[];
   onSelectPeak?: (role: 'fundamental' | 'fifth' | 'octave') => void;
+  onZoomTargetHz?: (targetHz: number) => void;
   zoomTargetHz?: number | null;
   onClearZoom?: () => void;
 }
@@ -53,7 +54,7 @@ interface HoverInfo {
 
 export const BBSpectrum: React.FC<Props> = ({
   alap, kvint, oktav, hasSignal, toleranceOverrideCents = null, toleranceMode = 'auto', customStrobeBands = [], onSelectPeak,
-  zoomTargetHz = null, onClearZoom,
+  zoomTargetHz = null, onZoomTargetHz, onClearZoom,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [peakDisplayEnabled, setPeakDisplayEnabled] = useState(true);
@@ -258,7 +259,7 @@ export const BBSpectrum: React.FC<Props> = ({
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-3 pb-1">
         <div>
           <h3 className="text-sm font-bold text-white">Frekvenciaspektrum · pontos csúcsok</h3>
-          <p className="text-[11px] text-slate-400">Azonosított parciálisok, zajpadló-szűrés és nagyítás kijelölés alapján</p>
+          <p className="text-[11px] text-slate-400">Azonosított parciálisok, zajpadló-szűrés; csúcsra bökve nagyítás</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <button type="button" onClick={() => setPeakDisplayEnabled((enabled) => !enabled)} aria-pressed={peakDisplayEnabled}
@@ -282,7 +283,6 @@ export const BBSpectrum: React.FC<Props> = ({
           onPointerMove={handlePointerMove}
           onPointerLeave={() => setHoverInfo(null)}
           onClick={(event) => {
-            if (!onSelectPeak) return;
             const rect = event.currentTarget.getBoundingClientRect();
             const x = (event.clientX - rect.left) * event.currentTarget.width / rect.width;
             const L = 54, plotWidth = event.currentTarget.width - L - 16;
@@ -290,6 +290,14 @@ export const BBSpectrum: React.FC<Props> = ({
             const base = Number.isFinite(rawBase) && rawBase > 0 ? rawBase : 146.83;
             const { lowHz: low, highHz: high } = getSpectrumDisplayRange(base, zoomTargetHz);
             const hz = low + ((x - L) / plotWidth) * (high - low);
+            const analyserData = bbAudioEngine.getFloatFrequencyData();
+            const binWidth = bbAudioEngine.getSampleRate() / (analyserData.length * 2);
+            const nearestPeak = findPeakNearFrequency(peaksRef.current, hz, Math.max(binWidth * 2.5, (high - low) / plotWidth * 8));
+            if (nearestPeak && onZoomTargetHz) {
+              onZoomTargetHz(nearestPeak.frequencyHz);
+              return;
+            }
+            if (!onSelectPeak) return;
             const choices = tracked.map((p) => ({
               ...p,
               hz: p.m.measuredHz !== null && Number.isFinite(p.m.measuredHz) && (p.m.status === 'valid' || p.m.status === 'held')
@@ -319,11 +327,18 @@ export const BBSpectrum: React.FC<Props> = ({
         {hasSignal && peakRows.length > 0 ? (
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
             {peakRows.map((peak) => (
-              <div key={peak.bin} className="min-w-0 rounded-lg border border-white/5 bg-white/[0.025] px-2 py-1.5">
+              <button
+                key={peak.bin}
+                type="button"
+                onClick={() => onZoomTargetHz?.(peak.frequencyHz)}
+                aria-label={'Spektrum nagyítása ' + peak.frequencyHz.toFixed(2) + ' Hz csúcsra'}
+                title="Nagyítás erre a csúcsra"
+                className="min-w-0 rounded-lg border border-white/5 bg-white/[0.025] px-2 py-1.5 text-left hover:border-cyan-400/40 focus:outline-none focus:ring-1 focus:ring-cyan-400/50"
+              >
                 <div className="truncate font-mono text-[11px] font-semibold text-slate-100">{peak.frequencyHz.toFixed(2)} Hz</div>
                 <div className="text-[10px] text-cyan-200">{peak.multipleOfBase.toFixed(3)}× alap</div>
                 <div className="text-[10px] text-slate-500">{peak.relativeDb.toFixed(1)} dB relatív · max {peak.maxAmplitudeDb.toFixed(1)} dBFS</div>
-              </div>
+              </button>
             ))}
           </div>
         ) : (
