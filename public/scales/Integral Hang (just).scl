@@ -1,0 +1,12 @@
+! Integral Hang (just).scl
+hexatonic just intonation scale for Panart's "Integral Hang"
+8
+!
+ 10/9  :D
+  5/4  :E
+  4/3  :F
+  3/2  :g
+  5/3  :A  !!reference 4 438.0  (keeps all notes close to ET at A440)
+ 16/9  :B^b
+ 15/8  :b
+  2/1  :C
