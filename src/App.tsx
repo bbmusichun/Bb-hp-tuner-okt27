@@ -1,5 +1,5 @@
 /**
- * BB Tuner – Handpan hangoló és felhangelemző
+ * Hangoal – Handpan hangoló és felhangelemző
  * Pixel-perfect implementation of the functional specification and visual design.
  */
 
@@ -1097,14 +1097,11 @@ export default function App() {
               <Menu className="w-5 h-5" />
             </button>
 
-            {/* BB Tuner title */}
+            {/* Hangoal title */}
             <div className="text-center leading-none">
-              <div className="text-lg font-black tracking-tight flex items-center justify-center gap-1">
-                <span className="text-[#f59e0b]">BB</span>
-                <span className="text-white">Tuner</span>
-              </div>
+              <div className="text-lg font-black tracking-tight text-white">Hangoal</div>
               <div className="text-[10px] text-slate-400 font-normal tracking-wide mt-0.5">
-                Handpan tuning analyzer
+                Handpan hangoló és felhangelemző
               </div>
             </div>
 
