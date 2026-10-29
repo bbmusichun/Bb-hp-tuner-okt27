@@ -301,6 +301,7 @@ export default function App() {
     return () => mediaDevices.removeEventListener('devicechange', onDeviceChange);
   }, [refreshAudioDevices]);
   useEffect(() => {
+    bbAudioEngine.setPreferredOutputDeviceId(selectedAudioOutputDeviceId || null);
     try {
       localStorage.setItem('hangoal-audio-input-device-v1', selectedAudioInputDeviceId);
       localStorage.setItem('hangoal-audio-output-device-v1', selectedAudioOutputDeviceId);
