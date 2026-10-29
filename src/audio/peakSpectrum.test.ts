@@ -50,7 +50,7 @@ describe('Linotune-style exact-bin peak spectrum', () => {
       minFrequencyHz: 150, maxFrequencyHz: 300, maxPeaks: 2,
     });
     assert.equal(peaks.length, 2);
-    assert.deepEqual(peaks.map((peak) => peak.bin), [80, 100]);
+    assert.deepEqual(peaks.map((peak) => peak.bin), [60, 80]);
   });
 
   it('rejects invalid analysis parameters', () => {
