@@ -59,6 +59,19 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
   const lastReadoutRef = useRef(0);
 
   useEffect(() => {
+    const reloadConfiguration = () => setBands(loadCustomBands());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY) reloadConfiguration();
+    };
+    window.addEventListener('hangoal-custom-strobe-bands-updated', reloadConfiguration);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('hangoal-custom-strobe-bands-updated', reloadConfiguration);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(bands));
     } catch (error) {
