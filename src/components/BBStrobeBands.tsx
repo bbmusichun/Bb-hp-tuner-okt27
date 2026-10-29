@@ -7,6 +7,7 @@ interface Props {
   kvint: ResonanceMeasurement;
   oktav: ResonanceMeasurement;
   hasSignal: boolean;
+  toleranceOverrideCents?: number | null;
   selectedRole?: string;
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
 }
@@ -18,10 +19,11 @@ export const BBStrobeBands: React.FC<Props> = ({
   hasSignal,
   selectedRole,
   onSelectRole,
+  toleranceOverrideCents = null,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestMeasurementsRef = useRef({ alap, kvint, oktav, hasSignal });
-  latestMeasurementsRef.current = { alap, kvint, oktav, hasSignal };
+  const latestMeasurementsRef = useRef({ alap, kvint, oktav, hasSignal, toleranceOverrideCents });
+  latestMeasurementsRef.current = { alap, kvint, oktav, hasSignal, toleranceOverrideCents };
 
   // Time-integrated phases for each band
   const phasesRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
@@ -131,7 +133,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         const now = currentTime;
         const key = row.key as 'alap' | 'kvint' | 'oktav';
         // Smooth frequency-dependent product threshold; not presented as a proven JND model.
-        const toleranceCents = tuningToleranceCents(row.targetHz);
+        const toleranceCents = tuningToleranceCents(row.targetHz, measurement.toleranceOverrideCents);
         const inTolerance = row.isValid && Number.isFinite(row.cents) && Math.abs(row.cents) <= toleranceCents;
         if (inTolerance) {
           if (greenSinceRef.current[key] === null) greenSinceRef.current[key] = now;

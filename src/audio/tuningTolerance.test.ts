@@ -23,6 +23,16 @@ describe('frequency-dependent tuning tolerance', () => {
     assert.equal(isWithinTuningTolerance(0, 0), false);
   });
 
+  it('uses an explicit fixed tolerance when configured, otherwise keeps adaptive thresholds', () => {
+    assert.equal(tuningToleranceCents(146.832384, 2), 2);
+    assert.equal(isWithinTuningTolerance(1.99, 146.832384, 2), true);
+    assert.equal(isWithinTuningTolerance(-2, 146.832384, 2), true);
+    assert.equal(isWithinTuningTolerance(2.01, 146.832384, 2), false);
+    assert.equal(tuningToleranceCents(146.832384, null), 1.5);
+    assert.equal(tuningToleranceCents(146.832384, 0), 1.5);
+    assert.equal(tuningToleranceCents(146.832384, 21), 1.5);
+  });
+
   it('uses the same threshold for positive and negative detuning', () => {
     const tol = tuningToleranceCents(293.664768);
     assert.equal(isWithinTuningTolerance(tol, 293.664768), true);
