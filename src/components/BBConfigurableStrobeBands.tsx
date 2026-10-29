@@ -15,6 +15,7 @@ interface Props {
   transientHoldoff: boolean;
   toleranceOverrideCents?: number | null;
   baseFrequencyHz?: number;
+  strobeSensitivity?: number;
 }
 
 interface BandReading {
@@ -50,13 +51,14 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
   transientHoldoff,
   toleranceOverrideCents = null,
   baseFrequencyHz = 440,
+  strobeSensitivity = 1,
 }) => {
   const [bands, setBands] = useState<StrobeBandConfig[]>(loadCustomBands);
   const [readings, setReadings] = useState<Record<string, BandReading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestRef = useRef({ bands, active, hasSignal, transientHoldoff, toleranceOverrideCents, baseFrequencyHz });
-  latestRef.current = { bands, active, hasSignal, transientHoldoff, toleranceOverrideCents, baseFrequencyHz };
+  const latestRef = useRef({ bands, active, hasSignal, transientHoldoff, toleranceOverrideCents, baseFrequencyHz, strobeSensitivity });
+  latestRef.current = { bands, active, hasSignal, transientHoldoff, toleranceOverrideCents, baseFrequencyHz, strobeSensitivity };
   const phasesRef = useRef<Record<string, number>>({});
   const lastTickRef = useRef(performance.now());
   const lastReadoutRef = useRef(0);
@@ -121,7 +123,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
         const valid = band.enabled && current.active && current.hasSignal &&
           !current.transientHoldoff && deviationCents !== null;
         const speed = valid
-          ? Math.max(-220, Math.min(220, targetHz * (Math.pow(2, (deviationCents ?? 0) / 1200) - 1) * 65))
+          ? Math.max(-220, Math.min(220, targetHz * (Math.pow(2, (deviationCents ?? 0) / 1200) - 1) * 65 * current.strobeSensitivity))
           : 0;
         const phase = previousPhase + speed * dt;
         phasesRef.current[band.id] = phase;
