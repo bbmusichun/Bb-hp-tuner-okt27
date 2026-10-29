@@ -260,7 +260,10 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
                         type="text"
                         maxLength={48}
                         value={band.name}
-                        onChange={(event) => updateBand(band.id, { name: event.target.value.slice(0, 48) })}
+                        onChange={(event) => {
+                          const value = event.target.value.slice(0, 48);
+                          if (value.trim()) updateBand(band.id, { name: value });
+                        }}
                         className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white outline-none focus:border-amber-400"
                       />
                     </label>
