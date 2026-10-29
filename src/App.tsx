@@ -30,6 +30,7 @@ import {
 } from './audio/partialTargets';
 import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
+import { BBConfigurableStrobeBands } from './components/BBConfigurableStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
 import { BBCards } from './components/BBCards';
 import { BBStabilityGraph } from './components/BBStabilityGraph';
@@ -812,6 +813,12 @@ export default function App() {
                 hasSignal={hasSignal}
                 selectedRole={selectedRole}
                 onSelectRole={setSelectedRole}
+                toleranceOverrideCents={toleranceOverrideCents}
+              />
+              <BBConfigurableStrobeBands
+                active={isListening}
+                hasSignal={hasSignal}
+                transientHoldoff={transientHoldoff}
                 toleranceOverrideCents={toleranceOverrideCents}
               />
             </div>

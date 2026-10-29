@@ -24,6 +24,8 @@ describe('Hangoal configurable strobe band model', () => {
 
   it('uses safe defaults when storage is missing or contains no valid entries', () => {
     assert.equal(normalizeStrobeBands(null).length, 3);
+    assert.deepEqual(normalizeStrobeBands([]), []);
+    assert.equal(normalizeStrobeBands([{ id: 'custom', name: 'Custom 500', source: 'custom', targetHz: 500, centsOffset: 0, enabled: true }])[0].source, 'custom');
     assert.equal(normalizeStrobeBands([{ id: 'x', name: '', source: 'fundamental', targetHz: 440, centsOffset: 0, enabled: true }]).length, 3);
   });
 
