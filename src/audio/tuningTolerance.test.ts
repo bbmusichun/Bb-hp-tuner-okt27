@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isWithinTuningTolerance, tuningToleranceCents } from './tuningTolerance';
+import { isWithinTuningTolerance, normalizeTuningToleranceMode, tuningToleranceCents } from './tuningTolerance';
 
 describe('frequency-dependent tuning tolerance', () => {
   it('uses a strict threshold at low fundamentals and expands smoothly upward', () => {
@@ -17,10 +17,12 @@ describe('frequency-dependent tuning tolerance', () => {
     assert.equal(tuningToleranceCents(20000), 4);
   });
 
-  it('rejects missing, non-finite and invalid targets', () => {
-    assert.equal(isWithinTuningTolerance(null, 146.83), false);
-    assert.equal(isWithinTuningTolerance(Number.NaN, 146.83), false);
-    assert.equal(isWithinTuningTolerance(0, 0), false);
+  it('rejects missing, non-finite and invalid targets in every mode', () => {
+    for (const mode of ['auto', 'any', 'off'] as const) {
+      assert.equal(isWithinTuningTolerance(null, 146.83, null, mode), false);
+      assert.equal(isWithinTuningTolerance(Number.NaN, 146.83, null, mode), false);
+      assert.equal(isWithinTuningTolerance(0, 0, null, mode), false);
+    }
   });
 
   it('uses an explicit fixed tolerance when configured, otherwise keeps adaptive thresholds', () => {
@@ -38,5 +40,20 @@ describe('frequency-dependent tuning tolerance', () => {
     assert.equal(isWithinTuningTolerance(tol, 293.664768), true);
     assert.equal(isWithinTuningTolerance(-tol, 293.664768), true);
     assert.equal(isWithinTuningTolerance(tol + 0.01, 293.664768), false);
+  });
+
+  it('supports Linotune-compatible always-green and never-green display modes without changing values', () => {
+    assert.equal(isWithinTuningTolerance(350, 146.8, null, 'any'), true);
+    assert.equal(isWithinTuningTolerance(-350, 146.8, null, 'any'), true);
+    assert.equal(isWithinTuningTolerance(0, 146.8, null, 'off'), false);
+    assert.equal(isWithinTuningTolerance(0, 146.8, null, 'auto'), true);
+  });
+
+  it('normalizes saved policy values safely', () => {
+    assert.equal(normalizeTuningToleranceMode('any'), 'any');
+    assert.equal(normalizeTuningToleranceMode('off'), 'off');
+    assert.equal(normalizeTuningToleranceMode('auto'), 'auto');
+    assert.equal(normalizeTuningToleranceMode('invalid'), 'auto');
+    assert.equal(normalizeTuningToleranceMode(null), 'auto');
   });
 });
