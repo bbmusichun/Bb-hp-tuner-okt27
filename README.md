@@ -5,6 +5,8 @@ Mobilra optimalizált, böngészőben futó handpan-hangoló automatikus hangfel
 ## Funkciók
 
 - Valós idejű mikrofonbemenet és spektrális csúcsinterpoláció.
+- Saját D Kurd handpan-felvétel a főoldalon: lejátszás/leállítás, ismétlés, pozíció- és hangerőszabályzás; mikrofonmérés indításakor a felvétel leáll.
+- Hangoal telepíthető webalkalmazás (PWA), helyben tárolt hangszerprofilokkal és mérési naplóval.
 - Alaphang (1×), oktáv (2×) és harmadik parciális (3×) egyidejű követése.
 - Célfrekvencia-referenciahang az aktív alaphang/parciális lejátszásához. A hanggenerátor mikrofonmérés közben automatikusan leáll, hogy ne szennyezze a mérést.
 - Spektrum- és stabilitásnézet, tranziensvédelem és külön YIN-alapú diagnosztika.
