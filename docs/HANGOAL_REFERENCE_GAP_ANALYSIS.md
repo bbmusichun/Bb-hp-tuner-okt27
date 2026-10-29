@@ -40,7 +40,7 @@ Státuszmagyarázat:
 | Leolvasási módok | Hz, cent, hangnév vagy tiszta hangközarány. | Hz, cent, hangnév és a mért arány az alaphanghoz képest. | **Megvan/részleges.** A célarány és mért arány világos megkülönböztetése. |
 | Freeze | Védi a cent-, referenciafrekvencia- és transzponálás-beállításokat a változástól. | Mentett freeze mód; az A4 referencia, részleges korrekciók, transzponálás és az egyedi sávok cél-/offset-szerkesztése blokkolva van, a mért értékek tovább frissülnek. | **Implementálva.** Az instrument profile/scale váltás a hangcél választása marad, nem a freeze által tiltott paraméter. |
 | Billentyűzetes vezérlés | Front/rear panel navigáció, nyíl/enter/escape és közvetlen billentyűparancsok. | A fő hangoló billentyűparancsai és súgója megvannak; a teljes settings-panel navigáció nem igazolt. | **P2.** Mobilon alacsonyabb prioritás; asztali használatnál hozzáférhetőségi fejlesztésként kezelendő. |
-| Több összekapcsolt példány | Több referenciaalkalmazás-ablak mester/szolga kapcsolatban, közös vezérléssel és külön I/O-val. | Egy Hangoal nézetben 3 alap- és max. 8 egyedi sáv áll rendelkezésre; több példány közötti szinkron nincs igazolva. | **P2.** A legtöbb hangolási helyzetre a több sáv elegendő; külön I/O-s master/slave mód későbbi haladó funkció. |
+| Több összekapcsolt példány | Több ablak Master/Slave kapcsolatban: a Master hangja, oktávja, transzponálása, centkorrekciója és referenciája átkerül a Slave ablakokba. | Az azonos eredetű Hangoal-ablakok `BroadcastChannel`-on osztják meg a pontos 1×/2×/3× célfrekvenciákat, az A4-referenciát, transzponálást, kijelölt rezonanciát, tűrést és stroboszkóp-érzékenységet. A külön hang-I/O nem szinkronizálódik. | **Részben megvan.** Az alap Master/Slave vezérlés implementálva; több Master egyidejű használata és külön I/O-szinkron nincs kezelve, a böngészők közötti valós próba szükséges. |
 | Munkamenet, profil és napló | Az előző munkamenet beállításait megőrzi; hang- és skálaválasztás. | Verziózott profilok, teljes konfiguráció export/import, mérési napló, CSV/JSON és ismételhetőség-összegzés. | **Hangoal előnye.** Megtartani, és a mentést a relatív sávcélokra is kiterjeszteni. |
 | Mobil / telepíthetőség | Windows/macOS asztali termék; kézikönyv a nagyobb CPU-terhelésre figyelmeztet. | Web/PWA, iPhone Safari célkörnyezet. | **Hangoal stratégiai előnye.** Valós iPhone/Safari mikrofon- és teljesítményteszt szükséges. |
 
@@ -73,7 +73,7 @@ A szoftveres jelek a matematikai hibákat tesztelik; a fizikai handpan, mikrofon
 2. **P0 – Hangútvonal és munkafolyamat:** sávonkénti referenciahang, egyidejű hangok, spektrumra nagyítás, szünet/freeze és I/O-választás implementálva; a célböngészők tényleges hangkimenetét és késését tesztelni kell.
 3. **P1 – Valós eszköz átvétel:** iPhone/Safari és legalább egy másik böngésző valós handpannel, külső referenciafrekvenciával, zajos környezetben, gyenge alaphang és erős 2×/3× felhang mellett.
 4. **P1 – Hangolási mérőszámok:** dokumentálni kell a centhibát, stabilizálódási időt, oktáv-/kvinttévesztési arányt, és a hangolási pontosság ismételhetőségét ugyanazon bemenettel a referenciához képest.
-5. **P2 – Haladó paritás:** teljes billentyűzet-navigáció, több külön Hangoal-ablak mester/szolga szinkronja; ezek nem szükségesek az alapvető 1×/2×/3× egyidejű méréshez.
+5. **P2 – Haladó paritás:** teljes billentyűzet-navigáció, több Master egyidejű ütközéskezelése és külön hang-I/O-k szinkronja; ezek nem szükségesek az alapvető 1×/2×/3× egyidejű méréshez.
 
 ## Kiadási kapu
 
