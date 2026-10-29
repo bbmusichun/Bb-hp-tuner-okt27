@@ -20,6 +20,8 @@ interface Props {
   active?: boolean;
   transientHoldoff?: boolean;
   baseFrequencyHz?: number;
+  playbackSpectrum?: Float32Array | null;
+  playbackSampleRateHz?: number | null;
   toleranceOverrideCents?: number | null;
   selectedRole?: string;
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
@@ -50,7 +52,8 @@ function formatCents(cents: number | null): string {
 
 export const BBStrobeBands: React.FC<Props> = ({
   alap, kvint, oktav, hasSignal, active = false, transientHoldoff = false,
-  baseFrequencyHz = 146.832384, toleranceOverrideCents = null, selectedRole, onSelectRole,
+  baseFrequencyHz = 146.832384, playbackSpectrum = null, playbackSampleRateHz = null,
+  toleranceOverrideCents = null, selectedRole, onSelectRole,
   strobeSensitivity = 1, onChangeStrobeSensitivity,
 }) => {
   const [customBands, setCustomBands] = useState<StrobeBandConfig[]>(loadCustomBands);
@@ -58,8 +61,8 @@ export const BBStrobeBands: React.FC<Props> = ({
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands });
-  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands };
+  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands, playbackSpectrum, playbackSampleRateHz });
+  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands, playbackSpectrum, playbackSampleRateHz };
   const phasesRef = useRef<Record<string, number>>({});
   const smoothRef = useRef<Record<string, number>>({});
   const lastValidRef = useRef<Record<string, number>>({});
@@ -68,6 +71,7 @@ export const BBStrobeBands: React.FC<Props> = ({
   const lastTickRef = useRef(performance.now());
   const lastReadoutRef = useRef(0);
   const canvasHeight = ROW_HEIGHT * (3 + customBands.length);
+  const hasCustomSignal = active ? hasSignal && !transientHoldoff : Boolean(playbackSpectrum);
 
   useEffect(() => {
     const reload = () => setCustomBands(loadCustomBands());
@@ -95,8 +99,10 @@ export const BBStrobeBands: React.FC<Props> = ({
       lastTickRef.current = now;
       const width = canvas.width;
       const rowHeight = canvas.height / Math.max(1, 3 + current.customBands.length);
-      const spectrum = current.active && current.hasSignal && !current.transientHoldoff ? bbAudioEngine.getFloatFrequencyData() : null;
-      const sampleRate = bbAudioEngine.getSampleRate();
+      const liveSpectrum = current.active && current.hasSignal && !current.transientHoldoff ? bbAudioEngine.getFloatFrequencyData() : null;
+      const usingPlaybackSpectrum = !current.active && Boolean(current.playbackSpectrum);
+      const spectrum = liveSpectrum ?? (usingPlaybackSpectrum ? current.playbackSpectrum ?? null : null);
+      const sampleRate = usingPlaybackSpectrum && current.playbackSampleRateHz ? current.playbackSampleRateHz : bbAudioEngine.getSampleRate();
       const builtIns: Row[] = [
         { id: 'fifth', name: 'Kvint · 3×', note: current.kvint.noteName || 'A4', targetHz: current.kvint.targetHz ?? current.baseFrequencyHz * 3, measuredHz: current.kvint.measuredHz, cents: current.kvint.deviationCents, db: current.kvint.amplitudeDb, timestamp: current.kvint.timestampMs, stripeWidth: 34, valid: current.hasSignal && current.kvint.status === 'valid', role: 'fifth' },
         { id: 'octave', name: 'Oktáv · 2×', note: current.oktav.noteName || 'D4', targetHz: current.oktav.targetHz ?? current.baseFrequencyHz * 2, measuredHz: current.oktav.measuredHz, cents: current.oktav.deviationCents, db: current.oktav.amplitudeDb, timestamp: current.oktav.timestampMs, stripeWidth: 54, valid: current.hasSignal && current.oktav.status === 'valid', role: 'octave' },
@@ -111,7 +117,7 @@ export const BBStrobeBands: React.FC<Props> = ({
           id: band.id, name: band.name, note: formatStrobeTargetExpression(band), targetHz,
           measuredHz, cents, db: peak?.magDb ?? null, timestamp: now,
           stripeWidth: 18 + (index % 3) * 9,
-          valid: Boolean(band.enabled && current.active && current.hasSignal && !current.transientHoldoff && cents !== null),
+          valid: Boolean(band.enabled && spectrum && (!current.active || !current.transientHoldoff) && cents !== null),
         };
       });
       const rows = [...builtIns, ...extras];
@@ -247,7 +253,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500">
           {customBands.map((band, index) => {
             const reading = readings[band.id];
-            const valid = band.enabled && active && hasSignal && !transientHoldoff && reading?.deviationCents !== null && reading?.deviationCents !== undefined;
+            const valid = band.enabled && hasCustomSignal && reading?.deviationCents !== null && reading?.deviationCents !== undefined;
             return <span key={band.id} className="font-mono">
               <span style={{ color: BAND_COLORS[index % BAND_COLORS.length] }}>{band.name}: </span>
               {valid && reading?.measuredHz !== null && reading?.measuredHz !== undefined
@@ -275,7 +281,7 @@ export const BBStrobeBands: React.FC<Props> = ({
             const targetHz = getStrobeBandTargetHz(band, baseFrequencyHz);
             const measured = reading?.measuredHz ?? null;
             const cents = reading?.deviationCents ?? null;
-            const valid = band.enabled && active && hasSignal && !transientHoldoff && cents !== null;
+            const valid = band.enabled && hasCustomSignal && cents !== null;
             const inTolerance = valid && Math.abs(cents ?? Infinity) <= tuningToleranceCents(targetHz, toleranceOverrideCents);
             return (
               <div key={band.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5">
@@ -326,7 +332,7 @@ export const BBStrobeBands: React.FC<Props> = ({
             );
           })}
           {customBands.length >= MAX_CUSTOM_BANDS && <p className="text-[10px] text-amber-300">Legfeljebb {MAX_CUSTOM_BANDS} további sáv adható hozzá.</p>}
-          <p className="text-[10px] leading-relaxed text-slate-500">Az egyedi sávok a mikrofonos spektrumból mérnek. A cél Hz-ben, arányként (például 3/2), vagy centértékként adható meg.</p>
+          <p className="text-[10px] leading-relaxed text-slate-500">Az egyedi sávok az aktív jelforrást követik: mikrofonos mérést vagy lejátszott felvétel elemzését. A cél Hz-ben, arányként (például 3/2), vagy centértékként adható meg.</p>
         </div>
       )}
 
