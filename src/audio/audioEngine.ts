@@ -223,6 +223,7 @@ export class BBAudioEngine {
       this.sourceNode = null;
     }
     this.micState = 'inactive';
+    this.inputMode = 'inactive';
     this.autoGainControlStatus = null;
     this.inputLevelDb = -100;
     this.previousRms = 0;
