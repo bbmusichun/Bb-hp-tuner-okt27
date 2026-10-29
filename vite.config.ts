@@ -13,6 +13,10 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
+        // Keep the personal reference recording available after the app has been installed/offline-cached.
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,txt,woff2,mp3}'],
+        },
         manifest: {
           id: '/',
           name: 'Hangoal – Handpan hangoló és felhangelemző',
