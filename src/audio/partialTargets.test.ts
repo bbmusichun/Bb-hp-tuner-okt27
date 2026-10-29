@@ -16,6 +16,15 @@ describe('custom handpan partial targets', () => {
     assert.equal(partialTargetFrequency(D3, 3, 0), D3 * 3);
   });
 
+  it('applies a per-note fundamental correction without hiding independent partial offsets', () => {
+    const correctedFundamental = D3 * Math.pow(2, 14 / 1200);
+    const octave = partialTargetFrequency(correctedFundamental, 2, 6);
+    const third = partialTargetFrequency(correctedFundamental, 3, -4);
+    assert.ok(Math.abs(1200 * Math.log2(correctedFundamental / D3) - 14) < 1e-9);
+    assert.ok(Math.abs(1200 * Math.log2(octave / (D3 * 2)) - 20) < 1e-9);
+    assert.ok(Math.abs(1200 * Math.log2(third / (D3 * 3)) - 10) < 1e-9);
+  });
+
   it('applies octave and third-partial offsets independently in cents', () => {
     const octave = partialTargetFrequency(D3, 2, 12);
     const third = partialTargetFrequency(D3, 3, -7);
@@ -59,11 +68,13 @@ describe('custom handpan partial targets', () => {
     assert.deepEqual(normalizePartialTargetOffsets(null), {});
     assert.deepEqual(normalizePartialTargetOffsets({
       'd-kurd-9:D3': { octaveCents: 12, thirdPartialCents: -4 },
+      'd-kurd-9:E3': { fundamentalCents: -3.5, octaveCents: 2, thirdPartialCents: 0 },
       'd-kurd-9:A3': { octaveCents: 0, thirdPartialCents: 0 },
       'd-kurd-9:Bad': { octaveCents: Number.NaN, thirdPartialCents: 200 },
       '': { octaveCents: 3, thirdPartialCents: 0 },
     }), {
       'd-kurd-9:D3': { octaveCents: 12, thirdPartialCents: -4 },
+      'd-kurd-9:E3': { fundamentalCents: -3.5, octaveCents: 2, thirdPartialCents: 0 },
       'd-kurd-9:Bad': { octaveCents: 0, thirdPartialCents: 50 },
     });
   });
