@@ -660,6 +660,7 @@ export default function App() {
   const [yinFrequencyHz, setYinFrequencyHz] = useState<number | null>(null);
   const [yinClarity, setYinClarity] = useState(0);
   const [yinAgreementCents, setYinAgreementCents] = useState<number | null>(null);
+  const isSignalInputActive = isListening || isFileInputActive || isReferenceTonePlaying;
 
   // The 3 resonance measurements
   const [alap, setAlap] = useState<ResonanceMeasurement>({
@@ -770,7 +771,7 @@ export default function App() {
         analysisRateWindowRef.current = rateSample.window;
         if (rateSample.fps !== null) setAnalysisFps(rateSample.fps);
 
-        if (isDetectionArmed(autoDetectionMode, singleShotCaptured) && chromaticTargetMidi === null) {
+        if (!isReferenceTonePlaying && isDetectionArmed(autoDetectionMode, singleShotCaptured) && chromaticTargetMidi === null) {
           const detected = bbAudioEngine.detectNote(
             enabledToneNotes.map((note) => ({ id: note.id, noteName: note.noteName, frequency: note.frequency }))
           );
@@ -820,17 +821,17 @@ export default function App() {
         }
       }
 
-      if (isListening || isFileInputActive) {
+      if (isSignalInputActive) {
         animId = requestAnimationFrame(loop);
       }
     }
 
-    if (isListening || isFileInputActive) {
+    if isSignalInputActive {
       animId = requestAnimationFrame(loop);
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isListening, isFileInputActive, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
+  }, [isSignalInputActive, isReferenceTonePlaying, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
 
   // Toggle microphone
   const handleToggleMic = async () => {
@@ -969,7 +970,7 @@ export default function App() {
   };
 
   const handleToggleReferenceTone = () => {
-    if (referenceToneMode !== 'continuous' || isListening) return;
+    if (referenceToneMode !== 'continuous' || isListening || isFileInputActive) return;
     if (isReferenceTonePlaying) {
       bbAudioEngine.stopTone();
       setIsReferenceTonePlaying(false);
@@ -1057,7 +1058,7 @@ export default function App() {
           return;
         }
         case 'toggle-reference-tone':
-          if (referenceToneMode === 'continuous' && !isListening) keyboardActionsRef.current.handleToggleReferenceTone();
+          if (referenceToneMode === 'continuous' && !isListening && !isFileInputActive) keyboardActionsRef.current.handleToggleReferenceTone();
           return;
         case 'show-shortcuts':
           setIsKeyboardHelpOpen((open) => !open);
@@ -1157,13 +1158,13 @@ export default function App() {
             <div className="flex items-center gap-2">
               <span
                 className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                  isListening
+                  isSignalInputActive
                     ? 'bg-[#10b981] shadow-[0_0_8px_#10b981]'
                     : 'bg-slate-600'
                 }`}
               />
               <span className={`text-[11px] font-medium ${(isListening || isFileInputActive) ? 'text-slate-200' : 'text-slate-400'}`}>
-                {isListening ? 'Mikrofon aktív' : isFileInputActive ? 'Hangfájl tesztelése' : 'Mikrofon inaktív'}
+                {isListening ? 'Mikrofon aktív' : isFileInputActive ? 'Hangfájl tesztelése' : isReferenceTonePlaying ? 'Szinuszjel aktív' : 'Mikrofon inaktív'}
               </span>
             </div>
 
@@ -1228,11 +1229,9 @@ export default function App() {
           </div>
         )}
 
-        {/* ================= TAB 1: MAIN TUNING SCREEN ================= */}
-        {activeTab === 'hangolas' && (
-          <div className="flex flex-col gap-1.5 flex-1 justify-between">
-            <section aria-label="Saját D handpan felvétele" className="mx-1 mb-2 rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-400/10 to-slate-900 px-3 py-3">
               <audio
+                className="hidden"
+                aria-hidden="true"
                 ref={ownDPlayerRef}
                 src="/audio/sajat-d-handpan.mp3"
                 loop={false}
@@ -1277,6 +1276,12 @@ export default function App() {
                 onPause={(event) => { if (event.currentTarget.paused) { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); setHasSignal(false); setInputLevelDb(-100); setTransientHoldoff(false); } }}
                 onPlay={() => { setOwnDAudioError(''); setIsOwnDPlaying(true); }}
               />
+
+        {/* ================= TAB 1: MAIN TUNING SCREEN ================= */}
+        {activeTab === 'hangolas' && (
+          <div className="flex flex-col gap-1.5 flex-1 justify-between">
+            <section aria-label="Saját D handpan felvétele" className="mx-1 mb-2 rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-400/10 to-slate-900 px-3 py-3">
+
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-white">Saját D lejátszása</div>
@@ -1294,7 +1299,7 @@ export default function App() {
                       setIsFileInputActive(false);
                       setOwnDAudioCurrentTime(0);
                       setIsOwnDPlaying(false);
-                    } else if (!isListening) {
+                    } else if (!isListening && !isReferenceTonePlaying) {
                       setOwnDAudioError('');
                       const startPlayback = async () => {
                         const playPromise = player.play();
@@ -1319,8 +1324,8 @@ export default function App() {
                   }}
                   className="shrink-0 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20"
                   aria-label={isOwnDPlaying ? "Saját D leállítása" : "Saját D lejátszása"}
-                  disabled={isListening}
-                  title={isListening ? 'A saját felvétel lejátszásához előbb állítsd le a mikrofonmérést.' : undefined}
+                  disabled={isListening || isReferenceTonePlaying}
+                  title={isListening ? 'A saját felvétel lejátszásához előbb állítsd le a mikrofonmérést.' : isReferenceTonePlaying ? 'Előbb állítsd le a szinuszreferenciát.' : undefined}
                 >
                   <Volume2 className="h-4 w-4" />
                   {isOwnDPlaying ? "Leállítás" : "Lejátszás"}
@@ -1451,7 +1456,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleToggleReferenceTone}
-                  disabled={referenceToneMode !== 'continuous' || isListening || !Number.isFinite(referenceToneHz) || referenceToneHz <= 0}
+                  disabled={referenceToneMode !== 'continuous' || isListening || isFileInputActive || !Number.isFinite(referenceToneHz) || referenceToneHz <= 0}
                   aria-pressed={referenceToneMode === 'continuous' && isReferenceTonePlaying}
                   aria-label={isReferenceTonePlaying ? 'Referenciahang leállítása' : 'Referenciahang lejátszása'}
                   title={referenceToneMode === 'off' ? 'A referenciahang ki van kapcsolva.' : referenceToneMode === 'strike' ? 'Minden érzékelt ütés kezdetén rövid referenciahang szól.' : isListening ? 'Mikrofonmérés közben a folyamatos referenciahang ki van kapcsolva.' : 'A kiválasztott rezonancia célfrekvenciájának lejátszása'}
@@ -1518,7 +1523,7 @@ export default function App() {
                 kvint={kvint}
                 oktav={oktav}
                 hasSignal={hasSignal}
-                active={isListening || isFileInputActive}
+                active={isSignalInputActive}
                 transientHoldoff={transientHoldoff}
                 baseFrequencyHz={selectedNote.frequency}
                 selectedRole={selectedRole}
@@ -1540,7 +1545,7 @@ export default function App() {
             />
 
             <BBSpectrumDiagnostics
-              active={isListening || isFileInputActive}
+              active={isSignalInputActive}
               hasSignal={hasSignal}
               transientHoldoff={transientHoldoff}
               alap={alap}
@@ -1617,7 +1622,7 @@ export default function App() {
         {/* ================= TAB 2: DETAILED SPECTRUM VIEW ================= */}
         {activeTab === 'spektrum' && (
           <div className="flex-1 flex flex-col gap-2 py-1 min-h-0">
-            <BBSpectrumWaterfall active={isListening || isFileInputActive} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
+            <BBSpectrumWaterfall active={isSignalInputActive} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
             <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
               <button onClick={() => setSelectedRole('fundamental')} className={`rounded-lg border p-2 text-left ${selectedRole === 'fundamental' ? 'border-amber-400/60 bg-amber-400/10' : 'border-white/10 bg-slate-900/50'}`}>
                 <div className="font-sans font-semibold text-amber-400">1× Alaphang</div>
@@ -1644,7 +1649,7 @@ export default function App() {
             <BBHangmezoView
               notes={enabledToneNotes}
               totalNoteCount={toneNotes.length}
-              allowReferenceTonePreview={referenceToneMode === 'continuous' && !isListening}
+              allowReferenceTonePreview={referenceToneMode === 'continuous' && !isListening && !isFileInputActive && !isReferenceTonePlaying}
               selectedNote={selectedNote}
               onSelectNote={handleSelectToneFieldNote}
               hasSignal={hasSignal}
@@ -1711,7 +1716,7 @@ export default function App() {
                   ? 'bg-gradient-to-br from-[#f59e0b] via-[#fbbf24] to-[#d97706] text-slate-950 border-white/40 ring-4 ring-[#f59e0b]/20'
                   : 'bg-gradient-to-br from-[#d97706] to-[#b45309] text-slate-950 border-[#f59e0b]/40 hover:opacity-95'
               }`}
-              title={isListening ? 'Mérés Leállítása' : 'Mérés Indítása'}
+              title={isListening ? 'Mérés Leállítása' : isReferenceTonePlaying ? 'A szinuszjel mérése aktív' : 'Mérés Indítása'}
             >
               {isListening ? (
                 <Mic className="w-6 h-6 text-slate-950" />
