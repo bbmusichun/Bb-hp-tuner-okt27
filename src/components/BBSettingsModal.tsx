@@ -4,6 +4,7 @@ import { HandpanScale } from '../types/tuner';
 import { PRESET_SCALES } from '../audio/scales';
 import { MAX_PARTIAL_TARGET_OFFSET_CENTS, partialTargetFrequency } from '../audio/partialTargets';
 import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/partialTargets';
+import type { InstrumentProfile } from '../audio/instrumentProfiles';
 
 interface Props {
   isOpen: boolean;
@@ -19,6 +20,12 @@ interface Props {
   onResetPartialTargetOffsets: () => void;
   sampleRateKhz: number | null;
   isListening: boolean;
+  instrumentProfiles: InstrumentProfile[];
+  activeInstrumentProfileId: string;
+  onSelectInstrumentProfile: (profileId: string) => void;
+  onCreateInstrumentProfile: (name: string) => void;
+  onRenameInstrumentProfile: (profileId: string, name: string) => void;
+  onDeleteInstrumentProfile: (profileId: string) => void;
 }
 
 export const BBSettingsModal: React.FC<Props> = ({
@@ -35,7 +42,16 @@ export const BBSettingsModal: React.FC<Props> = ({
   onResetPartialTargetOffsets,
   sampleRateKhz,
   isListening,
+  instrumentProfiles,
+  activeInstrumentProfileId,
+  onSelectInstrumentProfile,
+  onCreateInstrumentProfile,
+  onRenameInstrumentProfile,
+  onDeleteInstrumentProfile,
 }) => {
+  const activeProfile = instrumentProfiles.find((profile) => profile.id === activeInstrumentProfileId);
+  const [newProfileName, setNewProfileName] = React.useState('');
+  const [renameProfileDraft, setRenameProfileDraft] = React.useState(activeProfile?.name ?? '');
   const [octaveDraft, setOctaveDraft] = React.useState(String(partialTargetOffsets.octaveCents));
   const [thirdPartialDraft, setThirdPartialDraft] = React.useState(String(partialTargetOffsets.thirdPartialCents));
 
@@ -43,6 +59,10 @@ export const BBSettingsModal: React.FC<Props> = ({
     setOctaveDraft(String(partialTargetOffsets.octaveCents));
     setThirdPartialDraft(String(partialTargetOffsets.thirdPartialCents));
   }, [selectedNoteName, partialTargetOffsets.octaveCents, partialTargetOffsets.thirdPartialCents]);
+
+  React.useEffect(() => {
+    setRenameProfileDraft(activeProfile?.name ?? '');
+  }, [activeInstrumentProfileId, activeProfile?.name]);
 
   const commitOffset = (field: PartialTargetOffsetField, draft: string) => {
     const parsed = draft.trim() === '' ? 0 : Number(draft);
@@ -77,6 +97,82 @@ export const BBSettingsModal: React.FC<Props> = ({
         </div>
 
         <div className="overflow-y-auto space-y-4 pr-1 flex-1 text-xs">
+          {/* Physical instrument profiles */}
+          <section className="p-3 rounded-xl bg-[#080b0f] border border-white/5 space-y-2.5">
+            <div className="font-semibold text-slate-200">Fizikai hangszerprofil</div>
+            <p className="text-[10px] leading-relaxed text-slate-400">
+              Minden handpan saját referenciahangot, hangolási profilt és felhangcélokat kap. A mérési napló megőrzi, melyik hangszerrel készült.
+            </p>
+            <select
+              aria-label="Aktív hangszerprofil"
+              value={activeInstrumentProfileId}
+              onChange={(event) => onSelectInstrumentProfile(event.target.value)}
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-white"
+            >
+              {instrumentProfiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>{profile.name}</option>
+              ))}
+            </select>
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <input
+                aria-label="Aktív hangszerprofil neve"
+                value={renameProfileDraft}
+                maxLength={80}
+                onChange={(event) => setRenameProfileDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && activeProfile && renameProfileDraft.trim()) {
+                    onRenameInstrumentProfile(activeProfile.id, renameProfileDraft);
+                  }
+                }}
+                className="min-w-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white"
+              />
+              <button
+                type="button"
+                onClick={() => activeProfile && onRenameInstrumentProfile(activeProfile.id, renameProfileDraft)}
+                disabled={!activeProfile || !renameProfileDraft.trim() || renameProfileDraft.trim() === activeProfile.name}
+                className="rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-[10px] font-semibold text-slate-200 disabled:opacity-40"
+              >
+                Név mentése
+              </button>
+            </div>
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <input
+                aria-label="Új hangszerprofil neve"
+                value={newProfileName}
+                maxLength={80}
+                placeholder="Pl. D Kurd · 2026-os hangszer"
+                onChange={(event) => setNewProfileName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && newProfileName.trim()) {
+                    onCreateInstrumentProfile(newProfileName);
+                    setNewProfileName('');
+                  }
+                }}
+                className="min-w-0 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs text-white placeholder:text-slate-600"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  onCreateInstrumentProfile(newProfileName);
+                  setNewProfileName('');
+                }}
+                disabled={!newProfileName.trim()}
+                className="rounded-lg bg-[#f59e0b] px-3 py-2 text-[10px] font-bold text-slate-950 disabled:opacity-40"
+              >
+                + Új
+              </button>
+            </div>
+            {instrumentProfiles.length > 1 && (
+              <button
+                type="button"
+                onClick={() => activeProfile && onDeleteInstrumentProfile(activeProfile.id)}
+                className="w-full rounded-lg border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-[10px] text-rose-300 hover:bg-rose-950/60"
+              >
+                Aktív hangszerprofil törlése
+              </button>
+            )}
+          </section>
+
           {/* A4 Reference */}
           <div className="p-3 rounded-xl bg-[#080b0f] border border-white/5">
             <div className="flex items-center justify-between font-semibold mb-2">

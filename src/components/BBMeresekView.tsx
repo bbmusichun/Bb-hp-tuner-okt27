@@ -7,6 +7,8 @@ interface Props {
   logs: TuningLogEntry[];
   selectedScaleId: string;
   selectedNoteName: string;
+  selectedInstrumentProfileId: string;
+  selectedInstrumentProfileName: string;
   onClearLogs: () => void;
   onCapture: () => void;
   hasSignal: boolean;
@@ -17,6 +19,8 @@ export const BBMeresekView: React.FC<Props> = ({
   logs,
   selectedScaleId,
   selectedNoteName,
+  selectedInstrumentProfileId,
+  selectedInstrumentProfileName,
   onClearLogs,
   onCapture,
   hasSignal,
@@ -24,10 +28,12 @@ export const BBMeresekView: React.FC<Props> = ({
 }) => {
   const handleExportCSV = () => {
     if (logs.length === 0) return;
-    const headers = ['Timestamp', 'Date', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune'];
+    const headers = ['Timestamp', 'Date', 'Instrument_Profile_ID', 'Instrument_Profile_Name', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune'];
     const rows = logs.map((l) => [
       l.timestamp,
       new Date(l.timestamp).toISOString(),
+      l.instrumentProfileId ?? '',
+      l.instrumentProfileName ?? '',
       l.scaleId ?? '',
       l.noteName,
       l.audioSampleRateHz?.toFixed(0) ?? '',
@@ -68,7 +74,7 @@ export const BBMeresekView: React.FC<Props> = ({
     window.setTimeout(() => URL.revokeObjectURL(jsonUrl), 1000);
   };
 
-  const repeatability = summarizeRepeatability(logs, selectedScaleId, selectedNoteName, 10);
+  const repeatability = summarizeRepeatability(logs, selectedScaleId, selectedNoteName, 10, selectedInstrumentProfileId);
 
   return (
     <div className="w-full flex flex-col p-3 animate-in fade-in">
@@ -117,7 +123,7 @@ export const BBMeresekView: React.FC<Props> = ({
       {repeatability && (
         <section className="mb-3 rounded-xl border border-white/10 bg-[#0b0f14] p-3">
           <div className="flex items-center justify-between gap-2 mb-1">
-            <h4 className="text-xs font-bold text-white">Ismételhetőség · {repeatability.noteName}</h4>
+            <h4 className="text-xs font-bold text-white">Ismételhetőség · {selectedInstrumentProfileName} · {repeatability.noteName}</h4>
             <span className="text-[10px] text-slate-400">{repeatability.sampleCount} legutóbbi mérés</span>
           </div>
           <p className="text-[10px] leading-relaxed text-slate-500 mb-3">
@@ -168,9 +174,10 @@ export const BBMeresekView: React.FC<Props> = ({
                 )}
               </div>
 
-              {(log.audioSampleRateHz !== undefined || log.inputLevelDbfs !== undefined || log.scaleId) && (
+              {(log.audioSampleRateHz !== undefined || log.inputLevelDbfs !== undefined || log.scaleId || log.instrumentProfileName || log.instrumentProfileId) && (
                 <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-slate-500 font-mono">
-                  {log.scaleId && <span>Profil: {log.scaleId}</span>}
+                  {(log.instrumentProfileName || log.instrumentProfileId) && <span>Hangszer: {log.instrumentProfileName ?? log.instrumentProfileId}</span>}
+                  {log.scaleId && <span>Hangolás: {log.scaleId}</span>}
                   {log.audioSampleRateHz !== undefined && <span>Fs: {log.audioSampleRateHz.toFixed(0)} Hz</span>}
                   {log.inputLevelDbfs !== undefined && <span>Bemenet: {log.inputLevelDbfs.toFixed(1)} dBFS</span>}
                 </div>

@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { summarizeRepeatability } from './repeatabilitySummary';
 import type { TuningLogEntry } from '../types/tuner';
 
-function log(id: number, scaleId: string, noteName: string, fundamentalCents: number, fifthCents = fundamentalCents, octaveCents = fundamentalCents): TuningLogEntry {
+function log(id: number, scaleId: string, noteName: string, fundamentalCents: number, fifthCents = fundamentalCents, octaveCents = fundamentalCents, instrumentProfileId?: string): TuningLogEntry {
   return {
     id: String(id),
     timestamp: id,
     scaleId,
+    instrumentProfileId,
     noteName,
     fundamentalHz: 146.8,
     fundamentalCents,
@@ -44,6 +45,18 @@ describe('repeatability summary', () => {
       log(4, 'd-kurd-9', 'A3', 4),
     ], 'd-kurd-9', 'D3');
     assert.equal(result, null);
+  });
+
+  it('keeps repeated measurements from different physical instruments separate', () => {
+    const result = summarizeRepeatability([
+      log(1, 'd-kurd-9', 'D3', 1, 1, 1, 'instrument-a'),
+      log(2, 'd-kurd-9', 'D3', 2, 2, 2, 'instrument-b'),
+      log(3, 'd-kurd-9', 'D3', 3, 3, 3, 'instrument-a'),
+      log(4, 'd-kurd-9', 'D3', 4, 4, 4, 'instrument-a'),
+    ], 'd-kurd-9', 'D3', 10, 'instrument-a');
+    assert.ok(result);
+    assert.equal(result.sampleCount, 3);
+    assert.equal(result.fundamental.medianCents, 3);
   });
 
   it('uses only the most recent requested number of samples', () => {

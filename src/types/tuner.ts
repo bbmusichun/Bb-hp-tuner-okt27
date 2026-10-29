@@ -56,6 +56,9 @@ export interface TuningLogEntry {
   noteName: string;
   /** Scale/profile identity; optional for older saved logs. */
   scaleId?: string;
+  /** Physical instrument identity; optional for older saved logs. */
+  instrumentProfileId?: string;
+  instrumentProfileName?: string;
   /** Capture conditions, optional for older saved logs. */
   audioSampleRateHz?: number;
   inputLevelDbfs?: number;
