@@ -274,6 +274,7 @@ export default function App() {
 
   // Selected resonance focus for the main display and stability graph
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
+  const [spectrumZoomTargetHz, setSpectrumZoomTargetHz] = useState<number | null>(null);
   const [isReferenceTonePlaying, setIsReferenceTonePlaying] = useState(false);
   const ownDPlayerRef = useRef<HTMLAudioElement | null>(null);
   const [ownDLoop, setOwnDLoop] = useState(() => {
@@ -1700,6 +1701,7 @@ export default function App() {
                 toleranceOverrideCents={toleranceOverrideCents}
                 strobeSensitivity={strobeSensitivity}
                 onChangeStrobeSensitivity={setStrobeSensitivity}
+                onZoomTargetHz={setSpectrumZoomTargetHz}
               />
               )}
             </div>
@@ -1713,6 +1715,8 @@ export default function App() {
               hasSignal={hasSignal}
               toleranceOverrideCents={toleranceOverrideCents}
               onSelectPeak={setSelectedRole}
+              zoomTargetHz={spectrumZoomTargetHz}
+              onClearZoom={() => setSpectrumZoomTargetHz(null)}
             />
               )}
 
