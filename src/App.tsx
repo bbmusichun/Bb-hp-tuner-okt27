@@ -1162,8 +1162,8 @@ export default function App() {
                     : 'bg-slate-600'
                 }`}
               />
-              <span className={`text-[11px] font-medium ${isListening ? 'text-slate-200' : 'text-slate-400'}`}>
-                {isListening ? 'Mikrofon aktív' : 'Mikrofon inaktív'}
+              <span className={`text-[11px] font-medium ${(isListening || isFileInputActive) ? 'text-slate-200' : 'text-slate-400'}`}>
+                {isListening ? 'Mikrofon aktív' : isFileInputActive ? 'Hangfájl tesztelése' : 'Mikrofon inaktív'}
               </span>
             </div>
 
@@ -1178,7 +1178,7 @@ export default function App() {
               >{(isListening || isFileInputActive) && analysisFps !== null ? `${analysisFps} FPS` : '— FPS'}</span>
               <span className="text-slate-600">|</span>
               <span className={inputNearClip ? 'w-11 text-right text-red-300' : 'w-11 text-right'}>
-                {isListening && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}
+                {(isListening || isFileInputActive) && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}
               </span>
 
               {/* 8-segment LED VU meter matching screenshot */}
@@ -1186,7 +1186,7 @@ export default function App() {
                 {[0, 1, 2, 3, 4, 5, 6, 7].map((barIdx) => {
                   // Thresholds: -60, -50, -40, -30, -20, -12, -6, -2 dB
                   const thresholds = [-60, -50, -40, -30, -22, -14, -8, -3];
-                  const isLit = isListening && hasSignal && inputLevelDb >= thresholds[barIdx];
+                  const isLit = (isListening || isFileInputActive) && hasSignal && inputLevelDb >= thresholds[barIdx];
 
                   let colorClass = 'bg-[#10b981]'; // Green (bars 0-4)
                   if (barIdx >= 5 && barIdx <= 6) colorClass = 'bg-[#f59e0b]'; // Yellow/Amber
@@ -1271,7 +1271,7 @@ export default function App() {
                   setOwnDAudioError('A saját D-felvétel nem tölthető be. Frissítsd az oldalt, és próbáld újra.');
                 }}
                 onEnded={() => { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); setOwnDAudioCurrentTime(0); }}
-                onPause={(event) => { if (event.currentTarget.paused) { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); } }}
+                onPause={(event) => { if (event.currentTarget.paused) { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); setHasSignal(false); setInputLevelDb(-100); setTransientHoldoff(false); } }}
                 onPlay={() => { setOwnDAudioError(''); setIsOwnDPlaying(true); }}
               />
               <div className="flex items-center justify-between gap-3">
@@ -1537,7 +1537,7 @@ export default function App() {
             />
 
             <BBSpectrumDiagnostics
-              active={isListening}
+              active={isListening || isFileInputActive}
               hasSignal={hasSignal}
               transientHoldoff={transientHoldoff}
               alap={alap}
@@ -1614,7 +1614,7 @@ export default function App() {
         {/* ================= TAB 2: DETAILED SPECTRUM VIEW ================= */}
         {activeTab === 'spektrum' && (
           <div className="flex-1 flex flex-col gap-2 py-1 min-h-0">
-            <BBSpectrumWaterfall active={isListening} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
+            <BBSpectrumWaterfall active={isListening || isFileInputActive} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
             <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
               <button onClick={() => setSelectedRole('fundamental')} className={`rounded-lg border p-2 text-left ${selectedRole === 'fundamental' ? 'border-amber-400/60 bg-amber-400/10' : 'border-white/10 bg-slate-900/50'}`}>
                 <div className="font-sans font-semibold text-amber-400">1× Alaphang</div>
