@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeInstrumentProfiles, resolveActiveInstrumentProfileId, type InstrumentProfile } from './instrumentProfiles';
+import { normalizeInstrumentProfiles, parseCustomScale, resolveActiveInstrumentProfileId, type InstrumentProfile } from './instrumentProfiles';
 
 const fallback: InstrumentProfile = {
   id: 'instrument-default',
@@ -10,7 +10,33 @@ const fallback: InstrumentProfile = {
   partialTargetOffsets: {},
 };
 
+describe('custom instrument scales', () => {
+  it('keeps exact target frequencies instead of rounding to temperament', () => {
+    const scale = parseCustomScale('My D Kurd', 'D3, 146.900\nA3, 220.500\nBb3, 233.300', 'custom-test');
+    assert.ok(scale);
+    assert.equal(scale.noteCount, 3);
+    assert.equal(scale.notes[0].frequencyHz, 146.9);
+    assert.equal(scale.notes[1].frequencyHz, 220.5);
+    assert.equal(scale.root, 'D3');
+  });
+
+  it('rejects duplicate names, malformed rows, out-of-range frequencies and invalid counts', () => {
+    assert.equal(parseCustomScale('Bad', 'D3, 146\nD3, 147', 'custom-bad'), null);
+    assert.equal(parseCustomScale('Bad', 'D3 146\nA3, 220', 'custom-bad'), null);
+    assert.equal(parseCustomScale('Bad', 'D3, 19\nA3, 220', 'custom-bad'), null);
+    assert.equal(parseCustomScale('Bad', 'D3, 146', 'custom-bad'), null);
+  });
+});
+
 describe('instrument profiles', () => {
+  it('restores valid custom scales from saved profile records', () => {
+    const customScale = parseCustomScale('Custom D', 'D3, 146.91\nA3, 220.49', 'custom-instrument-default');
+    assert.ok(customScale);
+    const profiles = normalizeInstrumentProfiles([{ ...fallback, scaleId: customScale.id, customScale }], ['d-kurd-9'], fallback);
+    assert.equal(profiles.length, 1);
+    assert.equal(profiles[0].customScale?.notes[0].frequencyHz, 146.91);
+  });
+
   it('keeps independently configured physical instruments', () => {
     const profiles = normalizeInstrumentProfiles([
       fallback,
