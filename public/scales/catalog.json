@@ -1,0 +1,177 @@
+[
+  {
+    "path": "/scales/Scales/Circle of Fifths.scl",
+    "category": "Scales",
+    "name": "Circle of Fifths"
+  },
+  {
+    "path": "/scales/Scales/Golden Gate (just).scl",
+    "category": "Scales",
+    "name": "Golden Gate (just)"
+  },
+  {
+    "path": "/scales/Scales/Integral Hang (just).scl",
+    "category": "Scales",
+    "name": "Integral Hang (just)"
+  },
+  {
+    "path": "/scales/Scales/Quarter-Tone Equal.scl",
+    "category": "Scales",
+    "name": "Quarter-Tone Equal"
+  },
+  {
+    "path": "/scales/Scales/Sacred Solfeggio.scl",
+    "category": "Scales",
+    "name": "Sacred Solfeggio"
+  },
+  {
+    "path": "/scales/Temperaments/Bach/Barnes (1979).scl",
+    "category": "Bach",
+    "name": "Barnes (1979)"
+  },
+  {
+    "path": "/scales/Temperaments/Bach/Hill (2008).scl",
+    "category": "Bach",
+    "name": "Hill (2008)"
+  },
+  {
+    "path": "/scales/Temperaments/Bach/Kellner (1980).scl",
+    "category": "Bach",
+    "name": "Kellner (1980)"
+  },
+  {
+    "path": "/scales/Temperaments/Bach/Klais.scl",
+    "category": "Bach",
+    "name": "Klais"
+  },
+  {
+    "path": "/scales/Temperaments/Bach/Lehman (2005).scl",
+    "category": "Bach",
+    "name": "Lehman (2005)"
+  },
+  {
+    "path": "/scales/Temperaments/Bach/O'Donnell (2006).scl",
+    "category": "Bach",
+    "name": "O'Donnell (2006)"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/d'Alembert (1752).scl",
+    "category": "Circulating",
+    "name": "d'Alembert (1752)"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/Kirnberger III (1779).scl",
+    "category": "Circulating",
+    "name": "Kirnberger III (1779)"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/Neidhardt (1732) City.scl",
+    "category": "Circulating",
+    "name": "Neidhardt (1732) City"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/Neidhardt (1732) Town.scl",
+    "category": "Circulating",
+    "name": "Neidhardt (1732) Town"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/Neidhardt (1732) Village.scl",
+    "category": "Circulating",
+    "name": "Neidhardt (1732) Village"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/Pinnock Modern (2009).scl",
+    "category": "Circulating",
+    "name": "Pinnock Modern (2009)"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/Vallotti.scl",
+    "category": "Circulating",
+    "name": "Vallotti"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/Werckmeister III (1691).scl",
+    "category": "Circulating",
+    "name": "Werckmeister III (1691)"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/Werckmeister IV (1691).scl",
+    "category": "Circulating",
+    "name": "Werckmeister IV (1691)"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/Werckmeister V (1691).scl",
+    "category": "Circulating",
+    "name": "Werckmeister V (1691)"
+  },
+  {
+    "path": "/scales/Temperaments/Circulating/Young (1800).scl",
+    "category": "Circulating",
+    "name": "Young (1800)"
+  },
+  {
+    "path": "/scales/Temperaments/Equal Temperament.scl",
+    "category": "Equal Temperament.scl",
+    "name": "Equal Temperament"
+  },
+  {
+    "path": "/scales/Temperaments/Grammateus (1518).scl",
+    "category": "Grammateus (1518).scl",
+    "name": "Grammateus (1518)"
+  },
+  {
+    "path": "/scales/Temperaments/Kirnberger II (1771).scl",
+    "category": "Kirnberger II (1771).scl",
+    "name": "Kirnberger II (1771)"
+  },
+  {
+    "path": "/scales/Temperaments/Meantone/Corrette (1753).scl",
+    "category": "Meantone",
+    "name": "Corrette (1753)"
+  },
+  {
+    "path": "/scales/Temperaments/Meantone/Fifth-Comma (Rossi).scl",
+    "category": "Meantone",
+    "name": "Fifth-Comma (Rossi)"
+  },
+  {
+    "path": "/scales/Temperaments/Meantone/Quarter-Comma (Aron, 1523).scl",
+    "category": "Meantone",
+    "name": "Quarter-Comma (Aron, 1523)"
+  },
+  {
+    "path": "/scales/Temperaments/Meantone/Quarter-Comma Split-Wolf.scl",
+    "category": "Meantone",
+    "name": "Quarter-Comma Split-Wolf"
+  },
+  {
+    "path": "/scales/Temperaments/Meantone/Sixth-Comma (Silbermann II).scl",
+    "category": "Meantone",
+    "name": "Sixth-Comma (Silbermann II)"
+  },
+  {
+    "path": "/scales/Temperaments/Meantone/Third-Comma (Salinas).scl",
+    "category": "Meantone",
+    "name": "Third-Comma (Salinas)"
+  },
+  {
+    "path": "/scales/Temperaments/Meantone/Two-Ninth (Rossi, 1666).scl",
+    "category": "Meantone",
+    "name": "Two-Ninth (Rossi, 1666)"
+  },
+  {
+    "path": "/scales/Temperaments/Meantone/Two-Seventh (Zarlino, 1558).scl",
+    "category": "Meantone",
+    "name": "Two-Seventh (Zarlino, 1558)"
+  },
+  {
+    "path": "/scales/Temperaments/Pythagorean.scl",
+    "category": "Pythagorean.scl",
+    "name": "Pythagorean"
+  },
+  {
+    "path": "/scales/Temperaments/Werckmeister VI (1691).scl",
+    "category": "Werckmeister VI (1691).scl",
+    "name": "Werckmeister VI (1691)"
+  }
+]
