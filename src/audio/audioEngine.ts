@@ -82,7 +82,10 @@ export class BBAudioEngine {
           autoGainControl: true,
         },
       });
-      const trackSettings = this.microphoneStream.getAudioTracks()[0]?.getSettings();
+      const microphoneTrack = this.microphoneStream.getAudioTracks()[0];
+      const trackSettings = typeof microphoneTrack?.getSettings === 'function'
+        ? microphoneTrack.getSettings()
+        : undefined;
       this.autoGainControlStatus = typeof trackSettings?.autoGainControl === 'boolean'
         ? trackSettings.autoGainControl
         : null;
