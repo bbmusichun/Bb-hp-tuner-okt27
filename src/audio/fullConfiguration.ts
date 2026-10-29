@@ -6,6 +6,8 @@ import type { AutoDetectionMode } from './detectionModes';
 import type { TuningReadoutMode } from './readoutModes';
 import type { ReferenceToneMode } from './referenceToneModes';
 import { isValidStrobeSensitivity, normalizeStrobeSensitivity } from './strobeSensitivity';
+import { normalizeTuningToleranceMode, type TuningToleranceMode } from './tuningTolerance';
+import { normalizePitchPipeModes, type PitchPipeMode } from './pitchPipeModes';
 
 export interface HangoalFullConfiguration {
   schemaVersion: 2;
@@ -14,6 +16,8 @@ export interface HangoalFullConfiguration {
     autoDetect: boolean;
     autoDetectionMode: AutoDetectionMode;
     toleranceOverrideCents: number | null;
+    toleranceMode: TuningToleranceMode;
+    freezeTargets: boolean;
     transposeSemitones: number;
     strobeSensitivity: number;
     readoutMode: TuningReadoutMode;
@@ -23,6 +27,7 @@ export interface HangoalFullConfiguration {
   };
   disabledToneNotesByScale: Record<string, string[]>;
   customStrobeBands: StrobeBandConfig[];
+  pitchPipeModes: Record<string, PitchPipeMode>;
   measurements: TuningLogEntry[];
 }
 
@@ -79,6 +84,11 @@ export function parseHangoalFullConfiguration(
   if (!(settings.toleranceOverrideCents === null ||
     (typeof settings.toleranceOverrideCents === 'number' && Number.isFinite(settings.toleranceOverrideCents) &&
       settings.toleranceOverrideCents >= 0.5 && settings.toleranceOverrideCents <= 20))) return null;
+  if (settings.toleranceMode !== undefined &&
+    settings.toleranceMode !== 'auto' && settings.toleranceMode !== 'any' && settings.toleranceMode !== 'off') return null;
+  const toleranceMode = normalizeTuningToleranceMode(settings.toleranceMode);
+  if (settings.freezeTargets !== undefined && typeof settings.freezeTargets !== 'boolean') return null;
+  const freezeTargets = settings.freezeTargets === true;
   if (typeof settings.transposeSemitones !== 'number' || !Number.isInteger(settings.transposeSemitones) ||
     settings.transposeSemitones < -12 || settings.transposeSemitones > 12) return null;
   if (settings.strobeSensitivity !== undefined && !isValidStrobeSensitivity(settings.strobeSensitivity)) return null;
@@ -91,6 +101,9 @@ export function parseHangoalFullConfiguration(
   const customStrobeBands = normalizeStrobeBands(value.customStrobeBands);
   if (customStrobeBands.length !== value.customStrobeBands.length ||
     customStrobeBands.some((band) => band.source !== 'custom')) return null;
+  if (value.pitchPipeModes !== undefined && (!isRecord(value.pitchPipeModes) ||
+    Object.keys(normalizePitchPipeModes(value.pitchPipeModes)).length !== Object.keys(value.pitchPipeModes).length)) return null;
+  const pitchPipeModes = normalizePitchPipeModes(value.pitchPipeModes);
   if (!Array.isArray(value.measurements) || value.measurements.length > 5000 ||
     !value.measurements.every(isValidLogEntry)) return null;
   const ids = value.measurements.map((item) => (item as TuningLogEntry).id);
@@ -108,6 +121,8 @@ export function parseHangoalFullConfiguration(
       autoDetect: settings.autoDetect,
       autoDetectionMode: settings.autoDetectionMode,
       toleranceOverrideCents: settings.toleranceOverrideCents,
+      toleranceMode,
+      freezeTargets,
       transposeSemitones: settings.transposeSemitones,
       strobeSensitivity,
       readoutMode: settings.readoutMode,
@@ -117,6 +132,7 @@ export function parseHangoalFullConfiguration(
     },
     disabledToneNotesByScale,
     customStrobeBands,
+    pitchPipeModes,
     measurements: value.measurements as TuningLogEntry[],
   };
 }
