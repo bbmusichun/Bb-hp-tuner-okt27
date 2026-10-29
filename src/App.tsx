@@ -1244,9 +1244,14 @@ export default function App() {
                 }}
                 onTimeUpdate={(event) => setOwnDAudioCurrentTime(event.currentTarget.currentTime)}
                 onCanPlay={() => setOwnDAudioError('')}
-                onError={() => setOwnDAudioError('A saját D-felvétel nem tölthető be. Frissítsd az oldalt, és próbáld újra.')}
+                onError={() => {
+                  setIsOwnDPlaying(false);
+                  setOwnDAudioDuration(0);
+                  setOwnDAudioCurrentTime(0);
+                  setOwnDAudioError('A saját D-felvétel nem tölthető be. Frissítsd az oldalt, és próbáld újra.');
+                }}
                 onEnded={() => { setIsOwnDPlaying(false); setOwnDAudioCurrentTime(0); }}
-                onPause={() => setIsOwnDPlaying(false)}
+                onPause={(event) => { if (event.currentTarget.paused) setIsOwnDPlaying(false); }}
                 onPlay={() => { setOwnDAudioError(''); setIsOwnDPlaying(true); }}
               />
               <div className="flex items-center justify-between gap-3">
