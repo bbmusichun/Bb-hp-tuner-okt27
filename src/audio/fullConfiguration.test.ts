@@ -102,7 +102,7 @@ test('rejects malformed log entries and duplicate log ids', () => {
 
 test('keeps older complete backups compatible when strobe sensitivity is absent', () => {
   const backup = validBackup();
-  Reflect.deleteProperty(backup.settings, 'strobeSensitivity');
+  (backup.settings as unknown as Record<string, unknown>).strobeSensitivity = undefined;
   const result = parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile);
   assert.ok(result);
   assert.equal(result.settings.strobeSensitivity, 1);
