@@ -9,6 +9,24 @@ import type { ResonanceMeasurement } from '../types/tuner';
 
 const STORAGE_KEY = 'hangoal-custom-strobe-bands-v1';
 const MAX_CUSTOM_BANDS = 8;
+type PitchPipeMode = 'continuous' | 'strike' | 'off';
+const PITCH_PIPE_STORAGE_KEY = 'hangoal-strobe-pitch-pipe-modes-v1';
+function loadPitchPipeModes(): Record<string, PitchPipeMode> {
+  try {
+    const raw = localStorage.getItem(PITCH_PIPE_STORAGE_KEY);
+    if (!raw) return {};
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .filter((entry): entry is [string, PitchPipeMode] => entry[0].length <= 80 && (entry[1] === 'continuous' || entry[1] === 'strike' || entry[1] === 'off')));
+  } catch { return {}; }
+}
+function nextPitchPipeMode(mode: PitchPipeMode): PitchPipeMode {
+  return mode === 'off' ? 'continuous' : mode === 'continuous' ? 'strike' : 'off';
+}
+function pitchPipeModeLabel(mode: PitchPipeMode): string {
+  return mode === 'continuous' ? 'Folyamatos hang' : mode === 'strike' ? 'Ütésre rövid hang' : 'Kikapcsolva';
+}
 const ROW_HEIGHT = 38;
 const BAND_COLORS = ['#f59e0b', '#22d3ee', '#c084fc', '#34d399', '#fb7185', '#60a5fa', '#eab308', '#a3e635'];
 
@@ -22,7 +40,7 @@ interface Props {
   baseFrequencyHz?: number;
   toleranceOverrideCents?: number | null;
   toleranceMode?: TuningToleranceMode;
-  selectedRole? string;
+  selectedRole?: string;
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
   strobeSensitivity?: number;
   onChangeStrobeSensitivity?: (value: number) => void;
@@ -60,6 +78,13 @@ export const BBStrobeBands: React.FC<Props> = ({
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
+  const [pitchPipeModes, setPitchPipeModes] = useState<Record<string, PitchPipeMode>>(loadPitchPipeModes);
+  const [activePitchPipeId, setActivePitchPipeId] = useState<string | null>(null);
+  const activePitchPipeRef = useRef<string | null>(null);
+  const pitchPipeModesRef = useRef(pitchPipeModes);
+  activePitchPipeRef.current = activePitchPipeId;
+  pitchPipeModesRef.current = pitchPipeModes;
+  const previousTransientRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, toleranceMode, strobeSensitivity, baseFrequencyHz, customBands });
   latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, toleranceMode, strobeSensitivity, baseFrequencyHz, customBands };
@@ -72,6 +97,47 @@ export const BBStrobeBands: React.FC<Props> = ({
   const lastReadoutRef = useRef(0);
   const canvasHeight = ROW_HEIGHT * (3 + customBands.length);
   const hasCustomSignal = active && hasSignal && !transientHoldoff;
+
+  const modeForPipe = (id: string): PitchPipeMode => pitchPipeModes[id] ?? 'off';
+  const targetForPipe = (id: string): number | null => {
+    if (id === 'fundamental') return alap.targetHz;
+    if (id === 'fifth') return kvint.targetHz;
+    if (id === 'octave') return oktav.targetHz;
+    const band = customBands.find((item) => item.id === id);
+    return band ? getStrobeBandTargetHz(band, baseFrequencyHz) : null;
+  };
+  const cyclePitchPipe = (id: string, fallbackHz: number) => {
+    const nextMode = nextPitchPipeMode(modeForPipe(id));
+    // One physical output oscillator at a time; cycling any band replaces its prior pitch pipe.
+    bbAudioEngine.stopTone();
+    window.dispatchEvent(new Event('hangoal-band-pitch-pipe-toggle'));
+    setPitchPipeModes((previous) => ({ ...previous, [id]: nextMode }));
+    setActivePitchPipeId(nextMode === 'off' ? null : id);
+    const targetHz = targetForPipe(id) ?? fallbackHz;
+    if (nextMode === 'continuous' && Number.isFinite(targetHz) && targetHz > 0) {
+      bbAudioEngine.playTone(targetHz);
+    }
+  };
+
+  useEffect(() => {
+    if (!transientHoldoff) {
+      previousTransientRef.current = false;
+      return;
+    }
+    if (previousTransientRef.current) return;
+    previousTransientRef.current = true;
+    const id = activePitchPipeId;
+    if (!active || !id || pitchPipeModes[id] !== 'strike') return;
+    const targetHz = targetForPipe(id);
+    if (targetHz === null || !Number.isFinite(targetHz) || targetHz <= 0) return;
+    bbAudioEngine.playTone(targetHz);
+    const timer = window.setTimeout(() => {
+      if (activePitchPipeRef.current === id && pitchPipeModesRef.current[id] === 'strike') {
+        bbAudioEngine.stopTone();
+      }
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [transientHoldoff, active, activePitchPipeId, pitchPipeModes, alap.targetHz, kvint.targetHz, oktav.targetHz, customBands, baseFrequencyHz]);
 
   useEffect(() => {
     const reload = () => setCustomBands(loadCustomBands());
@@ -87,6 +153,10 @@ export const BBStrobeBands: React.FC<Props> = ({
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(customBands)); }
     catch (error) { console.warn('Nem sikerült menteni az egyedi stroboszkópsávokat:', error); }
   }, [customBands]);
+  useEffect(() => {
+    try { localStorage.setItem(PITCH_PIPE_STORAGE_KEY, JSON.stringify(pitchPipeModes)); }
+    catch { /* Pitch-pipe controls remain usable when storage is disabled. */ }
+  }, [pitchPipeModes]);
 
   useEffect(() => {
     let animationId = 0;
@@ -237,20 +307,42 @@ export const BBStrobeBands: React.FC<Props> = ({
       </div>
 
       <div className="flex w-full items-stretch gap-2">
-        <div className="flex w-[78px] shrink-0 flex-col select-none" style={{ height: canvasHeight }}>
-          {builtInLabels.map((row) => (
-            <button key={row.id} type="button" style={{ height: ROW_HEIGHT }} onClick={() => focusRole(row.role)}
-              className={'flex flex-col justify-center items-start leading-tight hover:opacity-80 transition ' + (selectedRole === row.role ? 'opacity-100' : 'opacity-90')}>
-              <span className="text-[11px] font-semibold text-white/90">{row.name}</span>
-              <span className="text-[10px] font-mono font-medium" style={{ color: row.color }}>{row.note}</span>
-            </button>
-          ))}
-          {customBands.map((band, index) => (
-            <button key={band.id} type="button" style={{ height: ROW_HEIGHT }} onClick={() => onZoomTargetHz?.(getStrobeBandTargetHz(band, baseFrequencyHz))} className="flex flex-col justify-center leading-tight overflow-hidden text-left hover:opacity-80">
-              <span className="truncate text-[11px] font-semibold text-white/80">{band.name || 'Egyedi sáv ' + (index + 1)}</span>
-              <span className="truncate text-[10px] font-mono text-slate-400">{formatStrobeTargetExpression(band)}</span>
-            </button>
-          ))}
+        <div className="flex w-[116px] shrink-0 flex-col select-none" style={{ height: canvasHeight }}>
+          {builtInLabels.map((row) => {
+            const mode = modeForPipe(row.role);
+            return (
+              <div key={row.id} style={{ height: ROW_HEIGHT }} className="flex min-w-0 items-center gap-1">
+                <button type="button" onClick={() => focusRole(row.role)}
+                  className={'min-w-0 flex-1 overflow-hidden flex flex-col justify-center items-start leading-tight hover:opacity-80 transition ' + (selectedRole === row.role ? 'opacity-100' : 'opacity-90')}>
+                  <span className="truncate text-[11px] font-semibold text-white/90">{row.name}</span>
+                  <span className="truncate text-[10px] font-mono font-medium" style={{ color: row.color }}>{row.note}</span>
+                </button>
+                <button type="button" onClick={() => cyclePitchPipe(row.role, targetForPipe(row.role) ?? baseFrequencyHz)}
+                  aria-label={row.name + ' referenciahang mód: ' + pitchPipeModeLabel(mode) + '. Mód váltása.'}
+                  title={pitchPipeModeLabel(mode) + ' – kattints a váltáshoz'}
+                  className={'h-7 w-7 shrink-0 rounded-md border text-xs font-bold ' + (mode === 'off' ? 'border-slate-700 text-slate-500' : mode === 'continuous' ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-200' : 'border-amber-400/50 bg-amber-400/10 text-amber-200')}>
+                  {mode === 'off' ? '♪' : mode === 'continuous' ? '♫' : '♩'}
+                </button>
+              </div>
+            );
+          })}
+          {customBands.map((band, index) => {
+            const mode = modeForPipe(band.id);
+            return (
+              <div key={band.id} style={{ height: ROW_HEIGHT }} className="flex min-w-0 items-center gap-1">
+                <button type="button" onClick={() => onZoomTargetHz?.(getStrobeBandTargetHz(band, baseFrequencyHz))} className="min-w-0 flex-1 flex flex-col justify-center leading-tight overflow-hidden text-left hover:opacity-80">
+                  <span className="truncate text-[11px] font-semibold text-white/80">{band.name || 'Egyedi sáv ' + (index + 1)}</span>
+                  <span className="truncate text-[10px] font-mono text-slate-400">{formatStrobeTargetExpression(band)}</span>
+                </button>
+                <button type="button" onClick={() => cyclePitchPipe(band.id, getStrobeBandTargetHz(band, baseFrequencyHz))}
+                  aria-label={band.name + ' referenciahang mód: ' + pitchPipeModeLabel(mode) + '. Mód váltása.'}
+                  title={pitchPipeModeLabel(mode) + ' – kattints a váltáshoz'}
+                  className={'h-7 w-7 shrink-0 rounded-md border text-xs font-bold ' + (mode === 'off' ? 'border-slate-700 text-slate-500' : mode === 'continuous' ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-200' : 'border-amber-400/50 bg-amber-400/10 text-amber-200')}>
+                  {mode === 'off' ? '♪' : mode === 'continuous' ? '♫' : '♩'}
+                </button>
+              </div>
+            );
+          })}
         </div>
         <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-white/5 shadow-inner">
           <canvas ref={canvasRef} width={600} height={canvasHeight}
