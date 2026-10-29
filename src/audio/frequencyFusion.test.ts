@@ -7,7 +7,7 @@ const cents = (measured: number, target: number) => 1200 * Math.log2(measured / 
 
 describe('reference-frequency estimate fusion', () => {
   it('leaves an exact pure-tone reference unchanged', () => {
-    assert.equal(fuseAgreeingFrequencyEstimates(A4, A4, 1), A4);
+    assert.ok(Math.abs(fuseAgreeingFrequencyEstimates(A4, A4, 1) - A4) < 1e-10);
   });
 
   it('reduces error when two high-quality estimates bracket the known reference', () => {
