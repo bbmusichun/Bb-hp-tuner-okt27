@@ -14,7 +14,14 @@ const PITCH_PIPE_STORAGE_KEY = 'hangoal-strobe-pitch-pipe-modes-v1';
 function loadPitchPipeModes(): Record<string, PitchPipeMode> {
   try {
     const raw = localStorage.getItem(PITCH_PIPE_STORAGE_KEY);
-    return raw ? normalizePitchPipeModes(JSON.parse(raw)) : {};
+    if (!raw) return {};
+    const saved = normalizePitchPipeModes(JSON.parse(raw));
+    // A browser reload destroys AudioContext voices; do not show a silent voice as active.
+    // Voices survive ordinary tab changes inside the same app session.
+    return Object.fromEntries(Object.entries(saved).map(([id, mode]) => [
+      id,
+      mode === 'continuous' && !bbAudioEngine.hasPitchPipeTone(pitchPipeVoiceId(id)) ? 'off' : mode,
+    ]));
   } catch { return {}; }
 }
 const ROW_HEIGHT = 38;
@@ -299,7 +306,7 @@ export const BBStrobeBands: React.FC<Props> = ({
       <div className="mb-2 flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-bold text-white">Stroboszkóp</h3>
-          <p className="mt-0.5 text-[10px] text-slate-400">Felül kvint, középen oktáv, alul alap. A további sávok is ebben a nézetben jelennek meg.</p>
+          <p className="mt-0.5 text-[10px] text-slate-400">Felül kvint, középen oktáv, alul alap. A ♪ gomb ciklusa: ki → folyamatos → ütésre; több sáv együtt is szólhat.</p>
           {renderFps !== null && !isPaused && (
             <p role={renderFps < 40 ? 'alert' : 'status'} className={'mt-1 text-[10px] font-mono ' + (renderFps < 40 ? 'text-rose-300' : 'text-emerald-300')}>
               {renderFps < 40 ? 'Lassú stroboszkóprajzolás: ' : 'Stroboszkóprajzolás: '}{Math.round(renderFps)} FPS{renderFps < 40 ? ' · csökkentsd a képernyő terhelését' : ''}
