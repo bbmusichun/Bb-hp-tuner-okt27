@@ -9,6 +9,7 @@ import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 import { detectTransientOnset, isTransientHoldoffActive, StablePitchTracker } from './transientGuard';
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
+import { isNearDigitalClipPeak } from './inputClipping';
 import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
 import { findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
@@ -238,7 +239,7 @@ export class BBAudioEngine {
       peakAbsolute = Math.max(peakAbsolute, Math.abs(sample));
     }
     const rms = Math.sqrt(sumSquares / this.timeData.length);
-    const clippingLikely = peakAbsolute >= 0.999;
+    const clippingLikely = isNearDigitalClipPeak(peakAbsolute);
     const db = rms > 1e-5 ? Math.max(-100, Math.min(0, 20 * Math.log10(rms))) : -100;
     this.inputLevelDb = Math.round(db);
 
