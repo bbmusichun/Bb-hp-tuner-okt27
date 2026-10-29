@@ -88,7 +88,9 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
     typeof entry.overallInTune === 'boolean' &&
     (entry.fundamentalTargetHz === undefined || (typeof entry.fundamentalTargetHz === 'number' && Number.isFinite(entry.fundamentalTargetHz) && entry.fundamentalTargetHz > 0)) &&
     (entry.fifthTargetHz === undefined || (typeof entry.fifthTargetHz === 'number' && Number.isFinite(entry.fifthTargetHz) && entry.fifthTargetHz > 0)) &&
-    (entry.octaveTargetHz === undefined || (typeof entry.octaveTargetHz === 'number' && Number.isFinite(entry.octaveTargetHz) && entry.octaveTargetHz > 0));
+    (entry.octaveTargetHz === undefined || (typeof entry.octaveTargetHz === 'number' && Number.isFinite(entry.octaveTargetHz) && entry.octaveTargetHz > 0)) &&
+    (entry.audioSampleRateHz === undefined || (typeof entry.audioSampleRateHz === 'number' && Number.isFinite(entry.audioSampleRateHz) && entry.audioSampleRateHz > 0)) &&
+    (entry.inputLevelDbfs === undefined || (typeof entry.inputLevelDbfs === 'number' && Number.isFinite(entry.inputLevelDbfs) && entry.inputLevelDbfs >= -160 && entry.inputLevelDbfs <= 0));
 }
 
 export default function App() {
@@ -372,6 +374,8 @@ export default function App() {
       timestamp: Date.now(),
       noteName: selectedNote.noteName,
       scaleId: currentScale.id,
+      audioSampleRateHz: bbAudioEngine.getSampleRate(),
+      inputLevelDbfs: inputLevelDb,
       fundamentalHz: alap.measuredHz!,
       fundamentalCents: alap.deviationCents!,
       fifthHz: kvint.measuredHz!,
