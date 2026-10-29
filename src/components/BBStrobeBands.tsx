@@ -168,6 +168,19 @@ export const BBStrobeBands: React.FC<Props> = ({
       window.removeEventListener('storage', onStorage);
     };
   }, []);
+
+  useEffect(() => {
+    const reload = () => setPitchPipeModes(loadPitchPipeModes());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === PITCH_PIPE_STORAGE_KEY) reload();
+    };
+    window.addEventListener('hangoal-strobe-pitch-pipe-modes-updated', reload);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('hangoal-strobe-pitch-pipe-modes-updated', reload);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(customBands));
