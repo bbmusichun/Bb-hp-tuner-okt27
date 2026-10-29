@@ -20,7 +20,7 @@ This document defines the functional baseline for the Hangoal handpan tuner from
 | Pitch dial with note and octave selection | Partial: handpan tone-field selection exists; full chromatic dial/octave/transposition remains. |
 | Modal note enable/disable and transposition | Not yet implemented to acceptance level. |
 | Automatic pitch detection and single-shot/continuous modes | Partial: microphone detection exists; interaction semantics need acceptance tests. |
-| Exact peak spectrum, peak hover values, noise-floor suppression, doubled-peak inspection | Partial: spectrum and peak estimation exist; detailed peak inspector and doubled-peak diagnostics remain. |
+| Exact peak spectrum, peak hover values, noise-floor suppression, doubled-peak inspection | Full spectrum/waterfall and live diagnostic panel are present. The panel estimates the median noise floor and flags possible near-target double peaks without changing the tuning result; heuristic and physical-device validation remain open. |
 | Hz / cents / note / just-ratio readout modes | Partial: Hz and cents are present; configurable ratio and note-name display modes remain. |
 | Keyboard control and front/rear settings panel | Not yet implemented to acceptance level. |
 | Input clipping/level and performance feedback | Partial: input-level metadata exists; live clipping and frame-rate indicators remain. |
