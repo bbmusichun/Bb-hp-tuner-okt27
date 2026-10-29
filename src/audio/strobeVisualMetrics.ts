@@ -30,3 +30,12 @@ export function strobeSharpnessFromCents(samples: readonly number[]): number {
   // A spread of 12 cents or more is rendered with the softest edges.
   return clamp01(1 - standardDeviation / 12);
 }
+/** Only a live, valid analysis frame may drive the strobe or its green/tolerance state. */
+export function isStrobeMeasurementLive(
+  inputActive: boolean,
+  hasSignal: boolean,
+  transientHoldoff: boolean,
+  measurementStatus: string,
+): boolean {
+  return inputActive && hasSignal && !transientHoldoff && measurementStatus === 'valid';
+}
