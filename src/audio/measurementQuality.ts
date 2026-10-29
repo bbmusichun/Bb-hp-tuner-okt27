@@ -79,6 +79,40 @@ function isFiniteNumber(value: number | null): value is number {
   return value !== null && Number.isFinite(value);
 }
 
+/** Format a quality verdict for accessible UI copy without implying calibrated accuracy. */
+export function describeMeasurementQuality(assessment: PartialQualityAssessment): {
+  title: string;
+  description: string;
+} {
+  switch (assessment.status) {
+    case 'reliable':
+      return {
+        title: 'Ismételhető mérés',
+        description: 'A talált csúcs több elemzett ablakban stabilan megjelent. Ez nem igazolja önmagában a külső referencia szerinti abszolút pontosságot.',
+      };
+    case 'marginal':
+      return {
+        title: 'Óvatosan értékeld',
+        description: 'A mérés használható tájékoztató jelleggel, de a kevés minta vagy a jel minősége miatt érdemes újramérni.',
+      };
+    default:
+      return {
+        title: 'Nem elég megbízható',
+        description: 'A rendelkezésre álló jelből nem állítható elő kellően alátámasztott hangolási eredmény. Ellenőrizd a jelszintet, a zajt és a hangszer lecsengését, majd mérj újra.',
+      };
+  }
+}
+
+/** Human-readable explanations for quality flags; kept separate from measurement values. */
+export const MEASUREMENT_QUALITY_REASON_LABELS: Record<MeasurementQualityReason, string> = {
+  'no-measurement': 'Nem találtunk értékelhető frekvenciacsúcsot.',
+  'too-few-windows': 'Kevés elemzési ablak áll rendelkezésre a stabilitás megítéléséhez.',
+  'low-coverage': 'A csúcs nem jelent meg elég következetesen az elemzési ablakokban.',
+  unstable: 'A mért frekvencia több ablak között túlságosan ingadozott.',
+  'weak-peak': 'A frekvenciacsúcs túl gyenge a biztos értékeléshez.',
+  'low-prominence': 'A frekvenciacsúcs nem emelkedik ki eléggé a környező spektrumból.',
+};
+
 export function assessPartialQuality(input: PartialQualityInput): PartialQualityAssessment {
   const totalWindows = Number.isFinite(input.totalWindows) ? Math.max(0, input.totalWindows) : 0;
   const measuredWindows = Number.isFinite(input.measuredWindows)
