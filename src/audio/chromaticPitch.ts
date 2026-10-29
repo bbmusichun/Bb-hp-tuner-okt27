@@ -19,12 +19,13 @@ export function buildChromaticTargetNote(
   const note = freqToNoteAndCents(frequency, a4Ref);
   const key = partialTargetOffsetKey(scaleId, note.note);
   const offsets = partialTargetOffsets[key] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
+  const calibratedFundamental = frequency * Math.pow(2, (offsets.fundamentalCents ?? 0) / 1200);
   return {
     id: 'chromatic-' + midi,
     noteName: note.note,
-    frequency,
-    fifthFreq: partialTargetFrequency(frequency, 3, offsets.thirdPartialCents),
-    octaveFreq: partialTargetFrequency(frequency, 2, offsets.octaveCents),
+    frequency: calibratedFundamental,
+    fifthFreq: partialTargetFrequency(calibratedFundamental, 3, offsets.thirdPartialCents),
+    octaveFreq: partialTargetFrequency(calibratedFundamental, 2, offsets.octaveCents),
     positionIndex: -1,
   };
 }
