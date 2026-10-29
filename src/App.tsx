@@ -1112,9 +1112,17 @@ export default function App() {
 
             {/* Right: Sample rate, input level dB, and LED meter */}
             <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-              <span>{sampleRateKhz !== null ? `${sampleRateKhz} kHz` : '— kHz'}</span>
+              <span title="A mikrofon mintavételezési frekvenciája">{sampleRateKhz !== null ? `${sampleRateKhz} kHz` : '— kHz'}</span>
               <span className="text-slate-600">|</span>
-              <span className="w-11 text-right">{isListening && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}</span>
+              <span
+                title="A fő elemzési ciklus mért frissítési üteme"
+                aria-label={analysisFps !== null ? `Elemzési frissítés: ${analysisFps} képkocka másodpercenként` : 'Elemzési frissítési ütem még nem mérhető'}
+                className={analysisFps !== null && analysisFps < 20 ? 'text-amber-300' : ''}
+              >{isListening && analysisFps !== null ? `${analysisFps} FPS` : '— FPS'}</span>
+              <span className="text-slate-600">|</span>
+              <span className={inputNearClip ? 'w-11 text-right text-red-300' : 'w-11 text-right'}>
+                {isListening && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}
+              </span>
 
               {/* 8-segment LED VU meter matching screenshot */}
               <div className="flex items-center gap-[2px] ml-1">
@@ -1140,10 +1148,16 @@ export default function App() {
             </div>
           </div>
         </div>
-        {isListening && (transientHoldoff || highInputLevel) && (
-          <div role="status" className={`mx-1 mb-2 rounded-md border px-2 py-1.5 text-[11px] ${highInputLevel ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-amber-500/30 bg-amber-500/10 text-amber-200'}`}>
-            {highInputLevel
-              ? 'Túl erős bemeneti jel – üss finomabban vagy távolítsd a mikrofont a hangszertől.'
+        {isListening && (transientHoldoff || highInputLevel || inputNearClip) && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`mx-1 mb-2 rounded-md border px-2 py-1.5 text-[11px] ${highInputLevel || inputNearClip ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-amber-500/30 bg-amber-500/10 text-amber-200'}`}
+          >
+            {inputNearClip
+              ? 'A bemeneti jel csúcsa közel van a digitális maximumhoz – a torzítás lehetséges; csökkentsd a mikrofon erősítését vagy távolítsd a mikrofont.'
+              : highInputLevel
+              ? 'Magas bemeneti RMS-szint – a tranziens torzulhat; csökkentsd a mikrofon erősítését vagy üss finomabban.'
               : 'Ütés tranziensének kiszűrése – várj a zengő sustain szakaszra.'}
           </div>
         )}
