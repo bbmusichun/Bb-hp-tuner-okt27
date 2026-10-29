@@ -6,7 +6,7 @@ import { MAX_PARTIAL_TARGET_OFFSET_CENTS, partialTargetFrequency } from '../audi
 import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/partialTargets';
 import type { InstrumentProfile } from '../audio/instrumentProfiles';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
-import { parseScalaScl, scalaToCustomScaleText } from '../audio/scala';
+import { describeScalaReference, parseScalaScl, scalaReferenceToA4, scalaToCustomScaleText } from '../audio/scala';
 
 interface Props {
   isOpen: boolean;
@@ -71,6 +71,8 @@ export const BBSettingsModal: React.FC<Props> = ({
     activeProfile?.customScale?.notes.map((note) => `${note.name}, ${note.frequencyHz?.toFixed(3) ?? ''}`).join('\n') ?? '',
   );
   const [customScaleMessage, setCustomScaleMessage] = React.useState('');
+  const [pendingScalaA4, setPendingScalaA4] = React.useState<number | null>(null);
+  const [pendingScalaReference, setPendingScalaReference] = React.useState<string | null>(null);
   const [bundledScalaAssets, setBundledScalaAssets] = React.useState<Array<{ path: string; category: string; name: string }>>([]);
   const [selectedBundledScalaPath, setSelectedBundledScalaPath] = React.useState('');
   const [isLoadingBundledScala, setIsLoadingBundledScala] = React.useState(false);
@@ -118,7 +120,9 @@ export const BBSettingsModal: React.FC<Props> = ({
       }
       setCustomScaleNameDraft(asset.name);
       setCustomScaleTextDraft(converted);
-      setCustomScaleMessage('A beépített skála betöltve. Ellenőrizd, majd alkalmazd az egyedi hangmezőt.');
+      setPendingScalaA4(scalaReferenceToA4(parsed));
+      setPendingScalaReference(describeScalaReference(parsed));
+      setCustomScaleMessage('A beépített skála betöltve (' + describeScalaReference(parsed) + '). Ellenőrizd, majd alkalmazd az egyedi hangmezőt.');
     } catch {
       setCustomScaleMessage('A beépített Scala-fájl nem olvasható.');
     } finally {
@@ -448,7 +452,9 @@ export const BBSettingsModal: React.FC<Props> = ({
                     }
                     setCustomScaleNameDraft(file.name.replace(/\.scl$/i, ''));
                     setCustomScaleTextDraft(converted);
-                    setCustomScaleMessage('A Scala-skála beolvasva. Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.');
+                    setPendingScalaA4(scalaReferenceToA4(parsed));
+                    setPendingScalaReference(describeScalaReference(parsed));
+                    setCustomScaleMessage('A Scala-skála beolvasva (' + describeScalaReference(parsed) + '). Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.');
                   } catch {
                     setCustomScaleMessage('A Scala-fájl nem olvasható.');
                   } finally {
@@ -468,7 +474,7 @@ export const BBSettingsModal: React.FC<Props> = ({
             <textarea
               aria-label="Egyedi hangmező frekvencia-lista"
               value={customScaleTextDraft}
-              onChange={(event) => setCustomScaleTextDraft(event.target.value)}
+              onChange={(event) => { setCustomScaleTextDraft(event.target.value); setPendingScalaA4(null); setPendingScalaReference(null); }}
               placeholder={"D3, 146.832\nA3, 220.000\nBb3, 233.082"}
               rows={5}
               spellCheck={false}
@@ -478,9 +484,20 @@ export const BBSettingsModal: React.FC<Props> = ({
               type="button"
               onClick={() => {
                 const applied = onApplyCustomScale(customScaleNameDraft, customScaleTextDraft);
-                setCustomScaleMessage(applied
-                  ? 'Az egyedi hangmező alkalmazva és a hangszerprofilhoz mentve.'
-                  : 'Hibás adatok. Ellenőrizd a hangneveket, a duplikációkat és a 20–2000 Hz közötti célfrekvenciákat.');
+                if (applied) {
+                  if (pendingScalaA4 !== null && !freezeTargetSettings && pendingScalaA4 >= 420 && pendingScalaA4 <= 450) {
+                    onChangeA4(pendingScalaA4);
+                    setCustomScaleMessage('Az egyedi hangmező alkalmazva. A Scala-referencia alapján az A4 is beállítva: ' + pendingScalaA4.toFixed(2) + ' Hz.');
+                  } else if (pendingScalaA4 !== null && freezeTargetSettings) {
+                    setCustomScaleMessage('Az egyedi hangmező alkalmazva; az A4 referencia változatlan maradt a freeze mód miatt.');
+                  } else if (pendingScalaA4 !== null && (pendingScalaA4 < 420 || pendingScalaA4 > 450)) {
+                    setCustomScaleMessage('Az egyedi hangmező alkalmazva; a Scala által számított A4 (' + pendingScalaA4.toFixed(2) + ' Hz) kívül esik a Hangoal 420–450 Hz-es beállítási tartományán, ezért nem módosítottam.');
+                  } else {
+                    setCustomScaleMessage('Az egyedi hangmező alkalmazva és a hangszerprofilhoz mentve.');
+                  }
+                } else {
+                  setCustomScaleMessage('Hibás adatok. Ellenőrizd a hangneveket, a duplikációkat és a 20–2000 Hz közötti célfrekvenciákat.');
+                }
               }}
               disabled={!customScaleNameDraft.trim() || !customScaleTextDraft.trim()}
               className="w-full rounded-lg bg-[#f59e0b] px-3 py-2.5 text-[11px] font-bold text-slate-950 disabled:opacity-40"
