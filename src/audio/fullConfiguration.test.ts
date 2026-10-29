@@ -117,7 +117,7 @@ test('rejects invalid tolerance, freeze or pitch-pipe backup settings atomically
   assert.equal(parseHangoalFullConfiguration(invalidTolerance, ['d-kurd-9'], fallbackProfile), null);
 
   const invalidFreeze = validBackup();
-  invalidFreeze.settings.freezeTargets = 'true';
+  (invalidFreeze.settings as unknown as Record<string, unknown>).freezeTargets = 'true';
   assert.equal(parseHangoalFullConfiguration(invalidFreeze, ['d-kurd-9'], fallbackProfile), null);
 
   const invalidPipes = validBackup() as unknown as Record<string, unknown>;
