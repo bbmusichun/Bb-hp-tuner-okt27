@@ -172,6 +172,11 @@ function loadTuningToleranceMode(): TuningToleranceMode {
   catch { return 'auto'; }
 }
 
+function loadFreezeTargetsPreference(): boolean {
+  try { return localStorage.getItem('hangoal-freeze-targets-v1') === 'true'; }
+  catch { return false; }
+}
+
 function formatAudioTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const totalSeconds = Math.floor(seconds);
@@ -262,6 +267,11 @@ export default function App() {
     () => loadTuningPreferences().toleranceOverrideCents,
   );
   const [toleranceMode, setToleranceMode] = useState<TuningToleranceMode>(loadTuningToleranceMode);
+  const [freezeTargets, setFreezeTargets] = useState<boolean>(loadFreezeTargetsPreference);
+  useEffect(() => {
+    try { localStorage.setItem('hangoal-freeze-targets-v1', String(freezeTargets)); }
+    catch { /* Target locks remain available for this session. */ }
+  }, [freezeTargets]);
   useEffect(() => {
     try { localStorage.setItem('hangoal-tolerance-mode-v1', toleranceMode); }
     catch { /* The current session remains usable if storage is disabled. */ }
@@ -375,6 +385,7 @@ export default function App() {
   const selectedMidi = useMemo(() => midiFromFrequency(selectedNote.frequency, a4Ref), [selectedNote.frequency, a4Ref]);
 
   const handleSetTranspose = (value: number) => {
+    if (freezeTargets) return;
     const next = Math.max(-12, Math.min(12, Math.round(value)));
     setTransposeSemitones(next);
     setChromaticTargetMidi(null);
@@ -429,6 +440,7 @@ export default function App() {
   const selectedPartialOffsets = partialTargetOffsets[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
 
   const updateSelectedPartialOffset = (field: PartialTargetOffsetField, value: number) => {
+    if (freezeTargets) return;
     setPartialTargetOffsets((previous) => {
       const current = previous[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
       const next: PartialTargetOffset = { ...current, [field]: value };
@@ -442,6 +454,7 @@ export default function App() {
   };
 
   const resetSelectedPartialOffsets = () => {
+    if (freezeTargets) return;
     setPartialTargetOffsets((previous) => {
       const copy = { ...previous };
       delete copy[selectedPartialOffsetKey];
@@ -1692,10 +1705,10 @@ export default function App() {
                     <div className="mt-0.5 text-[10px] text-slate-400">Félhangok · a kromatikus tárcsa közvetlen célhangját nem módosítja</div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <button type="button" aria-label="Transzponálás egy félhanggal lejjebb" onClick={() => handleSetTranspose(transposeSemitones - 1)} disabled={transposeSemitones <= -12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">−</button>
+                    <button type="button" aria-label="Transzponálás egy félhanggal lejjebb" onClick={() => handleSetTranspose(transposeSemitones - 1)} disabled={freezeTargets || transposeSemitones <= -12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">−</button>
                     <span className="min-w-[54px] text-center font-mono text-xs font-semibold text-amber-200">{transposeSemitones > 0 ? '+' : ''}{transposeSemitones} st</span>
-                    <button type="button" aria-label="Transzponálás egy félhanggal feljebb" onClick={() => handleSetTranspose(transposeSemitones + 1)} disabled={transposeSemitones >= 12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">+</button>
-                    <button type="button" onClick={() => handleSetTranspose(0)} disabled={transposeSemitones === 0} className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-400 disabled:opacity-30">Nullázás</button>
+                    <button type="button" aria-label="Transzponálás egy félhanggal feljebb" onClick={() => handleSetTranspose(transposeSemitones + 1)} disabled={freezeTargets || transposeSemitones >= 12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">+</button>
+                    <button type="button" onClick={() => handleSetTranspose(0)} disabled={freezeTargets || transposeSemitones === 0} className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-400 disabled:opacity-30">Nullázás</button>
                   </div>
                 </div>
               </section>
@@ -1714,6 +1727,10 @@ export default function App() {
                     <option value="off">Soha ne legyen zöld</option>
                   </select>
                 </div>
+                <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-300">
+                  <input type="checkbox" checked={freezeTargets} onChange={(event) => setFreezeTargets(event.target.checked)} className="h-4 w-4 accent-cyan-400" />
+                  <span>{freezeTargets ? 'Célértékek befagyasztva: referenciafrekvencia, transzponálás és felhangkorrekció' : 'Célértékek befagyasztása (freeze)'}</span>
+                </label>
               </section>
 
 {shouldShowTuningPanel('stroboscope') && (
@@ -1982,8 +1999,9 @@ export default function App() {
           a4Ref={a4Ref}
           toleranceOverrideCents={toleranceOverrideCents}
           onChangeToleranceOverrideCents={setToleranceOverrideCents}
+          freezeTargetSettings={freezeTargets}
           onChangeA4={(value) => {
-            if (Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
+            if (!freezeTargets && Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
           }}
           selectedScaleId={currentScale.id}
           onSelectScale={handleSelectScale}
