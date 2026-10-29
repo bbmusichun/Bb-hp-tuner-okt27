@@ -1,6 +1,6 @@
 # Hangoal baseline: feature acceptance map
 
-This document defines the functional baseline for the Hangoal handpan tuner from the supplied feature guide. All runtime behavior is implemented independently in the Hangoal codebase.
+This document defines the functional baseline for the Hangoal handpan tuner from the supplied feature guide. Runtime behavior is implemented independently in the Hangoal codebase.
 
 ## Included reference data
 
@@ -14,7 +14,7 @@ This document defines the functional baseline for the Hangoal handpan tuner from
 
 | Capability | Current baseline / remaining work |
 | --- | --- |
-| Strobe bands with arbitrary offsets | Partial: three resonance bands exist; editable arbitrary bands remain to implement. |
+| Strobe bands with arbitrary offsets | Partial: three resonance bands exist; configurable band data validation is now defined; editor and live arbitrary-frequency analysis remain to implement. |
 | Continuous / strike-triggered / off reference tone | Partial: target sine tone exists; per-band three-state modes remain to implement. |
 | Base frequency, cents offset, concert reference | Partial: A4 calibration and per-note 2x/3x offsets exist; full global base/transposition model remains. |
 | Pitch dial with note and octave selection | Partial: handpan tone-field selection exists; full chromatic dial/octave/transposition remains. |
