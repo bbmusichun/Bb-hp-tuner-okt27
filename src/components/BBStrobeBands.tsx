@@ -43,7 +43,7 @@ interface Props {
   strobeSensitivity?: number;
   onChangeStrobeSensitivity?: (value: number) => void;
   onZoomTargetHz?: (targetHz: number) => void;
-  onCalibrateBuiltInRole?: (role: 'fifth' | 'octave', targetHz: number, measuredHz: number) => void;
+  onCalibrateBuiltInRole?: (role: 'fundamental' | 'fifth' | 'octave', targetHz: number, measuredHz: number) => void;
 }
 interface Reading { measuredHz: number | null; deviationCents: number | null; amplitudeDb: number | null; }
 interface Row {
@@ -384,14 +384,14 @@ export const BBStrobeBands: React.FC<Props> = ({
       </div>
 
 
-      {(selectedRole === 'fifth' || selectedRole === 'octave') && (() => {
+      {(selectedRole === 'fundamental' || selectedRole === 'fifth' || selectedRole === 'octave') && (() => {
         const reading = readings[selectedRole];
-        const targetHz = selectedRole === 'fifth' ? kvint.targetHz : oktav.targetHz;
+        const targetHz = selectedRole === 'fifth' ? kvint.targetHz : selectedRole === 'octave' ? oktav.targetHz : alap.targetHz;
         const ready = active && hasSignal && !transientHoldoff &&
           reading?.measuredHz !== null && reading?.measuredHz !== undefined &&
           Number.isFinite(reading.measuredHz) && reading.measuredHz > 0 &&
           targetHz !== null && Number.isFinite(targetHz) && targetHz > 0;
-        const label = selectedRole === 'fifth' ? '3× összetett kvint' : '2× oktáv';
+        const label = selectedRole === 'fifth' ? '3× összetett kvint' : selectedRole === 'octave' ? '2× oktáv' : '1× alaphang';
         return (
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.035] px-2.5 py-2">
             <div className="min-w-0 flex-1">
