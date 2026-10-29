@@ -1,6 +1,6 @@
 # Scala scale library
 
-The five handpan-related `.scl` files supplied in the Linotune archive are preserved here as source assets:
+The five handpan-related `.scl` files included in the Hangoal source library are preserved here as source assets:
 
 - `Circle of Fifths.scl`
 - `Quarter-Tone Equal.scl`
@@ -16,4 +16,4 @@ The app's Settings panel now has a Scala `.scl` import control in the custom exa
 - The final Scala interval is treated as the period and is not duplicated as a note.
 - The custom handpan scale editor supports 2–24 tones, so imported scales outside that range must be reduced before application.
 - Files whose intervals are deliberately reordered (such as Circle of Fifths) or that do not describe a conventional ascending interval scale (such as Sacred Solfeggio) are not silently sorted or reinterpreted. They require a separate specialized import mode.
-- `linotune.exe` is not part of BB Tuner and is not bundled into the application; only scale data and independently implemented import logic are used.
+- Executable binaries are not bundled into the web application; all runtime features are implemented in the Hangoal source code.

@@ -7,8 +7,8 @@ export interface ParsedScalaScale {
   periodCents: number;
 }
 
-/** Parse a Scala .scl pitch list, preserving source order for Linotune-style reordered scales. */
-export function parseScalaScl(source: string): ParsedScalaScale | null {
+/** Parse a Scala .scl pitch list. Strict ascending order is the default; bundled special presets may explicitly preserve source order. */
+export function parseScalaScl(source: string, options: { preserveSourceOrder?: boolean } = {}): ParsedScalaScale | null {
   if (typeof source !== 'string' || source.length > 200_000) return null;
   const lines = source.split(/\r?\n/)
     .map((line) => line.replace(/!.*/, '').trim())
@@ -29,7 +29,7 @@ export function parseScalaScl(source: string): ParsedScalaScale | null {
       cents = Number(token);
     }
     if (!Number.isFinite(cents) || cents <= 0 || cents > 9600) return null;
-// Preserve the source order: some supplied Linotune scales intentionally list degrees out of order.
+if (!options.preserveSourceOrder && intervals.length > 0 && cents <= intervals[intervals.length - 1]) return null;
     intervals.push(cents);
   }
   const periodCents = intervals[intervals.length - 1];

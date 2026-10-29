@@ -23,9 +23,11 @@ describe('Scala SCL import', () => {
     assert.ok(Math.abs((scale.notes[1].frequencyHz ?? 0) - 146.832384 * Math.pow(2, 386.3137 / 1200)) < 0.1);
   });
 
-  it('rejects invalid, unordered, and oversized SCL files', () => {
+  it('rejects invalid, unordered, and oversized SCL files by default', () => {
     assert.equal(parseScalaScl('bad\nnot-a-count\n'), null);
     assert.equal(parseScalaScl('Bad order\n2\n700\n500\n'), null);
+    const sourceOrdered = parseScalaScl('Circle order\n3\n700\n200\n1200\n', { preserveSourceOrder: true });
+    assert.deepEqual(sourceOrdered?.intervalsCents, [700, 200]);
     assert.equal(parseScalaScl('Too many\n129\n'), null);
   });
 });
