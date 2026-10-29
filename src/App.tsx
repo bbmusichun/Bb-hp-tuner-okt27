@@ -1262,7 +1262,7 @@ export default function App() {
                   } else {
                     setOwnDAudioCurrentTime(player.currentTime);
                   }
-                }
+                }}
                 onCanPlay={() => setOwnDAudioError('')}
                 onError={() => {
                   setIsOwnDPlaying(false);
@@ -1296,7 +1296,7 @@ export default function App() {
                       const startPlayback = async () => {
                         const playPromise = player.play();
                         const inputPromise = bbAudioEngine.startAudioElementInput(player);
-                        const [playResult, inputReady] = await Promise.all([playPromise, inputPromise]);
+                        const [, inputReady] = await Promise.all([playPromise, inputPromise]);
                         if (!inputReady) throw new Error('A hangfájl nem kapcsolható az elemzőhöz.');
                         analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
                         setAnalysisFps(null);
