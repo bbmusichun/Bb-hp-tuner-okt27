@@ -47,7 +47,7 @@ const validBackup = () => ({
   customStrobeBands: [
     { id: 'custom-440', name: '440 Hz', source: 'custom', targetHz: 440, centsOffset: 0, enabled: true },
   ],
-  measurements: [validEntry],
+  measurements: [{ ...validEntry }],
 });
 
 test('parses a complete validated bundle and preserves its settings', () => {
