@@ -1420,7 +1420,7 @@ export default function App() {
             ? action === 'next-note' ? 0 : enabledToneNotes.length - 1
             : (currentIndex + (action === 'next-note' ? 1 : -1) + enabledToneNotes.length) % enabledToneNotes.length;
           keyboardActionsRef.current.handleSelectToneFieldNote(enabledToneNotes[nextIndex]);
-          setSelectedRole('fundamental');
+          if (windowSyncMode !== 'slave') setSelectedRole('fundamental');
           return;
         }
         case 'previous-resonance':
@@ -1428,7 +1428,7 @@ export default function App() {
           const roles = ['fundamental', 'fifth', 'octave'] as const;
           const index = roles.indexOf(selectedRole);
           const delta = action === 'next-resonance' ? 1 : -1;
-          setSelectedRole(roles[(index + delta + roles.length) % roles.length]);
+          if (windowSyncMode !== 'slave') setSelectedRole(roles[(index + delta + roles.length) % roles.length]);
           return;
         }
         case 'toggle-microphone':
@@ -1470,6 +1470,7 @@ export default function App() {
     singleShotCaptured,
     chromaticTargetMidi,
     referenceToneMode,
+    windowSyncMode,
   ]);
 
   return (
@@ -2052,7 +2053,7 @@ export default function App() {
                 toleranceOverrideCents={toleranceOverrideCents}
                 toleranceMode={toleranceMode}
                 strobeSensitivity={strobeSensitivity}
-                onChangeStrobeSensitivity={setStrobeSensitivity}
+                onChangeStrobeSensitivity={(value) => { if (windowSyncMode !== 'slave') setStrobeSensitivity(value); }}
                 onZoomTargetHz={setSpectrumZoomTargetHz}
                 onCalibrateBuiltInRole={handleCalibrateBuiltInRole}
               />
@@ -2167,17 +2168,17 @@ export default function App() {
           <div className="flex-1 flex flex-col gap-2 py-1 min-h-0">
             <BBSpectrumWaterfall active={isSignalInputActive} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
             <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
-              <button onClick={() => setSelectedRole('fundamental')} className={`rounded-lg border p-2 text-left ${selectedRole === 'fundamental' ? 'border-amber-400/60 bg-amber-400/10' : 'border-white/10 bg-slate-900/50'}`}>
+              <button disabled={windowSyncMode === 'slave'} onClick={() => handleSelectResonanceRole('fundamental')} className={`rounded-lg border p-2 text-left disabled:opacity-70 ${selectedRole === 'fundamental' ? 'border-amber-400/60 bg-amber-400/10' : 'border-white/10 bg-slate-900/50'}`}>
                 <div className="font-sans font-semibold text-amber-400">1× Alaphang</div>
                 <div className="text-white">{alap.measuredHz !== null ? alap.measuredHz.toFixed(2) + ' Hz' : '--'}</div>
                 <div className="text-slate-400">{alap.deviationCents !== null ? (alap.deviationCents > 0 ? '+' : '') + alap.deviationCents.toFixed(1) + ' cent' : '--'}</div>
               </button>
-              <button onClick={() => setSelectedRole('octave')} className={`rounded-lg border p-2 text-left ${selectedRole === 'octave' ? 'border-cyan-400/60 bg-cyan-400/10' : 'border-white/10 bg-slate-900/50'}`}>
+              <button disabled={windowSyncMode === 'slave'} onClick={() => handleSelectResonanceRole('octave')} className={`rounded-lg border p-2 text-left disabled:opacity-70 ${selectedRole === 'octave' ? 'border-cyan-400/60 bg-cyan-400/10' : 'border-white/10 bg-slate-900/50'}`}>
                 <div className="font-sans font-semibold text-cyan-400">2× Oktáv</div>
                 <div className="text-white">{oktav.measuredHz !== null ? oktav.measuredHz.toFixed(2) + ' Hz' : '--'}</div>
                 <div className="text-slate-400">{oktav.deviationCents !== null ? (oktav.deviationCents > 0 ? '+' : '') + oktav.deviationCents.toFixed(1) + ' cent' : '--'}</div>
               </button>
-              <button onClick={() => setSelectedRole('fifth')} className={`rounded-lg border p-2 text-left ${selectedRole === 'fifth' ? 'border-purple-400/60 bg-purple-400/10' : 'border-white/10 bg-slate-900/50'}`}>
+              <button disabled={windowSyncMode === 'slave'} onClick={() => handleSelectResonanceRole('fifth')} className={`rounded-lg border p-2 text-left disabled:opacity-70 ${selectedRole === 'fifth' ? 'border-purple-400/60 bg-purple-400/10' : 'border-white/10 bg-slate-900/50'}`}>
                 <div className="font-sans font-semibold text-purple-400">3× Kvint</div>
                 <div className="text-white">{kvint.measuredHz !== null ? kvint.measuredHz.toFixed(2) + ' Hz' : '--'}</div>
                 <div className="text-slate-400">{kvint.deviationCents !== null ? (kvint.deviationCents > 0 ? '+' : '') + kvint.deviationCents.toFixed(1) + ' cent' : '--'}</div>
@@ -2306,8 +2307,8 @@ export default function App() {
           onExportFullConfiguration={handleExportFullConfiguration}
           a4Ref={a4Ref}
           toleranceOverrideCents={toleranceOverrideCents}
-          onChangeToleranceOverrideCents={setToleranceOverrideCents}
-          freezeTargetSettings={freezeTargets}
+          onChangeToleranceOverrideCents={(value) => { if (windowSyncMode !== 'slave') setToleranceOverrideCents(value); }}
+          freezeTargetSettings={freezeTargets || windowSyncMode === 'slave'}
           audioInputDevices={audioInputDevices}
           selectedAudioInputDeviceId={selectedAudioInputDeviceId}
           onSelectAudioInputDevice={(deviceId) => { void handleSelectAudioInputDevice(deviceId); }}
