@@ -2,9 +2,9 @@
  * Per-note offsets for handpan partial targets.
  *
  * Equal-tempered note frequency is a useful starting point, but real handpan
- * tone fields can have deliberately inharmonic partials. Store the octave and
- * third-partial offsets independently in cents so makers can target the actual
- * instrument specification without changing the global A4 reference.
+ * tone fields can have deliberately inharmonic partials. Store the fundamental,
+ * octave and third-partial offsets independently in cents so makers can target the
+ * actual instrument specification without changing the global A4 reference.
  */
 export type PartialTargetOffsetField = 'fundamentalCents' | 'octaveCents' | 'thirdPartialCents';
 
@@ -43,7 +43,7 @@ export function partialTargetFrequency(
   return fundamentalHz * multiplier * Math.pow(2, clampPartialTargetOffset(offsetCents) / 1200);
 }
 
-/** Validate persisted custom offsets instead of trusting localStorage contents. */
+/** Validate persisted per-note target offsets, preserving compatibility with older two-offset profiles. */
 export function normalizePartialTargetOffsets(value: unknown): PartialTargetOffsetMap {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const normalized: PartialTargetOffsetMap = {};
