@@ -25,6 +25,7 @@ import { normalizeTuningReadoutMode, type TuningReadoutMode } from './audio/read
 import { isDetectionArmed, nextAutoDetectionMode, normalizeAutoDetectionMode, type AutoDetectionMode } from './audio/detectionModes';
 import { isEditableKeyboardTarget, resolveHangoalKeyboardAction } from './audio/keyboardShortcuts';
 import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
+import { recordAnalysisFrame } from './audio/analysisRate';
 import { normalizeStrobeBands } from './audio/strobeBands';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
@@ -607,6 +608,9 @@ export default function App() {
   const [inputLevelDb, setInputLevelDb] = useState(-100);
   const [transientHoldoff, setTransientHoldoff] = useState(false);
   const [highInputLevel, setHighInputLevel] = useState(false);
+  const [inputNearClip, setInputNearClip] = useState(false);
+  const [analysisFps, setAnalysisFps] = useState<number | null>(null);
+  const analysisRateWindowRef = useRef({ startedAtMs: performance.now(), frameCount: 0 });
   const [sampleRateKhz, setSampleRateKhz] = useState<number | null>(null);
   const [standardDeviationCents, setStandardDeviationCents] = useState(0);
   const [yinFrequencyHz, setYinFrequencyHz] = useState<number | null>(null);
@@ -717,6 +721,9 @@ export default function App() {
     function loop(now: number) {
       if (now - lastTick >= 33) {
         lastTick = now;
+        const rateSample = recordAnalysisFrame(analysisRateWindowRef.current, now);
+        analysisRateWindowRef.current = rateSample.window;
+        if (rateSample.fps !== null) setAnalysisFps(rateSample.fps);
 
         if (isDetectionArmed(autoDetectionMode, singleShotCaptured) && chromaticTargetMidi === null) {
           const detected = bbAudioEngine.detectNote(
@@ -753,6 +760,7 @@ export default function App() {
           setInputLevelDb(result.inputLevelDb);
           setTransientHoldoff(result.transientHoldoff);
           setHighInputLevel(result.highInputLevel);
+          setInputNearClip(result.clippingLikely);
           setSampleRateKhz(result.sampleRateKhz);
           setStandardDeviationCents(result.standardDeviationCents);
           setYinFrequencyHz(result.yinFrequencyHz);
@@ -789,6 +797,9 @@ export default function App() {
       setInputLevelDb(-100);
       setTransientHoldoff(false);
       setHighInputLevel(false);
+      setInputNearClip(false);
+      setAnalysisFps(null);
+      analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
       const clearMeasurement = (m: ResonanceMeasurement, targetHz: number): ResonanceMeasurement => ({
         ...m, measuredHz: null, targetHz, deviationCents: null, amplitudeDb: null,
         confidence: 0, timestampMs: Date.now(), status: 'no-signal',
@@ -800,6 +811,8 @@ export default function App() {
       setMicError('');
       const ok = await bbAudioEngine.startMicrophone();
       if (ok) {
+        analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
+        setAnalysisFps(null);
         setIsListening(true);
       } else {
         setMicError(bbAudioEngine.getErrorMessage() || 'A mikrofon nem indítható el. Ellenőrizd az engedélyeket.');
