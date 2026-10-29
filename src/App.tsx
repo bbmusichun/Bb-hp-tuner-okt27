@@ -32,6 +32,7 @@ import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type Refe
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
   DEFAULT_PARTIAL_TARGET_OFFSET,
+  calibratePartialTargetOffset,
   normalizePartialTargetOffsets,
   partialTargetFrequency,
   partialTargetOffsetKey,
@@ -532,6 +533,15 @@ export default function App() {
       }
       return { ...previous, [selectedPartialOffsetKey]: next };
     });
+  };
+
+
+  const handleCalibrateBuiltInRole = (role: 'fifth' | 'octave', targetHz: number, measuredHz: number) => {
+    if (freezeTargets) return;
+    const field: PartialTargetOffsetField = role === 'fifth' ? 'thirdPartialCents' : 'octaveCents';
+    const currentOffset = selectedPartialOffsets[field];
+    const corrected = calibratePartialTargetOffset(currentOffset, targetHz, measuredHz);
+    if (corrected !== null) updateSelectedPartialOffset(field, corrected);
   };
 
   const resetSelectedPartialOffsets = () => {
@@ -1875,6 +1885,7 @@ export default function App() {
                 strobeSensitivity={strobeSensitivity}
                 onChangeStrobeSensitivity={setStrobeSensitivity}
                 onZoomTargetHz={setSpectrumZoomTargetHz}
+                onCalibrateBuiltInRole={handleCalibrateBuiltInRole}
               />
               )}
             </div>
