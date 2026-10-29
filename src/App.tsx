@@ -26,7 +26,7 @@ import { isDetectionArmed, nextAutoDetectionMode, normalizeAutoDetectionMode, ty
 import { isEditableKeyboardTarget, resolveHangoalKeyboardAction } from './audio/keyboardShortcuts';
 import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
 import { recordAnalysisFrame } from './audio/analysisRate';
-import { normalizeStrobeBands } from './audio/strobeBands';
+import { getStrobeBandTargetHz, normalizeStrobeBands, type StrobeBandConfig } from './audio/strobeBands';
 import { normalizeStrobeSensitivity } from './audio/strobeSensitivity';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
@@ -183,6 +183,14 @@ function formatAudioTime(seconds: number): string {
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
 }
 
+function loadCustomStrobeBandsForSpectrum(): StrobeBandConfig[] {
+  try {
+    const raw = localStorage.getItem('hangoal-custom-strobe-bands-v1');
+    if (!raw) return [];
+    return normalizeStrobeBands(JSON.parse(raw)).filter((band) => band.source === 'custom');
+  } catch { return []; }
+}
+
 type AudioDeviceChoice = { deviceId: string; label: string };
 
 function loadAudioDevicePreference(key: string): string {
@@ -258,6 +266,19 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isKeyboardHelpOpen, setIsKeyboardHelpOpen] = useState(false);
+  const [customStrobeBands, setCustomStrobeBands] = useState<StrobeBandConfig[]>(loadCustomStrobeBandsForSpectrum);
+  useEffect(() => {
+    const refreshBands = () => setCustomStrobeBands(loadCustomStrobeBandsForSpectrum());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'hangoal-custom-strobe-bands-v1') refreshBands();
+    };
+    window.addEventListener('hangoal-custom-strobe-bands-changed', refreshBands);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('hangoal-custom-strobe-bands-changed', refreshBands);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
   const [audioInputDevices, setAudioInputDevices] = useState<AudioDeviceChoice[]>([]);
   const [audioOutputDevices, setAudioOutputDevices] = useState<AudioDeviceChoice[]>([]);
   const [selectedAudioInputDeviceId, setSelectedAudioInputDeviceId] = useState(() => loadAudioDevicePreference('hangoal-audio-input-device-v1'));
@@ -1863,6 +1884,7 @@ export default function App() {
               toleranceMode={toleranceMode}
               onSelectPeak={setSelectedRole}
               zoomTargetHz={spectrumZoomTargetHz}
+              customStrobeBands={customStrobeBands}
               onClearZoom={() => setSpectrumZoomTargetHz(null)}
             />
               )}
