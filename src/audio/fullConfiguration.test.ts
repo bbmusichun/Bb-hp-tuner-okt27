@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseHangoalFullConfiguration } from './fullConfiguration';
+import { MAX_CUSTOM_STROBE_BANDS } from './strobeBands';
 import type { InstrumentProfile } from './instrumentProfiles';
 
 const fallbackProfile: InstrumentProfile = {
@@ -147,4 +148,25 @@ test('rejects a strobe sensitivity outside the supported range', () => {
   const backup = validBackup();
   backup.settings.strobeSensitivity = 9;
   assert.equal(parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile), null);
+});
+
+
+test('supports the expanded custom strobe-band capacity in portable configuration backups', () => {
+  const makeBands = (count: number) => Array.from({ length: count }, (_unused, index) => ({
+    id: 'custom-' + index,
+    name: 'Custom ' + index,
+    source: 'custom' as const,
+    targetHz: 100 + index,
+    centsOffset: 0,
+    enabled: true,
+  }));
+  const backup = validBackup() as unknown as Record<string, unknown>;
+  backup.customStrobeBands = makeBands(MAX_CUSTOM_STROBE_BANDS);
+  const result = parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile);
+  assert.ok(result);
+  assert.equal(result.customStrobeBands.length, MAX_CUSTOM_STROBE_BANDS);
+
+  const oversized = validBackup() as unknown as Record<string, unknown>;
+  oversized.customStrobeBands = makeBands(MAX_CUSTOM_STROBE_BANDS + 1);
+  assert.equal(parseHangoalFullConfiguration(oversized, ['d-kurd-9'], fallbackProfile), null);
 });
