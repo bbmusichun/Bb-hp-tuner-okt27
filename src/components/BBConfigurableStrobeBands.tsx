@@ -208,7 +208,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
         <div>
           <h3 className="text-sm font-bold text-white">Egyedi stroboszkópsávok</h3>
           <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">
-            Célfrekvencia Hz-ben, arányként (3/2 vagy x1.5), illetve centeltérésként (702c) is megadható az A4 = 440 Hz referenciához képest. A csúcsot az élő FFT-spektrum keresi.
+            Célfrekvencia Hz-ben, arányként (3/2 vagy x1.5), illetve centeltérésként (700c) is megadható a beállított A4 referenciafrekvenciához képest. A csúcsot az élő FFT-spektrum keresi.
           </p>
         </div>
         <button
