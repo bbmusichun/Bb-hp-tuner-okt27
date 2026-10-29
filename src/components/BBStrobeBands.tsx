@@ -20,8 +20,6 @@ interface Props {
   active?: boolean;
   transientHoldoff?: boolean;
   baseFrequencyHz?: number;
-  playbackSpectrum?: Float32Array | null;
-  playbackSampleRateHz?: number | null;
   toleranceOverrideCents?: number | null;
   selectedRole?: string;
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
@@ -52,7 +50,7 @@ function formatCents(cents: number | null): string {
 
 export const BBStrobeBands: React.FC<Props> = ({
   alap, kvint, oktav, hasSignal, active = false, transientHoldoff = false,
-  baseFrequencyHz = 146.832384, playbackSpectrum = null, playbackSampleRateHz = null,
+  baseFrequencyHz = 146.832384,
   toleranceOverrideCents = null, selectedRole, onSelectRole,
   strobeSensitivity = 1, onChangeStrobeSensitivity,
 }) => {
@@ -61,8 +59,8 @@ export const BBStrobeBands: React.FC<Props> = ({
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands, playbackSpectrum, playbackSampleRateHz });
-  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands, playbackSpectrum, playbackSampleRateHz };
+  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands });
+  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands };
   const phasesRef = useRef<Record<string, number>>({});
   const smoothRef = useRef<Record<string, number>>({});
   const lastValidRef = useRef<Record<string, number>>({});
@@ -71,7 +69,7 @@ export const BBStrobeBands: React.FC<Props> = ({
   const lastTickRef = useRef(performance.now());
   const lastReadoutRef = useRef(0);
   const canvasHeight = ROW_HEIGHT * (3 + customBands.length);
-  const hasCustomSignal = active ? hasSignal && !transientHoldoff : Boolean(playbackSpectrum);
+  const hasCustomSignal = active && hasSignal && !transientHoldoff;
 
   useEffect(() => {
     const reload = () => setCustomBands(loadCustomBands());
@@ -99,10 +97,8 @@ export const BBStrobeBands: React.FC<Props> = ({
       lastTickRef.current = now;
       const width = canvas.width;
       const rowHeight = canvas.height / Math.max(1, 3 + current.customBands.length);
-      const liveSpectrum = current.active && current.hasSignal && !current.transientHoldoff ? bbAudioEngine.getFloatFrequencyData() : null;
-      const usingPlaybackSpectrum = !current.active && Boolean(current.playbackSpectrum);
-      const spectrum = liveSpectrum ?? (usingPlaybackSpectrum ? current.playbackSpectrum ?? null : null);
-      const sampleRate = usingPlaybackSpectrum && current.playbackSampleRateHz ? current.playbackSampleRateHz : bbAudioEngine.getSampleRate();
+      const spectrum = current.active && current.hasSignal && !current.transientHoldoff ? bbAudioEngine.getFloatFrequencyData() : null;
+      const sampleRate = bbAudioEngine.getSampleRate();
       const builtIns: Row[] = [
         { id: 'fifth', name: 'Kvint · 3×', note: current.kvint.noteName || 'A4', targetHz: current.kvint.targetHz ?? current.baseFrequencyHz * 3, measuredHz: current.kvint.measuredHz, cents: current.kvint.deviationCents, db: current.kvint.amplitudeDb, timestamp: current.kvint.timestampMs, stripeWidth: 34, valid: current.hasSignal && current.kvint.status === 'valid', role: 'fifth' },
         { id: 'octave', name: 'Oktáv · 2×', note: current.oktav.noteName || 'D4', targetHz: current.oktav.targetHz ?? current.baseFrequencyHz * 2, measuredHz: current.oktav.measuredHz, cents: current.oktav.deviationCents, db: current.oktav.amplitudeDb, timestamp: current.oktav.timestampMs, stripeWidth: 54, valid: current.hasSignal && current.oktav.status === 'valid', role: 'octave' },
