@@ -645,6 +645,7 @@ export default function App() {
 
   // Live Audio Analysis State
   const [isListening, setIsListening] = useState(false);
+  const [autoGainControlStatus, setAutoGainControlStatus] = useState<boolean | null>(null);
   const [micError, setMicError] = useState('');
   const [hasSignal, setHasSignal] = useState(false);
   const [inputLevelDb, setInputLevelDb] = useState(-100);
@@ -835,6 +836,7 @@ export default function App() {
     if (isListening) {
       bbAudioEngine.stopMicrophone();
       setIsListening(false);
+      setAutoGainControlStatus(null);
       setMicError('');
       setHasSignal(false);
       setInputLevelDb(-100);
@@ -863,8 +865,10 @@ export default function App() {
       if (ok) {
         analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
         setAnalysisFps(null);
+        setAutoGainControlStatus(bbAudioEngine.getAutoGainControlStatus());
         setIsListening(true);
       } else {
+        setAutoGainControlStatus(null);
         setMicError(bbAudioEngine.getErrorMessage() || 'A mikrofon nem indítható el. Ellenőrizd az engedélyeket.');
       }
     }
@@ -1198,6 +1202,15 @@ export default function App() {
             </div>
           </div>
         </div>
+        {isListening && autoGainControlStatus === false && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mx-1 mb-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200"
+          >
+            A böngésző nem aktiválta az automatikus mikrofonerősítést. Halk ütéseknél a hangfelismerés bizonytalanabb lehet.
+          </div>
+        )}
         {isListening && (transientHoldoff || highInputLevel || inputNearClip) && (
           <div
             role="status"
