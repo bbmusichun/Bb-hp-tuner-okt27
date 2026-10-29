@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
 import { bbAudioEngine } from '../audio/audioEngine';
+import { isWithinTuningTolerance } from '../audio/tuningTolerance';
 
-interface Props { alap: ResonanceMeasurement; kvint: ResonanceMeasurement; oktav: ResonanceMeasurement; hasSignal: boolean; onSelectPeak?: (role: 'fundamental' | 'fifth' | 'octave') => void; }
+interface Props { alap: ResonanceMeasurement; kvint: ResonanceMeasurement; oktav: ResonanceMeasurement; hasSignal: boolean; toleranceOverrideCents?: number | null; onSelectPeak?: (role: 'fundamental' | 'fifth' | 'octave') => void; }
 const COLORS = { fundamental: '#fbbf24', octave: '#22d3ee', fifth: '#c084fc' };
 const NOTES = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 export function getSpectrumFrequencyRange(baseHz: number): { lowHz: number; highHz: number } {
@@ -11,9 +12,9 @@ export function getSpectrumFrequencyRange(baseHz: number): { lowHz: number; high
 }
 function noteName(hz:number) { if (!Number.isFinite(hz)||hz<=0) return '--'; const m=Math.round(69+12*Math.log2(hz/440)); return NOTES[((m%12)+12)%12]+(Math.floor(m/12)-1); }
 
-export const BBSpectrum: React.FC<Props> = ({ alap, kvint, oktav, hasSignal, onSelectPeak }) => {
+export const BBSpectrum: React.FC<Props> = ({ alap, kvint, oktav, hasSignal, toleranceOverrideCents = null, onSelectPeak }) => {
   const canvasRef=useRef<HTMLCanvasElement>(null);
-  const latest=useRef({alap,kvint,oktav,hasSignal}); latest.current={alap,kvint,oktav,hasSignal};
+  const latest=useRef({alap,kvint,oktav,hasSignal,toleranceOverrideCents}); latest.current={alap,kvint,oktav,hasSignal,toleranceOverrideCents};
   useEffect(()=>{
     const canvas=canvasRef.current, ctx=canvas?.getContext('2d'); if(!canvas||!ctx)return;
     let raf=0;
@@ -39,7 +40,7 @@ export const BBSpectrum: React.FC<Props> = ({ alap, kvint, oktav, hasSignal, onS
       peaks.forEach((p,i)=>{const rawTarget=p.m.targetHz??p.fallback, target=Number.isFinite(rawTarget)&&rawTarget>0?rawTarget:p.fallback, rawMeasured=p.m.measuredHz, hz=rawMeasured!==null&&Number.isFinite(rawMeasured)&&(p.m.status==='valid'||p.m.status==='held')?rawMeasured:target;if(hz<low||hz>high)return;const x=X(hz),bin=Math.max(0,Math.min(data.length-1,Math.round(hz/binW))),db=s.hasSignal&&Number.isFinite(data[bin])?data[bin]:-75,y=Y(db);
         ctx.save();ctx.setLineDash([6,5]);ctx.strokeStyle=p.color;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x,T-3);ctx.lineTo(x,y);ctx.stroke();ctx.restore();
         const cw=118,ch=64,cx=Math.max(4,Math.min(w-cw-4,x-cw/2)),cy=7+(i===1?5:0);ctx.fillStyle='#0a1320';ctx.strokeStyle=p.color;ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect(cx,cy,cw,ch,12);ctx.fill();ctx.stroke();
-        ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=p.color;ctx.font='bold 17px system-ui';ctx.fillText(p.m.noteName||noteName(target),cx+cw/2,cy+17);ctx.fillStyle='#f8fafc';ctx.font='bold 15px ui-monospace';ctx.fillText(s.hasSignal&&p.m.measuredHz!==null?p.m.measuredHz.toFixed(2)+' Hz':target.toFixed(2)+' Hz',cx+cw/2,cy+37);const c=p.m.deviationCents;ctx.fillStyle=c===null?'#94a3b8':Math.abs(c)<=3?'#34d399':'#fbbf24';ctx.font='bold 14px ui-monospace';ctx.fillText(c===null?'— cent':(c>0?'+':'')+c.toFixed(1)+' c',cx+cw/2,cy+54);ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();
+        ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=p.color;ctx.font='bold 17px system-ui';ctx.fillText(p.m.noteName||noteName(target),cx+cw/2,cy+17);ctx.fillStyle='#f8fafc';ctx.font='bold 15px ui-monospace';ctx.fillText(s.hasSignal&&p.m.measuredHz!==null?p.m.measuredHz.toFixed(2)+' Hz':target.toFixed(2)+' Hz',cx+cw/2,cy+37);const c=p.m.deviationCents;ctx.fillStyle=c===null?'#94a3b8':isWithinTuningTolerance(c,target,s.toleranceOverrideCents)?'#34d399':'#fbbf24';ctx.font='bold 14px ui-monospace';ctx.fillText(c===null?'— cent':(c>0?'+':'')+c.toFixed(1)+' c',cx+cw/2,cy+54);ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fillStyle=p.color;ctx.fill();
       });
       raf=requestAnimationFrame(draw);
     };raf=requestAnimationFrame(draw);return()=>cancelAnimationFrame(raf);

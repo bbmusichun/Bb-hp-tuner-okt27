@@ -9,6 +9,7 @@ interface Props {
   hasSignal: boolean;
   selectedRole: 'fundamental' | 'fifth' | 'octave';
   onSelectRole: (role: 'fundamental' | 'fifth' | 'octave') => void;
+  toleranceOverrideCents?: number | null;
 }
 
 export const BBCards: React.FC<Props> = ({
@@ -18,6 +19,7 @@ export const BBCards: React.FC<Props> = ({
   hasSignal,
   selectedRole,
   onSelectRole,
+  toleranceOverrideCents = null,
 }) => {
   const cards = [
     {
@@ -58,7 +60,7 @@ export const BBCards: React.FC<Props> = ({
         const targetStr = `Cél: ${c.data.targetHz ? c.data.targetHz.toFixed(2) : '--'} Hz`;
         const cents = c.data.deviationCents;
         const centsStr = cents !== null && (c.data.status === 'valid' || isHeld) ? `${cents > 0 ? '+' : ''}${cents.toFixed(1)} cent` : '— cent';
-        const inTune = c.data.status === 'valid' && isWithinTuningTolerance(cents, c.data.targetHz);
+        const inTune = c.data.status === 'valid' && isWithinTuningTolerance(cents, c.data.targetHz, toleranceOverrideCents);
 
         return (
           <button
