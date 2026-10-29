@@ -392,6 +392,10 @@ export default function App() {
 
   // Selected resonance focus for the main display and stability graph
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
+  const handleSelectResonanceRole = (role: 'fundamental' | 'fifth' | 'octave') => {
+    if (windowSyncMode === 'slave') return;
+    setSelectedRole(role);
+  };
   const [spectrumZoomTargetHz, setSpectrumZoomTargetHz] = useState<number | null>(null);
   const [isReferenceTonePlaying, setIsReferenceTonePlaying] = useState(false);
   const ownDPlayerRef = useRef<HTMLAudioElement | null>(null);
@@ -1883,10 +1887,12 @@ export default function App() {
                 {/* Resonance Role Selector Pill */}
                 <button
                   onClick={() => {
+                    if (windowSyncMode === 'slave') return;
                     const roles: ('fundamental' | 'fifth' | 'octave')[] = ['fundamental', 'fifth', 'octave'];
                     const nextIdx = (roles.indexOf(selectedRole) + 1) % roles.length;
                     setSelectedRole(roles[nextIdx]);
                   }}
+                  disabled={windowSyncMode === 'slave'}
                   className="px-2.5 py-1.5 rounded-full border border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#f59e0b] text-xs font-medium flex items-center gap-1 hover:bg-[#f59e0b]/20 transition"
                 >
                   <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}</span>
@@ -1967,7 +1973,7 @@ export default function App() {
                     <button type="button" aria-label="Transzponálás egy félhanggal lejjebb" onClick={() => handleSetTranspose(transposeSemitones - 1)} disabled={freezeTargets || transposeSemitones <= -12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">−</button>
                     <span className="min-w-[54px] text-center font-mono text-xs font-semibold text-amber-200">{transposeSemitones > 0 ? '+' : ''}{transposeSemitones} st</span>
                     <button type="button" aria-label="Transzponálás egy félhanggal feljebb" onClick={() => handleSetTranspose(transposeSemitones + 1)} disabled={freezeTargets || transposeSemitones >= 12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">+</button>
-                    <button type="button" onClick={() => handleSetTranspose(0)} disabled={freezeTargets || transposeSemitones === 0} className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-400 disabled:opacity-30">Nullázás</button>
+                    <button type="button" onClick={() => handleSetTranspose(0)} disabled={freezeTargets || windowSyncMode === 'slave' || transposeSemitones === 0} className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-400 disabled:opacity-30">Nullázás</button>
                   </div>
                 </div>
               </section>
@@ -1980,7 +1986,7 @@ export default function App() {
                     <div className="text-xs font-semibold text-white">Stroboszkóp toleranciája</div>
                     <p className="mt-0.5 text-[10px] leading-relaxed text-slate-400">Csak a színjelzést módosítja, a mért Hz- és centértékeket nem.</p>
                   </div>
-                  <select aria-label="Stroboszkóp tolerancia módja" value={toleranceMode} onChange={(event) => setToleranceMode(normalizeTuningToleranceMode(event.target.value))} className="max-w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-[11px] text-white">
+                  <select aria-label="Stroboszkóp tolerancia módja" value={toleranceMode} onChange={(event) => setToleranceMode(normalizeTuningToleranceMode(event.target.value))} disabled={windowSyncMode === 'slave'} className="max-w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-[11px] text-white">
                     <option value="auto">Automatikus / rögzített cent</option>
                     <option value="any">Mindig elfogadott (mindig zöld)</option>
                     <option value="off">Soha ne legyen zöld</option>
@@ -1992,6 +1998,45 @@ export default function App() {
                 </label>
               </section>
 
+              <section aria-label="Master/slave hangolóablak-szinkron" className="my-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white">Többablakos Master / Slave</div>
+                    <p className="mt-0.5 text-[10px] leading-relaxed text-slate-400">Azonos eredetű Hangoal-ablakok között szinkronizálja a hangot, az A4-referenciát, a transzponálást és az 1×/2×/3× célfrekvenciákat.</p>
+                  </div>
+                  <select
+                    aria-label="Master/slave szinkronmód"
+                    value={windowSyncMode}
+                    onChange={(event) => {
+                      const nextMode = event.target.value as WindowSyncMode;
+                      if (nextMode !== 'off' && typeof BroadcastChannel === 'undefined') {
+                        setWindowSyncStatus('unsupported');
+                        return;
+                      }
+                      setWindowSyncMode(nextMode);
+                    }}
+                    className="max-w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-[11px] text-white"
+                  >
+                    <option value="off">Kikapcsolva</option>
+                    <option value="master">Master · vezérlő</option>
+                    <option value="slave">Slave · követő</option>
+                  </select>
+                </div>
+                {windowSyncMode !== 'off' && (
+                  <p role="status" className={'mt-2 text-[10px] ' + (windowSyncStatus === 'connected' || windowSyncStatus === 'master' ? 'text-emerald-300' : windowSyncStatus === 'unsupported' || windowSyncStatus === 'error' ? 'text-rose-300' : 'text-amber-200')}>
+                    {windowSyncStatus === 'master'
+                      ? 'Ez az ablak a Master; a követő ablakok kérésre megkapják az aktuális célhangot.'
+                      : windowSyncStatus === 'connected'
+                        ? 'Kapcsolódva a Masterhez; a célhang és a mérési beállítások szinkronban vannak.'
+                        : windowSyncStatus === 'unsupported'
+                          ? 'Ez a böngésző nem támogatja a többablakos szinkront; válaszd a Kikapcsolva módot.'
+                          : windowSyncStatus === 'error'
+                            ? 'A szinkroncsatorna nem indítható el ebben az ablakban.'
+                            : 'Master ablak keresése… nyisd meg egy másik Hangoal-ablakban a Master módot.'}
+                  </p>
+                )}
+              </section>
+
 {shouldShowTuningPanel('stroboscope') && (
               <BBStrobeBands
                 alap={alap}
@@ -2000,10 +2045,10 @@ export default function App() {
                 hasSignal={hasSignal}
                 active={isSignalInputActive}
                 transientHoldoff={transientHoldoff}
-                freezeTargetSettings={freezeTargets}
+                freezeTargetSettings={freezeTargets || windowSyncMode === 'slave'}
                 baseFrequencyHz={selectedNote.frequency}
                 selectedRole={selectedRole}
-                onSelectRole={setSelectedRole}
+                onSelectRole={handleSelectResonanceRole}
                 toleranceOverrideCents={toleranceOverrideCents}
                 toleranceMode={toleranceMode}
                 strobeSensitivity={strobeSensitivity}
@@ -2023,7 +2068,7 @@ export default function App() {
               hasSignal={hasSignal}
               toleranceOverrideCents={toleranceOverrideCents}
               toleranceMode={toleranceMode}
-              onSelectPeak={setSelectedRole}
+              onSelectPeak={handleSelectResonanceRole}
               onZoomTargetHz={setSpectrumZoomTargetHz}
               zoomTargetHz={spectrumZoomTargetHz}
               customStrobeBands={customStrobeBands}
@@ -2274,7 +2319,7 @@ export default function App() {
           audioOutputSelectionSupported={audioOutputSelectionSupported}
           audioIoMessage={audioIoMessage}
           onChangeA4={(value) => {
-            if (!freezeTargets && Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
+            if (!freezeTargets && windowSyncMode !== 'slave' && Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
           }}
           selectedScaleId={currentScale.id}
           onSelectScale={handleSelectScale}
