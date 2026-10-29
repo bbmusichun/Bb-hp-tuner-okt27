@@ -51,6 +51,7 @@ import { BBHangmezoView } from './components/BBHangmezoView';
 import { BBScaleNoteEnablePanel } from './components/BBScaleNoteEnablePanel';
 import { BBMeresekView } from './components/BBMeresekView';
 import { BBSettingsModal } from './components/BBSettingsModal';
+import { OwnDRecordingAnalysis } from './components/OwnDRecordingAnalysis';
 import { BBSpectrumWaterfall } from './components/BBSpectrumWaterfall';
 import {
   normalizeInstrumentProfiles,
@@ -1350,6 +1351,15 @@ export default function App() {
                 Loopolva (folyamatos ismétlés)
               </label>
             </section>
+            <OwnDRecordingAnalysis
+              audioRef={ownDPlayerRef}
+              noteCandidates={enabledToneNotes.map((note) => ({
+                id: note.id,
+                noteName: note.noteName,
+                frequency: note.frequency,
+              }))}
+              targetFrequencyHz={selectedNote.frequency}
+            />
             {/* ================= SECTION B: MAIN PITCH & STROBE BANDS ================= */}
             <div>
               {/* Main Pitch Row (Large D3, +2.3 cent, Alaphang dropdown) */}
