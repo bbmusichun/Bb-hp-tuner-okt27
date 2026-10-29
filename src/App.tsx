@@ -359,6 +359,12 @@ export default function App() {
     try { localStorage.setItem('hangoal-freeze-targets-v1', String(freezeTargets)); }
     catch { /* Target locks remain available for this session. */ }
   }, [freezeTargets]);
+  const [windowSyncMode, setWindowSyncMode] = useState<WindowSyncMode>(loadWindowSyncMode);
+  const [windowSyncStatus, setWindowSyncStatus] = useState<'idle' | 'master' | 'waiting' | 'connected' | 'unsupported' | 'error'>('idle');
+  useEffect(() => {
+    try { sessionStorage.setItem('hangoal-window-sync-mode-v1', windowSyncMode); }
+    catch { /* Sync mode remains available for the current tab. */ }
+  }, [windowSyncMode]);
   useEffect(() => {
     try { localStorage.setItem('hangoal-tolerance-mode-v1', toleranceMode); }
     catch { /* The current session remains usable if storage is disabled. */ }
@@ -457,6 +463,28 @@ export default function App() {
   const [selectedNote, setSelectedNote] = useState<ToneFieldNote>(toneNotes[0]);
   const [chromaticTargetMidi, setChromaticTargetMidi] = useState<number | null>(null);
   const [isPitchDialOpen, setIsPitchDialOpen] = useState(false);
+  const windowSyncPeerIdRef = useRef<string>('');
+  if (!windowSyncPeerIdRef.current) windowSyncPeerIdRef.current = createWindowSyncPeerId();
+  const windowSyncSequenceRef = useRef(0);
+  const windowSyncChannelRef = useRef<BroadcastChannel | null>(null);
+  const latestWindowSyncStateRef = useRef({
+    target: selectedNote,
+    a4Ref,
+    transposeSemitones,
+    selectedRole,
+    toleranceOverrideCents,
+    toleranceMode,
+    strobeSensitivity,
+  });
+  latestWindowSyncStateRef.current = {
+    target: selectedNote,
+    a4Ref,
+    transposeSemitones,
+    selectedRole,
+    toleranceOverrideCents,
+    toleranceMode,
+    strobeSensitivity,
+  };
 
   useEffect(() => {
     // A zoom belongs to the previous target band; reset the view when the target note changes.
@@ -464,6 +492,8 @@ export default function App() {
   }, [selectedNote.id, selectedNote.frequency]);
 
   useEffect(() => {
+    // A slave uses the master's exact target frequencies instead of re-deriving them from its local scale.
+    if (windowSyncMode === 'slave') return;
     if (chromaticTargetMidi !== null) {
       const chromaticTarget = buildChromaticTargetNote(chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets);
       if (chromaticTarget) setSelectedNote(chromaticTarget);
@@ -472,7 +502,84 @@ export default function App() {
     if (toneNotes.length > 0) {
       setSelectedNote((previous) => enabledToneNotes.find((note) => note.id === previous.id) ?? enabledToneNotes[0] ?? toneNotes[0]);
     }
-  }, [toneNotes, enabledToneNotes, chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets]);
+  }, [toneNotes, enabledToneNotes, chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets, windowSyncMode]);
+
+  useEffect(() => {
+    if (windowSyncMode === 'off') {
+      setWindowSyncStatus('idle');
+      return;
+    }
+    if (typeof BroadcastChannel === 'undefined') {
+      setWindowSyncStatus('unsupported');
+      return;
+    }
+
+    let channel: BroadcastChannel;
+    try {
+      channel = new BroadcastChannel('hangoal-strobe-sync-v1');
+    } catch {
+      setWindowSyncStatus('unsupported');
+      return;
+    }
+    windowSyncChannelRef.current = channel;
+    let lastSenderId: string | null = null;
+    let lastSequence = -1;
+
+    const sendCurrentState = () => {
+      const current = latestWindowSyncStateRef.current;
+      const message = createWindowSyncState(windowSyncPeerIdRef.current, ++windowSyncSequenceRef.current, current);
+      if (message) channel.postMessage(message);
+    };
+
+    const onMessage = (event: MessageEvent<unknown>) => {
+      const message = normalizeWindowSyncMessage(event.data);
+      if (!message || message.senderId === windowSyncPeerIdRef.current) return;
+
+      if (windowSyncMode === 'master') {
+        if (message.type === 'request-state') sendCurrentState();
+        return;
+      }
+
+      if (message.type !== 'state') return;
+      if (message.senderId === lastSenderId && message.sequence <= lastSequence) return;
+      lastSenderId = message.senderId;
+      lastSequence = message.sequence;
+      setWindowSyncStatus('connected');
+      setSelectedNote({ ...message.target });
+      setChromaticTargetMidi(null);
+      setA4Ref(message.a4Ref);
+      setTransposeSemitones(message.transposeSemitones);
+      setSelectedRole(message.selectedRole);
+      setToleranceOverrideCents(message.toleranceOverrideCents);
+      setToleranceMode(message.toleranceMode);
+      setStrobeSensitivity(message.strobeSensitivity);
+    };
+
+    channel.addEventListener('message', onMessage);
+    if (windowSyncMode === 'master') {
+      setWindowSyncStatus('master');
+      sendCurrentState();
+    } else {
+      setWindowSyncStatus('waiting');
+      const request = createWindowSyncRequest(windowSyncPeerIdRef.current);
+      if (request) channel.postMessage(request);
+    }
+
+    return () => {
+      channel.removeEventListener('message', onMessage);
+      channel.close();
+      if (windowSyncChannelRef.current === channel) windowSyncChannelRef.current = null;
+    };
+  }, [windowSyncMode]);
+
+  useEffect(() => {
+    if (windowSyncMode !== 'master') return;
+    const channel = windowSyncChannelRef.current;
+    if (!channel) return;
+    const current = latestWindowSyncStateRef.current;
+    const message = createWindowSyncState(windowSyncPeerIdRef.current, ++windowSyncSequenceRef.current, current);
+    if (message) channel.postMessage(message);
+  }, [windowSyncMode, selectedNote, a4Ref, transposeSemitones, selectedRole, toleranceOverrideCents, toleranceMode, strobeSensitivity]);
 
   const selectedMidi = useMemo(() => midiFromFrequency(selectedNote.frequency, a4Ref), [selectedNote.frequency, a4Ref]);
 
