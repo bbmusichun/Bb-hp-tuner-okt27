@@ -1,4 +1,5 @@
 import { findSpectralPeakInWindow } from './spectralPeak';
+import { chooseNoteCandidate, type DetectedNote, type NoteCandidate } from './noteDetection';
 import { assessFundamentalIdentifiability, IdentifiabilityAssessment } from './fundamentalIdentifiability';
 
 export interface WavResonance {
@@ -16,6 +17,8 @@ export interface WavFrameAnalysis {
   resonances: WavResonance[];
   /** Whether this window's spectrum roots the target note in a harmonic series. */
   identifiability?: IdentifiabilityAssessment;
+  /** Automatically identified note using the same conservative detector as the microphone path. */
+  detectedNote?: DetectedNote | null;
 }
 
 export interface WavAnalysisOptions {
@@ -23,6 +26,8 @@ export interface WavAnalysisOptions {
   hopSize?: number;
   targetHz?: number;
   peakFloorDb?: number;
+  /** Optional handpan note candidates to run through the shared automatic note detector. */
+  noteCandidates?: NoteCandidate[];
 }
 
 function nextPowerOfTwo(value: number): number {
@@ -142,7 +147,16 @@ export function analyzeWavWindow(
     spectrum[bin] = 20 * Math.log10(Math.max(magnitude, 1e-12));
   }
 
-  const targets = [targetHz, targetHz * 2, targetHz * 3];
+  const detectedNote = options.noteCandidates?.length
+    ? chooseNoteCandidate(options.noteCandidates, (candidateHz, centsWindow = 45) => {
+        const peak = findSpectralPeakInWindow(candidateHz, centsWindow, spectrum, sampleRate, peakFloorDb);
+        return peak ? { hz: peak.freq, db: peak.magDb } : null;
+      })
+    : null;
+  // When a note is identified, measure its own 1x/2x/3x resonances instead of staying
+  // locked to a single preset pitch. If the frame is ambiguous, retain the selected target.
+  const effectiveTargetHz = detectedNote?.frequency ?? targetHz;
+  const targets = [effectiveTargetHz, effectiveTargetHz * 2, effectiveTargetHz * 3];
   const resonances = targets.map((target) => {
     const peak = findSpectralPeakInWindow(target, 150, spectrum, sampleRate, peakFloorDb);
     return {
@@ -159,8 +173,37 @@ export function analyzeWavWindow(
     timeSeconds: 0,
     rmsDb: 20 * Math.log10(Math.max(Math.sqrt(sumSquares / fftSize), 1e-12)),
     resonances,
-    identifiability: assessFundamentalIdentifiability(targetHz, spectrum, sampleRate, { peakFloorDb }),
+    identifiability: assessFundamentalIdentifiability(effectiveTargetHz, spectrum, sampleRate, { peakFloorDb }),
+    detectedNote,
   };
+}
+
+/** Analyze a decoded recording in small batches so the UI remains responsive on phones. */
+export async function analyzeWavRecordingAsync(
+  samples: Float32Array,
+  sampleRate: number,
+  options: WavAnalysisOptions = {},
+  onProgress?: (progressPercent: number) => void,
+  batchSize = 8,
+): Promise<WavFrameAnalysis[]> {
+  const fftSize = options.fftSize ?? 16384;
+  const hopSize = options.hopSize ?? Math.floor(fftSize / 2);
+  if (!Number.isInteger(hopSize) || hopSize < 1 || samples.length < fftSize ||
+      !Number.isInteger(batchSize) || batchSize < 1) return [];
+  const totalFrames = Math.floor((samples.length - fftSize) / hopSize) + 1;
+  const frames: WavFrameAnalysis[] = [];
+  for (let index = 0, start = 0; start + fftSize <= samples.length; index++, start += hopSize) {
+    const frame = analyzeWavWindow(samples.subarray(start, start + fftSize), sampleRate, options);
+    if (frame) {
+      frame.timeSeconds = start / sampleRate;
+      frames.push(frame);
+    }
+    if ((index + 1) % batchSize === 0 || index + 1 === totalFrames) {
+      onProgress?.(Math.round(((index + 1) / totalFrames) * 100));
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  return frames;
 }
 
 /** Analyze overlapping windows across decoded mono audio. */

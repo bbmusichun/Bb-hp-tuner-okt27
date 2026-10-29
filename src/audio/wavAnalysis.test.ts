@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeWavRecording, analyzeWavWindow, downmixChannels } from './wavAnalysis';
+import { analyzeWavRecording, analyzeWavRecordingAsync, analyzeWavWindow, downmixChannels } from './wavAnalysis';
+import type { NoteCandidate } from './noteDetection';
 
 const RATE = 44100;
 const FFT_SIZE = 16384;
@@ -93,6 +94,43 @@ describe('offline WAV resonance analysis', () => {
     const frames = analyzeWavRecording(sine(D3, FFT_SIZE * 2), RATE, { fftSize: FFT_SIZE, hopSize: FFT_SIZE / 2 });
     assert.equal(frames.length, 3);
     assert.deepEqual(frames.map(frame => frame.timeSeconds), [0, FFT_SIZE / 2 / RATE, FFT_SIZE / RATE]);
+  });
+
+  it('uses the shared automatic detector to identify a note from a recording window', () => {
+    const d3: NoteCandidate = { id: 'd3', noteName: 'D3', frequency: D3 };
+    const a3: NoteCandidate = { id: 'a3', noteName: 'A3', frequency: 220 };
+    const samples = new Float32Array(FFT_SIZE);
+    for (let i = 0; i < samples.length; i++) {
+      const t = i / RATE;
+      samples[i] = 0.5 * Math.sin(2 * Math.PI * D3 * t)
+        + 0.25 * Math.sin(2 * Math.PI * D3 * 2 * t)
+        + 0.15 * Math.sin(2 * Math.PI * D3 * 3 * t);
+    }
+    const result = analyzeWavWindow(samples, RATE, { noteCandidates: [d3, a3] });
+    assert.equal(result?.detectedNote?.id, 'd3');
+    assert.ok((result?.detectedNote?.confidence ?? 0) > 0.18);
+    assert.ok(Math.abs((result?.resonances[0].measuredHz ?? 0) - D3) < 0.2);
+  });
+
+  it('analyses a recording asynchronously in batches and reports completion progress', async () => {
+    const d3: NoteCandidate = { id: 'd3', noteName: 'D3', frequency: D3 };
+    const samples = new Float32Array(FFT_SIZE * 2);
+    for (let i = 0; i < samples.length; i++) {
+      const t = i / RATE;
+      samples[i] = 0.5 * Math.sin(2 * Math.PI * D3 * t)
+        + 0.25 * Math.sin(2 * Math.PI * D3 * 2 * t)
+        + 0.15 * Math.sin(2 * Math.PI * D3 * 3 * t);
+    }
+    const progress: number[] = [];
+    const frames = await analyzeWavRecordingAsync(
+      samples, RATE,
+      { fftSize: FFT_SIZE, hopSize: FFT_SIZE / 2, noteCandidates: [d3] },
+      (value) => progress.push(value),
+      1,
+    );
+    assert.equal(frames.length, 3);
+    assert.ok(frames.every((frame) => frame.detectedNote?.id === 'd3'));
+    assert.equal(progress.at(-1), 100);
   });
 
   it('downmixes stereo channels without changing their average amplitude', () => {
