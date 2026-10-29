@@ -51,3 +51,31 @@ export function normalizeStrobeBands(value: unknown): StrobeBandConfig[] {
 export function getStrobeBandTargetHz(band: StrobeBandConfig): number {
   return band.targetHz * Math.pow(2, band.centsOffset / 1200);
 }
+
+
+/**
+ * Parse a custom strobe target expression: absolute Hz, a ratio to A4 (3/2 or x1.5),
+ * or cents relative to A4 (702c or -100¢). Ratio/cents forms use A4 = 440 Hz by default.
+ */
+export function parseStrobeTargetExpression(expression: string, referenceHz = 440): number | null {
+  if (!Number.isFinite(referenceHz) || referenceHz < 20 || referenceHz > 20000) return null;
+  const value = expression.trim().replace(',', '.');
+  if (!value || value.length > 40) return null;
+  const centsMatch = value.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(?:c|¢)$/i);
+  if (centsMatch) {
+    const cents = Number(centsMatch[1]);
+    if (!Number.isFinite(cents) || cents < -1200 || cents > 1200) return null;
+    const hz = referenceHz * Math.pow(2, cents / 1200);
+    return Number.isFinite(hz) && hz >= 20 && hz <= 20000 ? hz : null;
+  }
+  const ratioMatch = value.match(/^(?:x\s*)?(\d+(?:\.\d+)?|\.\d+)\s*\/\s*(\d+(?:\.\d+)?|\.\d+)$/i);
+  const multiplierMatch = value.match(/^x\s*(\d+(?:\.\d+)?|\.\d+)$/i);
+  if (ratioMatch || multiplierMatch) {
+    const ratio = ratioMatch ? Number(ratioMatch[1]) / Number(ratioMatch[2]) : Number(multiplierMatch![1]);
+    if (!Number.isFinite(ratio) || ratio <= 0 || ratio > 100) return null;
+    const hz = referenceHz * ratio;
+    return Number.isFinite(hz) && hz >= 20 && hz <= 20000 ? hz : null;
+  }
+  const hz = Number(value);
+  return Number.isFinite(hz) && hz >= 20 && hz <= 20000 ? hz : null;
+}
