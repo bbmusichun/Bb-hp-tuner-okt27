@@ -6,6 +6,7 @@ import { MAX_PARTIAL_TARGET_OFFSET_CENTS, partialTargetFrequency } from '../audi
 import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/partialTargets';
 import type { InstrumentProfile } from '../audio/instrumentProfiles';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
+import { parseScalaScl, scalaToCustomScaleText } from '../audio/scala';
 
 interface Props {
   isOpen: boolean;
@@ -351,6 +352,36 @@ export const BBSettingsModal: React.FC<Props> = ({
             <p className="text-[10px] leading-relaxed text-slate-400">
               Készítői méréshez itt minden hang saját Hz-célértéket kap. Soronként egy hang: hangnév, frekvencia Hz-ben. 2–24 sor, 20–2000 Hz.
             </p>
+            <label className="block rounded-lg border border-dashed border-slate-700 px-3 py-2 text-xs text-slate-300 cursor-pointer hover:border-[#f59e0b]">
+              Scala .scl importálása
+              <span className="block text-[10px] text-slate-500 mt-1">A kiválasztott hang ({selectedNoteName}, {selectedNoteFundamentalHz.toFixed(2)} Hz) lesz az alaphang. A Scala-fájl hangközeit pontos frekvenciákká alakítja.</span>
+              <input
+                type="file"
+                accept=".scl,text/plain"
+                className="block w-full mt-2 text-[10px]"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const parsed = parseScalaScl(await file.text());
+                    const converted = parsed
+                      ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
+                      : null;
+                    if (!converted) {
+                      setCustomScaleMessage('A Scala-fájl hibás, vagy a skála több mint 24 használható hangot tartalmaz.');
+                      return;
+                    }
+                    setCustomScaleNameDraft(file.name.replace(/\.scl$/i, ''));
+                    setCustomScaleTextDraft(converted);
+                    setCustomScaleMessage('A Scala-skála beolvasva. Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.');
+                  } catch {
+                    setCustomScaleMessage('A Scala-fájl nem olvasható.');
+                  } finally {
+                    event.target.value = '';
+                  }
+                }}
+              />
+            </label>
             <input
               aria-label="Egyedi hangmező neve"
               value={customScaleNameDraft}

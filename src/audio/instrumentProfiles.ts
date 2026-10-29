@@ -29,7 +29,7 @@ export function parseCustomScale(name: string, source: string, id: string): Hand
     const fields = line.split(/[,\t;]/).map((field) => field.trim());
     if (fields.length !== 2) return null;
     const [noteName, rawFrequency] = fields;
-    if (!/^[A-Ga-g](?:#|b)?-?\d{1,2}$/.test(noteName)) return null;
+    if (!/^[A-Ga-g](?:#|b)?-?\d{1,2}(?:[+-]\d+c)?(?:\s+\(f\d+\))?$/.test(noteName)) return null;
     const uniquenessKey = noteName.toLowerCase();
     if (seenNames.has(uniquenessKey)) return null;
     const frequencyHz = Number(rawFrequency);
