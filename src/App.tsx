@@ -444,6 +444,11 @@ export default function App() {
   const [isPitchDialOpen, setIsPitchDialOpen] = useState(false);
 
   useEffect(() => {
+    // A zoom belongs to the previous target band; reset the view when the target note changes.
+    setSpectrumZoomTargetHz(null);
+  }, [selectedNote.id, selectedNote.frequency]);
+
+  useEffect(() => {
     if (chromaticTargetMidi !== null) {
       const chromaticTarget = buildChromaticTargetNote(chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets);
       if (chromaticTarget) setSelectedNote(chromaticTarget);
