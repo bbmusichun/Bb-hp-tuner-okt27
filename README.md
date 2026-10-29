@@ -6,6 +6,7 @@ Mobilra optimalizált, böngészőben futó handpan-hangoló valós idejű spekt
 
 - Valós idejű mikrofonbemenet és spektrális csúcsinterpoláció.
 - Alaphang (1×), oktáv (2×) és harmadik parciális (3×) egyidejű követése.
+- Célfrekvencia-referenciahang az aktív alaphang/parciális lejátszásához. A hanggenerátor mikrofonmérés közben automatikusan leáll, hogy ne szennyezze a mérést.
 - Spektrum- és stabilitásnézet, tranziensvédelem és külön YIN-alapú diagnosztika.
 - Több fizikai hangszer helyi profilja, egymástól független A4-referenciával, hangolási skálával és hangonkénti parciális-célértékekkel.
 - Hangszerprofilok JSON-os biztonsági mentése és visszatöltése. Az importált profilok validálása után az azonosítók alapján frissülnek a meglévő profilok, a többi profil megmarad.

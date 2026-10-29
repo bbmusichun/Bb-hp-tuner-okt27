@@ -14,6 +14,7 @@ import {
   Layers,
   BookOpen,
   ChevronDown,
+  Volume2,
 } from 'lucide-react';
 import { bbAudioEngine } from './audio/audioEngine';
 import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
@@ -167,6 +168,7 @@ export default function App() {
 
   // Selected resonance focus for the main display and stability graph
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
+  const [isReferenceTonePlaying, setIsReferenceTonePlaying] = useState(false);
 
   // Compute tone field notes with current A4
   const toneNotes: ToneFieldNote[] = useMemo(() => {
@@ -588,6 +590,32 @@ export default function App() {
 
   // Determine active resonance details for Section B header
   const activeResonance = selectedRole === 'fundamental' ? alap : selectedRole === 'fifth' ? kvint : oktav;
+  const referenceToneHz = activeResonance.targetHz ?? (
+    selectedRole === 'fundamental' ? selectedNote.frequency
+      : selectedRole === 'fifth' ? selectedNote.fifthFreq
+      : selectedNote.octaveFreq
+  );
+
+  useEffect(() => {
+    // Stop the reference pitch when its target changes or measurement begins,
+    // otherwise the generated tone could contaminate the live microphone input.
+    bbAudioEngine.stopTone();
+    setIsReferenceTonePlaying(false);
+    return () => bbAudioEngine.stopTone();
+  }, [selectedNote.id, selectedRole, activeInstrumentProfileId, referenceToneHz, isListening]);
+
+  const handleToggleReferenceTone = () => {
+    if (isListening) return;
+    if (isReferenceTonePlaying) {
+      bbAudioEngine.stopTone();
+      setIsReferenceTonePlaying(false);
+      return;
+    }
+    if (!Number.isFinite(referenceToneHz) || referenceToneHz <= 0) return;
+    bbAudioEngine.playTone(referenceToneHz);
+    setIsReferenceTonePlaying(true);
+  };
+
   const activeCents = activeResonance.deviationCents;
   const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz, toleranceOverrideCents);
 
@@ -748,6 +776,28 @@ export default function App() {
                 >
                   <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}</span>
                   <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <div className="mb-1 flex items-center justify-between gap-2 px-1">
+                <span className="text-[10px] text-slate-500">
+                  Célreferencia · {referenceToneHz.toFixed(3)} Hz
+                </span>
+                <button
+                  type="button"
+                  onClick={handleToggleReferenceTone}
+                  disabled={isListening || !Number.isFinite(referenceToneHz) || referenceToneHz <= 0}
+                  aria-pressed={isReferenceTonePlaying}
+                  aria-label={isReferenceTonePlaying ? 'Referenciahang leállítása' : 'Referenciahang lejátszása'}
+                  title={isListening ? 'Mikrofonmérés alatt a referenciahang ki van kapcsolva.' : 'A kiválasztott rezonancia célfrekvenciájának lejátszása'}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                    isReferenceTonePlaying
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                      : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-[#f59e0b]/50 hover:text-[#f59e0b]'
+                  }`}
+                >
+                  <Volume2 className="h-3.5 w-3.5" />
+                  {isReferenceTonePlaying ? 'Hang leállítása' : 'Referenciahang'}
                 </button>
               </div>
 

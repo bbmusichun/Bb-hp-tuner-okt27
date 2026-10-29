@@ -168,6 +168,13 @@ incorrectly selected spectral peak. Keep the microphone placement, distance, inp
 instrument condition consistent when comparing sessions.
 
 
+## Reference tone playback
+
+The main tuning view can play a sine reference at the currently selected resonance's target frequency
+(fundamental, third partial, or octave). The generated tone automatically stops when the target changes,
+the selected physical instrument changes, or live microphone measurement starts. It is intentionally
+disabled while the microphone is active to avoid feeding the reference tone back into the measurement.
+
 ## Physical instrument profiles and backups
 
 Each physical instrument profile owns its scale, A4 reference and per-note partial offsets. The
