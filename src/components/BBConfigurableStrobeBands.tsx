@@ -239,7 +239,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
           <div className="mt-3 space-y-3">
             {bands.map((band, index) => {
               const reading = readings[band.id];
-              const targetHz = getStrobeBandTargetHz(band);
+              const targetHz = getStrobeBandTargetHz(band, baseFrequencyHz);
               const measured = reading?.measuredHz ?? null;
               const cents = reading?.deviationCents ?? null;
               const valid = band.enabled && active && hasSignal && !transientHoldoff && cents !== null;
