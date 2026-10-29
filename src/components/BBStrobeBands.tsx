@@ -78,6 +78,8 @@ export const BBStrobeBands: React.FC<Props> = ({
   const [customBands, setCustomBands] = useState<StrobeBandConfig[]>(loadCustomBands);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [renderFps, setRenderFps] = useState<number | null>(null);
+  const fpsWindowRef = useRef({ startedAt: 0, frames: 0 });
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const [pitchPipeModes, setPitchPipeModes] = useState<Record<string, PitchPipeMode>>(loadPitchPipeModes);
@@ -172,6 +174,14 @@ export const BBStrobeBands: React.FC<Props> = ({
       if (current.isPaused) {
         animationId = requestAnimationFrame(render);
         return;
+      }
+      const fpsWindow = fpsWindowRef.current;
+      if (fpsWindow.startedAt === 0) fpsWindow.startedAt = now;
+      fpsWindow.frames += 1;
+      if (now - fpsWindow.startedAt >= 500) {
+        setRenderFps(fpsWindow.frames * 1000 / Math.max(1, now - fpsWindow.startedAt));
+        fpsWindow.startedAt = now;
+        fpsWindow.frames = 0;
       }
       const dt = Math.min(0.1, Math.max(0, (now - lastTickRef.current) / 1000));
       lastTickRef.current = now;
@@ -309,6 +319,11 @@ export const BBStrobeBands: React.FC<Props> = ({
         <div>
           <h3 className="text-sm font-bold text-white">Stroboszkóp</h3>
           <p className="mt-0.5 text-[10px] text-slate-400">Felül kvint, középen oktáv, alul alap. A további sávok is ebben a nézetben jelennek meg.</p>
+          {renderFps !== null && !isPaused && (
+            <p role={renderFps < 40 ? 'alert' : 'status'} className={'mt-1 text-[10px] font-mono ' + (renderFps < 40 ? 'text-rose-300' : 'text-emerald-300')}>
+              {renderFps < 40 ? 'Lassú stroboszkóprajzolás: ' : 'Stroboszkóprajzolás: '}{Math.round(renderFps)} FPS{renderFps < 40 ? ' · csökkentsd a képernyő terhelését' : ''}
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
           <button type="button" onClick={() => setIsPaused((paused) => !paused)} aria-pressed={isPaused}
