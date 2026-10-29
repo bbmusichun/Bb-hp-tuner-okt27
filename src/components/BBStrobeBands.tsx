@@ -76,6 +76,7 @@ export const BBStrobeBands: React.FC<Props> = ({
 }) => {
   const [customBands, setCustomBands] = useState<StrobeBandConfig[]>(loadCustomBands);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const [pitchPipeModes, setPitchPipeModes] = useState<Record<string, PitchPipeMode>>(loadPitchPipeModes);
@@ -86,8 +87,8 @@ export const BBStrobeBands: React.FC<Props> = ({
   pitchPipeModesRef.current = pitchPipeModes;
   const previousTransientRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, toleranceMode, strobeSensitivity, baseFrequencyHz, customBands });
-  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, toleranceMode, strobeSensitivity, baseFrequencyHz, customBands };
+  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, toleranceMode, strobeSensitivity, baseFrequencyHz, customBands, isPaused });
+  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, toleranceMode, strobeSensitivity, baseFrequencyHz, customBands, isPaused };
   const phasesRef = useRef<Record<string, number>>({});
   const smoothRef = useRef<Record<string, number>>({});
   const lastValidRef = useRef<Record<string, number>>({});
@@ -165,6 +166,10 @@ export const BBStrobeBands: React.FC<Props> = ({
     if (!canvas || !ctx) return;
     const render = (now: number) => {
       const current = latestRef.current;
+      if (current.isPaused) {
+        animationId = requestAnimationFrame(render);
+        return;
+      }
       const dt = Math.min(0.1, Math.max(0, (now - lastTickRef.current) / 1000));
       lastTickRef.current = now;
       const width = canvas.width;
@@ -300,12 +305,19 @@ export const BBStrobeBands: React.FC<Props> = ({
           <h3 className="text-sm font-bold text-white">Stroboszkóp</h3>
           <p className="mt-0.5 text-[10px] text-slate-400">Felül kvint, középen oktáv, alul alap. A további sávok is ebben a nézetben jelennek meg.</p>
         </div>
-        <button type="button" onClick={() => setIsEditorOpen((open) => !open)} aria-expanded={isEditorOpen}
-          className="shrink-0 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-xs font-semibold text-amber-200">
-          {isEditorOpen ? 'Szerkesztés bezárása' : 'Sávok szerkesztése'}
-        </button>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          <button type="button" onClick={() => setIsPaused((paused) => !paused)} aria-pressed={isPaused}
+            className={'rounded-lg border px-2.5 py-2 text-[11px] font-semibold ' + (isPaused ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200' : 'border-slate-700 text-slate-300')}>
+            {isPaused ? 'Stroboszkóp folytatása' : 'Stroboszkóp szünet'}
+          </button>
+          <button type="button" onClick={() => setIsEditorOpen((open) => !open)} aria-expanded={isEditorOpen}
+            className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-xs font-semibold text-amber-200">
+            {isEditorOpen ? 'Szerkesztés bezárása' : 'Sávok szerkesztése'}
+          </button>
+        </div>
       </div>
 
+      {isPaused && <p role="status" className="mb-2 rounded-lg border border-emerald-400/20 bg-emerald-400/5 px-2.5 py-1.5 text-[10px] text-emerald-200">A stroboszkóp rajzolása szünetel; a mikrofonos mérés tovább fut.</p>}
       <div className="flex w-full items-stretch gap-2">
         <div className="flex w-[116px] shrink-0 flex-col select-none" style={{ height: canvasHeight }}>
           {builtInLabels.map((row) => {
