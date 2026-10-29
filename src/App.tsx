@@ -2098,6 +2098,16 @@ export default function App() {
           toleranceOverrideCents={toleranceOverrideCents}
           onChangeToleranceOverrideCents={setToleranceOverrideCents}
           freezeTargetSettings={freezeTargets}
+          audioInputDevices={audioInputDevices}
+          selectedAudioInputDeviceId={selectedAudioInputDeviceId}
+          onSelectAudioInputDevice={(deviceId) => { void handleSelectAudioInputDevice(deviceId); }}
+          audioOutputDevices={audioOutputDevices}
+          selectedAudioOutputDeviceId={selectedAudioOutputDeviceId}
+          onSelectAudioOutputDevice={(deviceId) => { void handleSelectAudioOutputDevice(deviceId); }}
+          onRefreshAudioDevices={() => { void refreshAudioDevices(); }}
+          isRefreshingAudioDevices={isRefreshingAudioDevices}
+          audioOutputSelectionSupported={audioOutputSelectionSupported}
+          audioIoMessage={audioIoMessage}
           onChangeA4={(value) => {
             if (!freezeTargets && Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
           }}
