@@ -32,6 +32,7 @@ import { normalizePitchPipeModes } from './audio/pitchPipeModes';
 import { createWindowSyncRequest, createWindowSyncState, normalizeWindowSyncMessage, type WindowSyncMode } from './audio/windowSync';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
+import { rotateEnabledMode } from './audio/scaleMode';
 import {
   DEFAULT_PARTIAL_TARGET_OFFSET,
   calibratePartialTargetOffset,
@@ -613,6 +614,29 @@ export default function App() {
     setChromaticTargetMidi(null);
     autoDetectionRef.current = null;
     setSelectedNote(note);
+  };
+
+  const handleRotateToneMode = (steps: number) => {
+    if (windowSyncMode === 'slave' || toneNotes.length < 2 || !Number.isFinite(steps)) return;
+    const noteIds = toneNotes.map((note) => note.id);
+    const rotatedEnabledIds = new Set(rotateEnabledMode(noteIds, [...enabledToneNoteIds], steps));
+    if (rotatedEnabledIds.size === 0) return;
+    const nextDisabledIds = noteIds.filter((id) => !rotatedEnabledIds.has(id));
+    const nextEnabledNotes = getEnabledToneNotes(toneNotes, nextDisabledIds);
+    if (nextEnabledNotes.length === 0) return;
+
+    setDisabledToneNotesByScale((previous) => {
+      const next = { ...previous };
+      if (nextDisabledIds.length > 0) next[currentScale.id] = nextDisabledIds;
+      else delete next[currentScale.id];
+      return next;
+    });
+
+    if (!rotatedEnabledIds.has(selectedNote.id)) {
+      setChromaticTargetMidi(null);
+      setSelectedNote(nextEnabledNotes[0]);
+      setSelectedRole('fundamental');
+    }
   };
 
   const handleToggleToneNote = (noteId: string) => {
@@ -2251,6 +2275,8 @@ export default function App() {
               notes={toneNotes}
               enabledNoteIds={enabledToneNoteIds}
               onToggleNote={handleToggleToneNote}
+              onRotateMode={handleRotateToneMode}
+              readOnly={windowSyncMode === 'slave'}
             />
           </div>
         )}
