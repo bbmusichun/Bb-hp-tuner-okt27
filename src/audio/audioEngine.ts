@@ -649,7 +649,7 @@ export class BBAudioEngine {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.07, now + 0.025);
     oscillator.type = 'sine';
     oscillator.frequency.setValueAtTime(freqHz, now);
     oscillator.connect(gain);
@@ -665,13 +665,18 @@ export class BBAudioEngine {
 
     if (typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs > 0) {
       const endAt = now + Math.max(0.06, durationMs / 1000);
-      gain.gain.setValueAtTime(0.12, Math.max(now + 0.025, endAt - 0.03));
+      gain.gain.setValueAtTime(0.07, Math.max(now + 0.025, endAt - 0.03));
       gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
       oscillator.start(now);
       oscillator.stop(endAt + 0.01);
     } else {
       oscillator.start(now);
     }
+  }
+
+  /** Whether a continuous or short-lived pitch-pipe voice is currently allocated for this band id. */
+  public hasPitchPipeTone(id: string): boolean {
+    return this.pitchPipeVoices.has(id);
   }
 
   /** Stop only the selected pitch-pipe voice; other active bands keep sounding. */
