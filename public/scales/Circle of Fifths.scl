@@ -1,0 +1,16 @@
+! Circle of Fifths.scl
+12-tone equal temperament with the notes rearranged
+12
+!
+ 700.000 :G
+ 200.000 :D
+ 900.000 :A !!reference 4
+ 400.000 :E
+1100.000 :B
+ 600.000 :F^#
+ 100.000 :D^b
+ 800.000 :A^b
+ 300.000 :E^b
+1000.000 :B^b
+ 500.000 :F
+1200.000 :C
