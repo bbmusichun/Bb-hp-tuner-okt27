@@ -5,7 +5,7 @@ import { normalizeStrobeBands, type StrobeBandConfig } from './strobeBands';
 import type { AutoDetectionMode } from './detectionModes';
 import type { TuningReadoutMode } from './readoutModes';
 import type { ReferenceToneMode } from './referenceToneModes';
-import { DEFAULT_STROBE_SENSITIVITY, isValidStrobeSensitivity, normalizeStrobeSensitivity } from './strobeSensitivity';
+import { isValidStrobeSensitivity, normalizeStrobeSensitivity } from './strobeSensitivity';
 
 export interface HangoalFullConfiguration {
   schemaVersion: 2;
@@ -81,11 +81,9 @@ export function parseHangoalFullConfiguration(
       settings.toleranceOverrideCents >= 0.5 && settings.toleranceOverrideCents <= 20))) return null;
   if (typeof settings.transposeSemitones !== 'number' || !Number.isInteger(settings.transposeSemitones) ||
     settings.transposeSemitones < -12 || settings.transposeSemitones > 12) return null;
-  const rawStrobeSensitivity = settings.strobeSensitivity === undefined
-    ? DEFAULT_STROBE_SENSITIVITY
-    : settings.strobeSensitivity;
-  if (!isValidStrobeSensitivity(rawStrobeSensitivity)) return null;
-  const strobeSensitivity = normalizeStrobeSensitivity(rawStrobeSensitivity);
+  if (settings.strobeSensitivity !== undefined && !isValidStrobeSensitivity(settings.strobeSensitivity)) return null;
+  // Older schema-v2 backups predate this control; the normalizer supplies the 1.0× default.
+  const strobeSensitivity = normalizeStrobeSensitivity(settings.strobeSensitivity);
 
   if (!isRecord(value.disabledToneNotesByScale)) return null;
   const disabledToneNotesByScale = normalizeDisabledToneNotes(value.disabledToneNotesByScale);
