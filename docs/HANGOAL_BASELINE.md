@@ -21,7 +21,7 @@ This document defines the functional baseline for the Hangoal handpan tuner from
 | Modal note enable/disable and transposition | Per-scale enable/disable is implemented for the handpan tone field and automatic detection, with local persistence and protection against disabling the last active note. Global scale transposition is implemented. |
 | Automatic pitch detection and single-shot/continuous modes | Partial: microphone detection exists; interaction semantics need acceptance tests. |
 | Exact peak spectrum, peak hover values, noise-floor suppression, doubled-peak inspection | Full spectrum/waterfall and live diagnostic panel are present. The panel estimates the median noise floor and flags possible near-target double peaks without changing the tuning result; heuristic and physical-device validation remain open. |
-| Hz / cents / note / just-ratio readout modes | Partial: Hz and cents are present; configurable ratio and note-name display modes remain. |
+| Hz / cents / note / just-ratio readout modes | Measurement cards now offer persisted Hz, cent, measured note-name and measured ratio-to-fundamental modes. Ratio mode also reports the corresponding target ratio; tests cover missing-data behavior. |
 | Keyboard control and front/rear settings panel | Not yet implemented to acceptance level. |
 | Input clipping/level and performance feedback | Partial: input-level metadata exists; live clipping and frame-rate indicators remain. |
 | Save and restore tuning configuration | Partial: instrument profiles and preferences exist; full configuration restore needs acceptance tests. |

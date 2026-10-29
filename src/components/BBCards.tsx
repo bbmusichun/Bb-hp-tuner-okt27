@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
 import { isWithinTuningTolerance } from '../audio/tuningTolerance';
+import { formatMeasurementReadout, type TuningReadoutMode } from '../audio/readoutModes';
 
 interface Props {
   alap: ResonanceMeasurement;
@@ -10,6 +11,8 @@ interface Props {
   selectedRole: 'fundamental' | 'fifth' | 'octave';
   onSelectRole: (role: 'fundamental' | 'fifth' | 'octave') => void;
   toleranceOverrideCents?: number | null;
+  readoutMode?: TuningReadoutMode;
+  a4Ref?: number;
 }
 
 export const BBCards: React.FC<Props> = ({
@@ -20,6 +23,8 @@ export const BBCards: React.FC<Props> = ({
   selectedRole,
   onSelectRole,
   toleranceOverrideCents = null,
+  readoutMode = 'hz',
+  a4Ref = 440,
 }) => {
   const cards = [
     {
@@ -56,9 +61,19 @@ export const BBCards: React.FC<Props> = ({
       {cards.map((c) => {
         const isSelected = selectedRole === c.role;
         const isHeld = c.data.status === 'held' && c.data.measuredHz !== null && c.data.deviationCents !== null;
-        const measuredStr = c.data.measuredHz !== null && (c.data.status === 'valid' || isHeld) ? `${c.data.measuredHz.toFixed(2)} Hz` : '— Hz';
-        const targetStr = `Cél: ${c.data.targetHz ? c.data.targetHz.toFixed(2) : '--'} Hz`;
         const cents = c.data.deviationCents;
+        const readout = formatMeasurementReadout({
+          mode: readoutMode,
+          measuredHz: c.data.measuredHz,
+          targetHz: c.data.targetHz,
+          deviationCents: cents,
+          status: c.data.status,
+          baseMeasuredHz: alap.status === 'valid' || alap.status === 'held' ? alap.measuredHz : null,
+          baseTargetHz: alap.targetHz,
+          a4Ref,
+        });
+        const measuredStr = readout.primary;
+        const targetStr = readout.target;
         const centsStr = cents !== null && (c.data.status === 'valid' || isHeld) ? `${cents > 0 ? '+' : ''}${cents.toFixed(1)} cent` : '— cent';
         const inTune = c.data.status === 'valid' && isWithinTuningTolerance(cents, c.data.targetHz, toleranceOverrideCents);
 
@@ -100,9 +115,10 @@ export const BBCards: React.FC<Props> = ({
             >
               {isHeld
                 ? `Utolsó ütés · ${Math.max(0, (Date.now() - c.data.timestampMs) / 1000).toFixed(1)} s`
-                : !hasSignal || c.data.status === 'no-signal' ? 'Nincs jel' : centsStr}
+                : !hasSignal || c.data.status === 'no-signal' ? 'Nincs jel'
+                : readoutMode === 'cents' ? (inTune ? 'Pontos' : 'Ellenőrizd az eltérést') : centsStr}
             </div>
-            {isHeld && (
+            {isHeld && readoutMode !== 'cents' && (
               <div className="text-[10px] font-mono text-slate-300/70">{centsStr}</div>
             )}
 
