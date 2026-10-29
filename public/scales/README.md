@@ -1,17 +1,19 @@
 # Scala scale library
 
-This directory contains the five `.scl` files supplied for the BB Tuner scale library. The original file contents are preserved so they can be used as source data for a future Scala import workflow.
+The five handpan-related `.scl` files supplied in the Linotune archive are preserved here as source assets:
 
-## Included files
+- `Circle of Fifths.scl`
+- `Quarter-Tone Equal.scl`
+- `Sacred Solfeggio.scl`
+- `Integral Hang (just).scl`
+- `Golden Gate (just).scl`
 
-- `Circle of Fifths.scl` — 12-tone equal temperament, listed in circle-of-fifths order.
-- `Quarter-Tone Equal.scl` — 24-tone equal temperament.
-- `Sacred Solfeggio.scl` — Solfeggio frequency ratios referenced to 174; these entries are not a conventional ascending, single-octave Scala interval list.
-- `Integral Hang (just).scl` — just-intonation ratios labelled for the Integral Hang.
-- `Golden Gate (just).scl` — just-intonation ratios labelled for the Golden Gate / Halo scale.
+The app's Settings panel now has a Scala `.scl` import control in the custom exact-frequency scale section. Select the tone field whose frequency should act as the scale root, import an `.scl` file, inspect the generated exact-frequency list, and apply it to the active instrument profile.
 
-## Import note
+## Import behavior and limits
 
-A Scala `.scl` file normally describes successive intervals, with the final entry defining the scale period. The supplied files are kept verbatim, but they do not all use that conventional structure in the same way: the Circle of Fifths file is deliberately reordered, and Sacred Solfeggio lists frequency ratios above the octave before ending with `2/1`. An importer should validate and handle those cases explicitly rather than silently sorting or rewriting the source data.
-
-These files are static assets under `/scales/`; adding them to this directory does not by itself make them selectable in the app UI.
+- Standard Scala cent intervals and ratio intervals such as `3/2` are converted to exact target frequencies anchored to the selected tone.
+- The final Scala interval is treated as the period and is not duplicated as a note.
+- The custom handpan scale editor supports 2–24 tones, so imported scales outside that range must be reduced before application.
+- Files whose intervals are deliberately reordered (such as Circle of Fifths) or that do not describe a conventional ascending interval scale (such as Sacred Solfeggio) are not silently sorted or reinterpreted. They require a separate specialized import mode.
+- `linotune.exe` is not part of BB Tuner and is not bundled into the application; only scale data and independently implemented import logic are used.
