@@ -247,6 +247,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isKeyboardHelpOpen, setIsKeyboardHelpOpen] = useState(false);
+  useEffect(() => {
+    const handleBandPitchPipeToggle = () => setIsReferenceTonePlaying(false);
+    window.addEventListener('hangoal-band-pitch-pipe-toggle', handleBandPitchPipeToggle);
+    return () => window.removeEventListener('hangoal-band-pitch-pipe-toggle', handleBandPitchPipeToggle);
+  }, []);
   const [customTuningView, setCustomTuningView] = useState(loadTuningViewPreferences);
   const [isTuningPanelPickerOpen, setIsTuningPanelPickerOpen] = useState(false);
   const shouldShowTuningPanel = (panel: TuningViewPanelId) => !customTuningView.enabled || customTuningView.panels.includes(panel);
