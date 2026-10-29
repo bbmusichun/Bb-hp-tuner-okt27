@@ -26,6 +26,7 @@ interface Props {
   onCreateInstrumentProfile: (name: string) => void;
   onRenameInstrumentProfile: (profileId: string, name: string) => void;
   onDeleteInstrumentProfile: (profileId: string) => void;
+  onApplyCustomScale: (name: string, source: string) => boolean;
 }
 
 export const BBSettingsModal: React.FC<Props> = ({
@@ -48,10 +49,16 @@ export const BBSettingsModal: React.FC<Props> = ({
   onCreateInstrumentProfile,
   onRenameInstrumentProfile,
   onDeleteInstrumentProfile,
+  onApplyCustomScale,
 }) => {
   const activeProfile = instrumentProfiles.find((profile) => profile.id === activeInstrumentProfileId);
   const [newProfileName, setNewProfileName] = React.useState('');
   const [renameProfileDraft, setRenameProfileDraft] = React.useState(activeProfile?.name ?? '');
+  const [customScaleNameDraft, setCustomScaleNameDraft] = React.useState(activeProfile?.customScale?.name ?? '');
+  const [customScaleTextDraft, setCustomScaleTextDraft] = React.useState(
+    activeProfile?.customScale?.notes.map((note) => `${note.name}, ${note.frequencyHz?.toFixed(3) ?? ''}`).join('\n') ?? '',
+  );
+  const [customScaleMessage, setCustomScaleMessage] = React.useState('');
   const [octaveDraft, setOctaveDraft] = React.useState(String(partialTargetOffsets.octaveCents));
   const [thirdPartialDraft, setThirdPartialDraft] = React.useState(String(partialTargetOffsets.thirdPartialCents));
 
@@ -62,7 +69,12 @@ export const BBSettingsModal: React.FC<Props> = ({
 
   React.useEffect(() => {
     setRenameProfileDraft(activeProfile?.name ?? '');
-  }, [activeInstrumentProfileId, activeProfile?.name]);
+    setCustomScaleNameDraft(activeProfile?.customScale?.name ?? '');
+    setCustomScaleTextDraft(
+      activeProfile?.customScale?.notes.map((note) => `${note.name}, ${note.frequencyHz?.toFixed(3) ?? ''}`).join('\n') ?? '',
+    );
+    setCustomScaleMessage('');
+  }, [activeInstrumentProfileId, activeProfile?.name, activeProfile?.customScale]);
 
   const commitOffset = (field: PartialTargetOffsetField, draft: string) => {
     const parsed = draft.trim() === '' ? 0 : Number(draft);
@@ -239,6 +251,55 @@ export const BBSettingsModal: React.FC<Props> = ({
               })}
             </div>
           </div>
+
+          {/* Exact custom targets for makers */}
+          <section className="p-3 rounded-xl bg-[#080b0f] border border-white/5 space-y-2.5">
+            <div className="flex items-center gap-1.5 font-semibold text-slate-300">
+              <Music className="w-3.5 h-3.5 text-[#f59e0b]" />
+              <span>Egyedi hangmező · pontos célfrekvenciák</span>
+            </div>
+            <p className="text-[10px] leading-relaxed text-slate-400">
+              Készítői méréshez itt minden hang saját Hz-célértéket kap. Soronként egy hang: hangnév, frekvencia Hz-ben. 2–24 sor, 20–2000 Hz.
+            </p>
+            <input
+              aria-label="Egyedi hangmező neve"
+              value={customScaleNameDraft}
+              maxLength={80}
+              onChange={(event) => setCustomScaleNameDraft(event.target.value)}
+              placeholder="Pl. Saját D Kurd"
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-white placeholder:text-slate-600"
+            />
+            <textarea
+              aria-label="Egyedi hangmező frekvencia-lista"
+              value={customScaleTextDraft}
+              onChange={(event) => setCustomScaleTextDraft(event.target.value)}
+              placeholder={"D3, 146.832\nA3, 220.000\nBb3, 233.082"}
+              rows={5}
+              spellCheck={false}
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 font-mono text-xs leading-relaxed text-white placeholder:text-slate-600"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const applied = onApplyCustomScale(customScaleNameDraft, customScaleTextDraft);
+                setCustomScaleMessage(applied
+                  ? 'Az egyedi hangmező alkalmazva és a hangszerprofilhoz mentve.'
+                  : 'Hibás adatok. Ellenőrizd a hangneveket, a duplikációkat és a 20–2000 Hz közötti célfrekvenciákat.');
+              }}
+              disabled={!customScaleNameDraft.trim() || !customScaleTextDraft.trim()}
+              className="w-full rounded-lg bg-[#f59e0b] px-3 py-2.5 text-[11px] font-bold text-slate-950 disabled:opacity-40"
+            >
+              Egyedi hangmező alkalmazása
+            </button>
+            {activeProfile?.customScale && (
+              <p className="text-[10px] text-emerald-300">Aktív egyedi mező: {activeProfile.customScale.name} · {activeProfile.customScale.noteCount} hang</p>
+            )}
+            {customScaleMessage && (
+              <p role="status" className={customScaleMessage.startsWith('Az egyedi') ? 'text-[10px] text-emerald-300' : 'text-[10px] text-amber-300'}>
+                {customScaleMessage}
+              </p>
+            )}
+          </section>
 
           {/* Independent partial targets */}
           <div className="p-3 rounded-xl bg-[#080b0f] border border-white/5 space-y-3">
