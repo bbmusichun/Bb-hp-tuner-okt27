@@ -20,6 +20,7 @@ import { bbAudioEngine } from './audio/audioEngine';
 import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
 import { isWithinTuningTolerance } from './audio/tuningTolerance';
 import { buildChromaticTargetNote, midiFromFrequency } from './audio/chromaticPitch';
+import { transposeFrequencyBySemitones } from './audio/transposition';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
   DEFAULT_PARTIAL_TARGET_OFFSET,
@@ -200,7 +201,7 @@ export default function App() {
       const sourceFrequency = typeof n.frequencyHz === 'number' && Number.isFinite(n.frequencyHz) && n.frequencyHz > 0
         ? n.frequencyHz
         : midiToFreq(n.midi, a4Ref);
-      const f0 = sourceFrequency * Math.pow(2, transposeSemitones / 12);
+      const f0 = transposeFrequencyBySemitones(sourceFrequency, transposeSemitones);
       const displayNoteName = freqToNoteAndCents(f0, a4Ref).note;
       // Handpan acoustic resonances:
       // Fundamental: f0 (e.g. D3 = 146.83 Hz)
