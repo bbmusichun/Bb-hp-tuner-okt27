@@ -57,3 +57,26 @@ export function normalizePartialTargetOffsets(value: unknown): PartialTargetOffs
   }
   return normalized;
 }
+/**
+ * Calibrate an existing partial offset to an observed FFT frequency.
+ *
+ * targetHz must be the currently active target (including the existing offset).
+ * The measured frequency is never changed; only the target offset is corrected.
+ * Returns null for missing or invalid measurements so a stale/no-signal value
+ * cannot silently turn into a calibration.
+ */
+export function calibratePartialTargetOffset(
+  currentOffsetCents: number,
+  targetHz: number,
+  measuredHz: number,
+): number | null {
+  if (
+    !Number.isFinite(currentOffsetCents) ||
+    !Number.isFinite(targetHz) || targetHz <= 0 ||
+    !Number.isFinite(measuredHz) || measuredHz <= 0
+  ) return null;
+
+  const deviationCents = 1200 * Math.log2(measuredHz / targetHz);
+  if (!Number.isFinite(deviationCents)) return null;
+  return clampPartialTargetOffset(currentOffsetCents + deviationCents);
+}
