@@ -1,5 +1,5 @@
 /**
- * BB Tuner Audio Acoustic Engine
+ * Hangoal akusztikai motor
  * Real-time microphone input, FFT analysis, multi-resonance tracking (Alaphang, 3. parciális, Oktáv),
  * parabolic peak interpolation, input dB calculation, and stability tracking.
  */
