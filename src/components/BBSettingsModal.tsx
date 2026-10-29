@@ -136,7 +136,7 @@ export const BBSettingsModal: React.FC<Props> = ({
       const converted = parsed
         ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
         : null;
-      if (!converted) {
+      if (!parsed || !converted) {
         setCustomScaleMessage('Ez a Scala-fájl nem alakítható át biztonságosan a kiválasztott hanghoz.');
         return;
       }
@@ -508,7 +508,7 @@ export const BBSettingsModal: React.FC<Props> = ({
                     const converted = parsed
                       ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
                       : null;
-                    if (!converted) {
+                    if (!parsed || !converted) {
                       setCustomScaleMessage('A Scala-fájl hibás, vagy a skála több mint 24 használható hangot tartalmaz.');
                       return;
                     }
