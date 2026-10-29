@@ -51,6 +51,7 @@ function loadTuningPreferences(): {
   partialTargetOffsets: PartialTargetOffsetMap;
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
+  toleranceOverrideCents: number | null;
   scale: HandpanScale;
 } {
   const defaultProfile: InstrumentProfile = {
@@ -67,6 +68,7 @@ function loadTuningPreferences(): {
     partialTargetOffsets: defaultProfile.partialTargetOffsets,
     instrumentProfiles: [defaultProfile],
     activeInstrumentProfileId: defaultProfile.id,
+    toleranceOverrideCents: null,
     scale: PRESET_SCALES[0],
   };
   try {
@@ -81,6 +83,7 @@ function loadTuningPreferences(): {
       partialTargetOffsets?: unknown;
       instrumentProfiles?: unknown;
       activeInstrumentProfileId?: unknown;
+      toleranceOverrideCents?: unknown;
     };
     const legacyA4 = typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
       ? prefs.a4Ref : defaultProfile.a4Ref;
@@ -107,6 +110,9 @@ function loadTuningPreferences(): {
       partialTargetOffsets: activeProfile.partialTargetOffsets,
       instrumentProfiles: profiles,
       activeInstrumentProfileId,
+      toleranceOverrideCents: typeof prefs.toleranceOverrideCents === 'number' &&
+        Number.isFinite(prefs.toleranceOverrideCents) && prefs.toleranceOverrideCents >= 0.5 && prefs.toleranceOverrideCents <= 20
+        ? prefs.toleranceOverrideCents : null,
       scale: activeProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId) ?? PRESET_SCALES[0],
     };
   } catch {
@@ -139,6 +145,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [autoDetect, setAutoDetect] = useState(() => loadTuningPreferences().autoDetect);
+  const [toleranceOverrideCents, setToleranceOverrideCents] = useState<number | null>(
+    () => loadTuningPreferences().toleranceOverrideCents,
+  );
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
 
   // Calibration and Scale
@@ -445,6 +454,7 @@ export default function App() {
         a4Ref,
         scaleId: currentScale.id,
         autoDetect,
+        toleranceOverrideCents,
         partialTargetOffsets,
         instrumentProfiles: profilesToSave,
         activeInstrumentProfileId,
@@ -452,7 +462,7 @@ export default function App() {
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale, autoDetect, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+  }, [a4Ref, currentScale, autoDetect, toleranceOverrideCents, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
 
   // Audio Analysis Loop (~30 Hz)
   useEffect(() => {
@@ -569,9 +579,9 @@ export default function App() {
       fifthTargetHz: kvint.targetHz ?? selectedNote.fifthFreq,
       octaveTargetHz: oktav.targetHz ?? selectedNote.octaveFreq,
       overallInTune:
-        isWithinTuningTolerance(alap.deviationCents, alap.targetHz) &&
-        isWithinTuningTolerance(kvint.deviationCents, kvint.targetHz) &&
-        isWithinTuningTolerance(oktav.deviationCents, oktav.targetHz),
+        isWithinTuningTolerance(alap.deviationCents, alap.targetHz, toleranceOverrideCents) &&
+        isWithinTuningTolerance(kvint.deviationCents, kvint.targetHz, toleranceOverrideCents) &&
+        isWithinTuningTolerance(oktav.deviationCents, oktav.targetHz, toleranceOverrideCents),
     };
     setLogs((prev) => [newEntry, ...prev]);
   };
@@ -579,7 +589,7 @@ export default function App() {
   // Determine active resonance details for Section B header
   const activeResonance = selectedRole === 'fundamental' ? alap : selectedRole === 'fifth' ? kvint : oktav;
   const activeCents = activeResonance.deviationCents;
-  const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz);
+  const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz, toleranceOverrideCents);
 
   // Textual assessment (e.g. "(kissé magas)", "(kissé mély)", "(pontos)")
   const isHeldReading = activeResonance.status === 'held' && activeCents !== null;
@@ -749,6 +759,7 @@ export default function App() {
                 hasSignal={hasSignal}
                 selectedRole={selectedRole}
                 onSelectRole={setSelectedRole}
+                toleranceOverrideCents={toleranceOverrideCents}
               />
             </div>
 
@@ -777,6 +788,7 @@ export default function App() {
               hasSignal={hasSignal}
               currentCents={activeCents ?? 0}
               targetHz={activeResonance.targetHz}
+              toleranceOverrideCents={toleranceOverrideCents}
               standardDeviationCents={standardDeviationCents}
             />
           </div>
@@ -917,6 +929,8 @@ export default function App() {
           onDeleteInstrumentProfile={handleDeleteInstrumentProfile}
           onImportInstrumentProfiles={handleImportInstrumentProfiles}
           a4Ref={a4Ref}
+          toleranceOverrideCents={toleranceOverrideCents}
+          onChangeToleranceOverrideCents={setToleranceOverrideCents}
           onChangeA4={(value) => {
             if (Number.isFinite(value) && value >= 420 && value <= 450) setA4Ref(value);
           }}
