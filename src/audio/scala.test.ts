@@ -53,7 +53,8 @@ describe('Scala SCL import', () => {
     const rows = scalaToCustomScaleText(parsed, 'D3', 146.832384);
     assert.ok(rows);
     assert.match(rows, /^D3, 146\.832\nD#3-8c \(f2\), /);
-    assert.ok(rows.includes(', ' + (146.832384 * Math.pow(2, 91.9550008654 / 1200)).toFixed(3)));
+    const expectedSecondFrequency = 146.832384 * Math.pow(2, (1200 * Math.log2(135 / 128)) / 1200);
+    assert.ok(rows.includes(', ' + expectedSecondFrequency.toFixed(3)));
     const scale = parseCustomScale('Golden Gate (just)', rows, 'golden-gate-test');
     assert.ok(scale);
     assert.equal(scale.noteCount, 8);
