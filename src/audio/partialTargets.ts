@@ -6,9 +6,11 @@
  * third-partial offsets independently in cents so makers can target the actual
  * instrument specification without changing the global A4 reference.
  */
-export type PartialTargetOffsetField = 'octaveCents' | 'thirdPartialCents';
+export type PartialTargetOffsetField = 'fundamentalCents' | 'octaveCents' | 'thirdPartialCents';
 
 export interface PartialTargetOffset {
+  /** Per-note fundamental correction from the scale/profile target. */
+  fundamentalCents?: number;
   octaveCents: number;
   thirdPartialCents: number;
 }
@@ -16,6 +18,7 @@ export interface PartialTargetOffset {
 export type PartialTargetOffsetMap = Record<string, PartialTargetOffset>;
 
 export const DEFAULT_PARTIAL_TARGET_OFFSET: Readonly<PartialTargetOffset> = Object.freeze({
+  fundamentalCents: 0,
   octaveCents: 0,
   thirdPartialCents: 0,
 });
@@ -47,12 +50,18 @@ export function normalizePartialTargetOffsets(value: unknown): PartialTargetOffs
   for (const [key, candidate] of Object.entries(value)) {
     if (!key.trim() || !candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
     const record = candidate as Record<string, unknown>;
+    const fundamentalCents = typeof record.fundamentalCents === 'number' && Number.isFinite(record.fundamentalCents)
+      ? clampPartialTargetOffset(record.fundamentalCents) : 0;
     const octaveCents = typeof record.octaveCents === 'number' && Number.isFinite(record.octaveCents)
       ? clampPartialTargetOffset(record.octaveCents) : 0;
     const thirdPartialCents = typeof record.thirdPartialCents === 'number' && Number.isFinite(record.thirdPartialCents)
       ? clampPartialTargetOffset(record.thirdPartialCents) : 0;
-    if (octaveCents !== 0 || thirdPartialCents !== 0) {
-      normalized[key] = { octaveCents, thirdPartialCents };
+    if (fundamentalCents !== 0 || octaveCents !== 0 || thirdPartialCents !== 0) {
+      normalized[key] = {
+        ...(fundamentalCents === 0 ? {} : { fundamentalCents }),
+        octaveCents,
+        thirdPartialCents,
+      };
     }
   }
   return normalized;
