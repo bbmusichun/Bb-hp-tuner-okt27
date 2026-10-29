@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
+import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 
 interface Props {
   alap: ResonanceMeasurement;
@@ -29,6 +30,9 @@ export const BBStrobeBands: React.FC<Props> = ({
   const phasesRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
   const lastTimeRef = useRef<number>(performance.now());
   const lastMeasurementTimeRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
+  const stabilitySamplesRef = useRef<{ alap: number[]; kvint: number[]; oktav: number[] }>({ alap: [], kvint: [], oktav: [] });
+  const stabilitySampleTimestampRef = useRef({ alap: -1, kvint: -1, oktav: -1 });
+  const stabilityTargetHzRef = useRef<{ alap: number | null; kvint: number | null; oktav: number | null }>({ alap: null, kvint: null, oktav: null });
 
   // Smoothed deviation cents
   const smoothCentsRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
@@ -100,7 +104,10 @@ export const BBStrobeBands: React.FC<Props> = ({
           phase: phasesRef.current.alap,
           stripeWidth: 20, // Fine stripes for Alaphang
           cents: smoothCentsRef.current.alap,
+          rawCents: measurement.alap.deviationCents,
           targetHz: measurement.alap.targetHz ?? measurement.alap.measuredHz ?? 146.83,
+          amplitudeDb: measurement.alap.amplitudeDb,
+          timestampMs: measurement.alap.timestampMs,
           isValid: measurement.hasSignal && measurement.alap.status === 'valid',
         },
         {
@@ -112,7 +119,10 @@ export const BBStrobeBands: React.FC<Props> = ({
           phase: phasesRef.current.kvint,
           stripeWidth: 34, // Medium stripes for Kvint
           cents: smoothCentsRef.current.kvint,
+          rawCents: measurement.kvint.deviationCents,
           targetHz: measurement.kvint.targetHz ?? measurement.kvint.measuredHz ?? 440.50,
+          amplitudeDb: measurement.kvint.amplitudeDb,
+          timestampMs: measurement.kvint.timestampMs,
           isValid: measurement.hasSignal && measurement.kvint.status === 'valid',
         },
         {
@@ -124,7 +134,10 @@ export const BBStrobeBands: React.FC<Props> = ({
           phase: phasesRef.current.oktav,
           stripeWidth: 54, // Wide block stripes for Oktáv
           cents: smoothCentsRef.current.oktav,
+          rawCents: measurement.oktav.deviationCents,
           targetHz: measurement.oktav.targetHz ?? measurement.oktav.measuredHz ?? 293.66,
+          amplitudeDb: measurement.oktav.amplitudeDb,
+          timestampMs: measurement.oktav.timestampMs,
           isValid: measurement.hasSignal && measurement.oktav.status === 'valid',
         },
       ];
@@ -132,6 +145,23 @@ export const BBStrobeBands: React.FC<Props> = ({
       rows.forEach((row, idx) => {
         const now = currentTime;
         const key = row.key as 'alap' | 'kvint' | 'oktav';
+        const stabilitySamples = stabilitySamplesRef.current[key];
+        const previousTargetHz = stabilityTargetHzRef.current[key];
+        if (previousTargetHz !== null && Math.abs(previousTargetHz - row.targetHz) > 0.001) {
+          stabilitySamples.length = 0;
+          stabilitySampleTimestampRef.current[key] = -1;
+        }
+        stabilityTargetHzRef.current[key] = row.targetHz;
+        if (row.isValid && row.rawCents !== null && Number.isFinite(row.rawCents) && row.timestampMs !== stabilitySampleTimestampRef.current[key]) {
+          stabilitySamples.push(row.rawCents);
+          if (stabilitySamples.length > 15) stabilitySamples.shift();
+          stabilitySampleTimestampRef.current[key] = row.timestampMs;
+        } else if (!row.isValid && currentTime - lastMeasurementTimeRef.current[key] > 1000) {
+          stabilitySamples.length = 0;
+          stabilitySampleTimestampRef.current[key] = -1;
+        }
+        const signalContrast = strobeContrastFromDb(row.isValid ? row.amplitudeDb : null);
+        const sharpness = strobeSharpnessFromCents(stabilitySamples);
         // Smooth frequency-dependent product threshold; not presented as a proven JND model.
         const toleranceCents = tuningToleranceCents(row.targetHz, measurement.toleranceOverrideCents);
         const inTolerance = row.isValid && Number.isFinite(row.cents) && Math.abs(row.cents) <= toleranceCents;
@@ -172,16 +202,20 @@ export const BBStrobeBands: React.FC<Props> = ({
         const stripeLight = isConfirmedGreen ? '#31d889' : isNearButUnconfirmed ? '#e4ad43' : redLightColor;
         ctx.fillStyle = stripeBase;
 
+        // Linotune-style cues: signal level changes contrast; frame-to-frame cents
+        // spread changes edge sharpness. These cues do not affect the measurement.
+        ctx.globalAlpha = 0.18 + 0.82 * signalContrast;
+        const edge = 0.12 + (1 - sharpness) * 0.22;
         for (let x = -period + offset; x < w + period; x += period) {
-          // Soft gradient across stripe
           const grad = ctx.createLinearGradient(x, y, x + stripeW, y);
           grad.addColorStop(0, darkMidColor);
-          grad.addColorStop(0.2, stripeLight);
-          grad.addColorStop(0.8, stripeBase);
+          grad.addColorStop(edge, stripeLight);
+          grad.addColorStop(1 - edge, stripeBase);
           grad.addColorStop(1, darkMidColor);
           ctx.fillStyle = grad;
           ctx.fillRect(x, y, stripeW, rowHeight);
         }
+        ctx.globalAlpha = 1;
 
         // 3. Subtle inner shadow / border
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
