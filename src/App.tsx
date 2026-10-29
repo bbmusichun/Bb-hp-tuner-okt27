@@ -24,6 +24,7 @@ import { transposeFrequencyBySemitones } from './audio/transposition';
 import { normalizeTuningReadoutMode, type TuningReadoutMode } from './audio/readoutModes';
 import { isDetectionArmed, nextAutoDetectionMode, normalizeAutoDetectionMode, type AutoDetectionMode } from './audio/detectionModes';
 import { isEditableKeyboardTarget, resolveHangoalKeyboardAction } from './audio/keyboardShortcuts';
+import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
@@ -442,6 +443,100 @@ export default function App() {
     setPartialTargetOffsets(nextProfile.partialTargetOffsets);
     setSelectedRole('fundamental');
     return true;
+  };
+
+  const handleExportFullConfiguration = (): boolean => {
+    try {
+      const currentProfiles = instrumentProfiles.map((profile) =>
+        profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
+      );
+      const rawBands = localStorage.getItem('hangoal-custom-strobe-bands-v1');
+      let customStrobeBands: unknown = [];
+      if (rawBands) {
+        customStrobeBands = JSON.parse(rawBands);
+      }
+      const backup = {
+        schemaVersion: 2,
+        exportedAt: new Date().toISOString(),
+        settings: {
+          autoDetect: autoDetectionMode !== 'off',
+          autoDetectionMode,
+          toleranceOverrideCents,
+          transposeSemitones,
+          readoutMode,
+          referenceToneMode,
+          activeInstrumentProfileId,
+          instrumentProfiles: currentProfiles,
+        },
+        disabledToneNotesByScale,
+        customStrobeBands,
+        measurements: logs,
+      };
+      const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'Hangoal_Configuration_' + Date.now() + '.json';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return true;
+    } catch (error) {
+      console.warn('Nem sikerült exportálni a teljes Hangoal-konfigurációt:', error);
+      return false;
+    }
+  };
+
+  const handleImportConfiguration = (value: unknown): boolean => {
+    if (value && typeof value === 'object' && !Array.isArray(value) &&
+      (value as Record<string, unknown>).schemaVersion === 2) {
+      const currentProfile = instrumentProfiles.find((profile) => profile.id === activeInstrumentProfileId);
+      if (!currentProfile) return false;
+      const parsed = parseHangoalFullConfiguration(
+        value,
+        PRESET_SCALES.map((scale) => scale.id),
+        saveActiveProfileSettings(currentProfile),
+      );
+      if (!parsed) return false;
+
+      const activeProfile = parsed.settings.instrumentProfiles.find(
+        (profile) => profile.id === parsed.settings.activeInstrumentProfileId,
+      );
+      if (!activeProfile) return false;
+      const selectedScale = activeProfile.customScale ??
+        PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId);
+      if (!selectedScale) return false;
+
+      // Write cross-component state before updating React state; if storage fails, reject without a partial restore.
+      try {
+        localStorage.setItem('hangoal-custom-strobe-bands-v1', JSON.stringify(parsed.customStrobeBands));
+      } catch (error) {
+        console.warn('Nem sikerült menteni az importált egyedi stroboszkópsávokat:', error);
+        return false;
+      }
+
+      setChromaticTargetMidi(null);
+      setInstrumentProfiles(parsed.settings.instrumentProfiles);
+      setActiveInstrumentProfileId(parsed.settings.activeInstrumentProfileId);
+      setA4Ref(activeProfile.a4Ref);
+      setCurrentScale(selectedScale);
+      setPartialTargetOffsets(activeProfile.partialTargetOffsets);
+      setAutoDetectionMode(parsed.settings.autoDetectionMode);
+      setSingleShotCaptured(false);
+      setToleranceOverrideCents(parsed.settings.toleranceOverrideCents);
+      setTransposeSemitones(parsed.settings.transposeSemitones);
+      setReadoutMode(parsed.settings.readoutMode);
+      setReferenceToneMode(parsed.settings.referenceToneMode);
+      setDisabledToneNotesByScale(parsed.disabledToneNotesByScale);
+      setLogs(parsed.measurements);
+      setSelectedRole('fundamental');
+      autoDetectionRef.current = null;
+      window.dispatchEvent(new Event('hangoal-custom-strobe-bands-updated'));
+      return true;
+    }
+
+    // Backwards compatibility: schemaVersion 1 profile-only exports still import as before.
+    return handleImportInstrumentProfiles(value);
   };
 
   const handleRenameInstrumentProfile = (profileId: string, name: string) => {
@@ -1389,7 +1484,8 @@ export default function App() {
           onCreateInstrumentProfile={handleCreateInstrumentProfile}
           onRenameInstrumentProfile={handleRenameInstrumentProfile}
           onDeleteInstrumentProfile={handleDeleteInstrumentProfile}
-          onImportInstrumentProfiles={handleImportInstrumentProfiles}
+          onImportInstrumentProfiles={handleImportConfiguration}
+          onExportFullConfiguration={handleExportFullConfiguration}
           a4Ref={a4Ref}
           toleranceOverrideCents={toleranceOverrideCents}
           onChangeToleranceOverrideCents={setToleranceOverrideCents}
