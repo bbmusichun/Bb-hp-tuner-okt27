@@ -46,6 +46,7 @@ interface Props {
   strobeSensitivity?: number;
   onChangeStrobeSensitivity?: (value: number) => void;
   onZoomTargetHz?: (targetHz: number) => void;
+  onCalibrateBuiltInRole?: (role: 'fifth' | 'octave', targetHz: number, measuredHz: number) => void;
 }
 interface Reading { measuredHz: number | null; deviationCents: number | null; amplitudeDb: number | null; }
 interface Row {
@@ -73,7 +74,7 @@ export const BBStrobeBands: React.FC<Props> = ({
   alap, kvint, oktav, hasSignal, active = false, transientHoldoff = false, freezeTargetSettings = false,
   baseFrequencyHz = 146.832384,
   toleranceOverrideCents = null, toleranceMode = 'auto', selectedRole, onSelectRole,
-  strobeSensitivity = 1, onChangeStrobeSensitivity, onZoomTargetHz,
+  strobeSensitivity = 1, onChangeStrobeSensitivity, onZoomTargetHz, onCalibrateBuiltInRole,
 }) => {
   const [customBands, setCustomBands] = useState<StrobeBandConfig[]>(loadCustomBands);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -395,6 +396,36 @@ export const BBStrobeBands: React.FC<Props> = ({
             }} />
         </div>
       </div>
+
+
+      {(selectedRole === 'fifth' || selectedRole === 'octave') && (() => {
+        const reading = readings[selectedRole];
+        const targetHz = selectedRole === 'fifth' ? kvint.targetHz : oktav.targetHz;
+        const ready = active && hasSignal && !transientHoldoff &&
+          reading?.measuredHz !== null && reading?.measuredHz !== undefined &&
+          Number.isFinite(reading.measuredHz) && reading.measuredHz > 0 &&
+          targetHz !== null && Number.isFinite(targetHz) && targetHz > 0;
+        const label = selectedRole === 'fifth' ? '3× összetett kvint' : '2× oktáv';
+        return (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.035] px-2.5 py-2">
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-semibold text-slate-200">Kalibrálás · {label}</div>
+              <p className="mt-0.5 text-[10px] leading-relaxed text-slate-500">Az aktuális, érvényes méréshez igazítja ennek a hangnak a cél-offsetjét. A mért adat változatlan marad.</p>
+            </div>
+            <button
+              type="button"
+              disabled={freezeTargetSettings || !ready}
+              onClick={() => {
+                if (!ready || !reading || reading.measuredHz === null || !Number.isFinite(targetHz)) return;
+                onCalibrateBuiltInRole?.(selectedRole, targetHz as number, reading.measuredHz);
+              }}
+              className="shrink-0 rounded-lg border border-emerald-400/30 bg-emerald-400/5 px-3 py-2 text-[10px] font-semibold text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Kalibrálás nullára
+            </button>
+          </div>
+        );
+      })()}
 
       {customBands.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500">
