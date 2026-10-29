@@ -5,6 +5,7 @@ export interface ScalaReference {
   degreeIndex: number;
   octave: number;
   frequencyHz: number | null;
+  noteName: string | null;
   explicit: boolean;
 }
 
@@ -110,6 +111,7 @@ export function parseScalaScl(source: string, options: { preserveSourceOrder?: b
         degreeIndex: explicitReferenceIndex === entries.length - 1 ? -1 : explicitReferenceIndex,
         octave: explicitReference.octave,
         frequencyHz: explicitReference.frequencyHz,
+        noteName: entries[explicitReferenceIndex].label,
         explicit: true,
       }
     : {
@@ -117,6 +119,7 @@ export function parseScalaScl(source: string, options: { preserveSourceOrder?: b
         degreeIndex: isTwelveTone ? 8 : -1,
         octave: 4,
         frequencyHz: null,
+        noteName: isTwelveTone ? 'A' : null,
         explicit: false,
       };
 
@@ -128,6 +131,39 @@ export function parseScalaScl(source: string, options: { preserveSourceOrder?: b
     degreeLabels: intervals.map((entry) => entry.label),
     reference,
   };
+}
+
+
+/**
+ * Convert an explicit Scala reference pitch (frequency + pitch name + octave)
+ * into the equivalent A4 frequency. Fractional accidentals are supported as
+ * quarter-tone offsets; when metadata is incomplete, return null rather than
+ * inventing a calibration.
+ */
+export function scalaReferenceToA4(parsed: ParsedScalaScale): number | null {
+  const reference = parsed.reference;
+  if (!reference.explicit || reference.frequencyHz === null || !reference.noteName) return null;
+  const match = /^([A-Ga-g])([#b♯♭𝄫𝄪↑↓]?)/.exec(reference.noteName.trim());
+  if (!match) return null;
+  const base: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  let semitones = base[match[1].toUpperCase()];
+  const accidental = match[2];
+  if (accidental === '#' || accidental === '♯') semitones += 1;
+  else if (accidental === 'b' || accidental === '♭') semitones -= 1;
+  else if (accidental === '𝄫') semitones -= 2;
+  else if (accidental === '𝄪') semitones += 2;
+  else if (accidental === '↑') semitones += 0.5;
+  else if (accidental === '↓') semitones -= 0.5;
+  const midi = 12 * (reference.octave + 1) + semitones;
+  const a4 = reference.frequencyHz * Math.pow(2, (69 - midi) / 12);
+  return Number.isFinite(a4) && a4 >= 100 && a4 <= 2000 ? a4 : null;
+}
+
+export function describeScalaReference(parsed: ParsedScalaScale): string {
+  const reference = parsed.reference;
+  const pitch = (reference.noteName ?? (reference.degreeIndex < 0 ? 'Tonic' : 'Degree ' + (reference.degreeIndex + 1))) + reference.octave;
+  if (reference.frequencyHz !== null) return pitch + ' = ' + reference.frequencyHz.toFixed(3) + ' Hz';
+  return pitch + (reference.explicit ? ' · az aktuális referenciafrekvenciával' : ' · alapértelmezett referencia');
 }
 
 /**
