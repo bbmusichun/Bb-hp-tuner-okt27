@@ -14,6 +14,7 @@ import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
 import { findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
 import { finalizePeakReading } from './resonanceMetrics';
+import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -387,7 +388,19 @@ export class BBAudioEngine {
 
     // Search for the 3 resonances:
     // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const fPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);
+    const rawFundamentalPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);
+    // Refine the fundamental only when the independent periodicity estimate strongly agrees
+    // with the FFT peak. The FFT remains the primary reference; YIN cannot pull it to an octave.
+    const fPeak = rawFundamentalPeak && yinEstimate.frequencyHz !== null
+      ? {
+          ...rawFundamentalPeak,
+          freq: fuseAgreeingFrequencyEstimates(
+            rawFundamentalPeak.freq,
+            yinEstimate.frequencyHz,
+            yinEstimate.clarity,
+          ),
+        }
+      : rawFundamentalPeak;
     // Search each resonance independently to reduce masking by a dominant fundamental.
     const qPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
     const oPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
@@ -457,8 +470,9 @@ export class BBAudioEngine {
       clippingLikely,
       yinFrequencyHz: yinEstimate.frequencyHz,
       yinClarity: yinEstimate.clarity,
-      yinAgreementCents: yinEstimate.frequencyHz !== null && alap.measuredHz !== null
-        ? 1200 * Math.log2(yinEstimate.frequencyHz / alap.measuredHz)
+      // Keep the agreement diagnostic independent of the fusion performed for the readout.
+      yinAgreementCents: yinEstimate.frequencyHz !== null && rawFundamentalPeak !== null
+        ? 1200 * Math.log2(yinEstimate.frequencyHz / rawFundamentalPeak.freq)
         : null,
     };
   }
