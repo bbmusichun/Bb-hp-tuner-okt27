@@ -1665,6 +1665,8 @@ export default function App() {
               )}
 
 {shouldShowTuningPanel('referenceTone') && (
+<>
+
                             <div className="mb-1 flex items-center justify-between gap-2 px-1">
                 <span className="text-[10px] text-slate-500">
                   Célreferencia · {referenceToneHz.toFixed(3)} Hz
@@ -1706,9 +1708,13 @@ export default function App() {
                 </p>
               )}
 
+              
+</>
               )}
 
 {shouldShowTuningPanel('pitchDial') && (
+<>
+
                             <div className="mb-1 flex justify-end px-1">
                 <button
                   type="button"
@@ -1720,6 +1726,8 @@ export default function App() {
                 </button>
               </div>
               {isPitchDialOpen && <BBPitchDial selectedMidi={selectedMidi} onSelectMidi={handleSelectChromaticMidi} />}
+              
+</>
               )}
 
 {shouldShowTuningPanel('transposition') && (
@@ -1786,6 +1794,8 @@ export default function App() {
 
 
 {shouldShowTuningPanel('measurementCards') && (
+<>
+
                         <div className="my-1 flex items-center justify-between gap-3 px-1">
               <label htmlFor="hangoal-readout-mode" className="text-[11px] text-slate-400">Mérési kártyák kijelzése</label>
               <select
@@ -1814,7 +1824,9 @@ export default function App() {
               a4Ref={a4Ref}
             />
 
-            )}
+            
+</>
+              )}
 
             {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
 {shouldShowTuningPanel('stabilityGraph') && (
