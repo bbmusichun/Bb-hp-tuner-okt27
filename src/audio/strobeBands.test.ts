@@ -42,7 +42,7 @@ describe('custom strobe target expressions', () => {
     assert.equal(parseStrobeTargetExpression('440'), 440);
     assert.equal(parseStrobeTargetExpression('3/2'), 660);
     assert.equal(parseStrobeTargetExpression('x1.5'), 660);
-    assert.ok(Math.abs((parseStrobeTargetExpression('702c') ?? 0) - 659.255) < 0.2);
+    assert.ok(Math.abs((parseStrobeTargetExpression('700c') ?? 0) - 659.255) < 0.2);
     assert.ok(Math.abs((parseStrobeTargetExpression('-100¢') ?? 0) - 415.3047) < 0.001);
   });
   it('rejects invalid and out-of-range expressions', () => {
