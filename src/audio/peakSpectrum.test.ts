@@ -20,14 +20,14 @@ describe('Linotune-style exact-bin peak spectrum', () => {
     });
     assert.deepEqual(peaks.map((peak) => peak.bin), [50, 100, 150]);
     assert.deepEqual(peaks.map((peak) => peak.frequencyHz), [50 * SAMPLE_RATE / FFT_SIZE, 100 * SAMPLE_RATE / FFT_SIZE, 150 * SAMPLE_RATE / FFT_SIZE]);
-    assert.deepEqual(peaks.map((peak) => peak.relativeDb), [-25, -12, 0]);
+    assert.deepEqual(peaks.map((peak) => peak.relativeDb), [0, -12, -25]);
     assert.ok(peaks.every((peak) => Number.isFinite(peak.multipleOfBase) && peak.multipleOfBase > 0));
   });
 
   it('suppresses bins below the dynamic noise-floor threshold', () => {
     const spectrum = spectrumWithPeaks([[50, -20], [60, -40], [70, -76], [80, -92]]);
     const peaks = findSignificantSpectralPeaks(spectrum, SAMPLE_RATE, 146.8, { dynamicRangeDb: 48 });
-    assert.deepEqual(peaks.map((peak) => peak.bin), [50, 60, 70]);
+    assert.deepEqual(peaks.map((peak) => peak.bin), [50, 60]);
   });
 
   it('does not fabricate peaks from silence or non-finite samples', () => {
