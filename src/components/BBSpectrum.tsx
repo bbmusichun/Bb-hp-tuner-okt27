@@ -11,7 +11,7 @@ interface Props {
   hasSignal: boolean;
   toleranceOverrideCents?: number | null;
   toleranceMode?: TuningToleranceMode;
-  onSelectPeak? (role: 'fundamental' | 'fifth' | 'octave') => void;
+  onSelectPeak?: (role: 'fundamental' | 'fifth' | 'octave') => void;
   zoomTargetHz?: number | null;
   onClearZoom?: () => void;
 }
