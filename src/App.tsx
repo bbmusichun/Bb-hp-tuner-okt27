@@ -222,6 +222,9 @@ export default function App() {
   // Selected resonance focus for the main display and stability graph
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
   const [isReferenceTonePlaying, setIsReferenceTonePlaying] = useState(false);
+  const ownDPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const [ownDLoop, setOwnDLoop] = useState(false);
+  const [isOwnDPlaying, setIsOwnDPlaying] = useState(false);
   const strikeToneTimerRef = useRef<number | null>(null);
   const previousTransientHoldoffRef = useRef(false);
 
@@ -1174,6 +1177,51 @@ export default function App() {
         {/* ================= TAB 1: MAIN TUNING SCREEN ================= */}
         {activeTab === 'hangolas' && (
           <div className="flex flex-col gap-1.5 flex-1 justify-between">
+            <section aria-label="Saját D handpan felvétele" className="mx-1 mb-2 rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-400/10 to-slate-900 px-3 py-3">
+              <audio
+                ref={ownDPlayerRef}
+                src="/audio/sajat-d-handpan.mp3"
+                loop={ownDLoop}
+                preload="metadata"
+                onEnded={() => setIsOwnDPlaying(false)}
+                onPause={() => setIsOwnDPlaying(false)}
+                onPlay={() => setIsOwnDPlaying(true)}
+              />
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-white">Saját D lejátszása</div>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">A saját D Kurd handpan-felvételed, hangolási referencia nélkül.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const player = ownDPlayerRef.current;
+                    if (!player) return;
+                    if (isOwnDPlaying) {
+                      player.pause();
+                      player.currentTime = 0;
+                      setIsOwnDPlaying(false);
+                    } else {
+                      void player.play().then(() => setIsOwnDPlaying(true)).catch(() => setIsOwnDPlaying(false));
+                    }
+                  }}
+                  className="shrink-0 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20"
+                  aria-label={isOwnDPlaying ? "Saját D leállítása" : "Saját D lejátszása"}
+                >
+                  <Volume2 className="h-4 w-4" />
+                  {isOwnDPlaying ? "Leállítás" : "Lejátszás"}
+                </button>
+              </div>
+              <label className="mt-3 flex items-center gap-2 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={ownDLoop}
+                  onChange={(event) => setOwnDLoop(event.target.checked)}
+                  className="h-4 w-4 accent-amber-400"
+                />
+                Loopolva (folyamatos ismétlés)
+              </label>
+            </section>
             {/* ================= SECTION B: MAIN PITCH & STROBE BANDS ================= */}
             <div>
               {/* Main Pitch Row (Large D3, +2.3 cent, Alaphang dropdown) */}
