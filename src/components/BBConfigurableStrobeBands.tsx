@@ -55,8 +55,8 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
   const [readings, setReadings] = useState<Record<string, BandReading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestRef = useRef({ bands, active, hasSignal, transientHoldoff, toleranceOverrideCents });
-  latestRef.current = { bands, active, hasSignal, transientHoldoff, toleranceOverrideCents };
+  const latestRef = useRef({ bands, active, hasSignal, transientHoldoff, toleranceOverrideCents, baseFrequencyHz });
+  latestRef.current = { bands, active, hasSignal, transientHoldoff, toleranceOverrideCents, baseFrequencyHz };
   const phasesRef = useRef<Record<string, number>>({});
   const lastTickRef = useRef(performance.now());
   const lastReadoutRef = useRef(0);
@@ -104,7 +104,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
       ctx.clearRect(0, 0, width, height);
       current.bands.forEach((band, index) => {
         const y = index * rowHeight;
-        const targetHz = getStrobeBandTargetHz(band, baseFrequencyHz);
+        const targetHz = getStrobeBandTargetHz(band, current.baseFrequencyHz);
         const peak = spectrum
           ? findSpectralPeakInWindow(targetHz, 150, spectrum, sampleRate, -82)
           : null;
@@ -284,7 +284,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
                       />
                     </label>
                     <label className="min-w-0 text-[10px] text-slate-400">
-                      Cél (Hz)
+                      Cél (Hz / arány / cent)
                       <input
                         aria-label="Célfrekvencia vagy arány"
                         type="text"
