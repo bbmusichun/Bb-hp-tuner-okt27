@@ -1,0 +1,12 @@
+! Golden Gate (just).scl
+hexatonic just intonation scale for Pantheon Steel's "Halo" handpan
+8
+!
+135/128 :c#
+  9/8   :D
+  5/4   :E
+ 45/32  :F^#
+  3/2   :G
+ 27/16  :a  !!reference 4 442.5 (keeps all notes close to ET at A440)
+ 15/8   :B
+  2/1   :C
