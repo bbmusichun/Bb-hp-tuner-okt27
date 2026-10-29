@@ -32,6 +32,7 @@ interface Props {
   onDeleteInstrumentProfile: (profileId: string) => void;
   onApplyCustomScale: (name: string, source: string) => boolean;
   onImportInstrumentProfiles: (backup: unknown) => boolean;
+  onExportFullConfiguration: () => boolean;
 }
 
 export const BBSettingsModal: React.FC<Props> = ({
@@ -58,6 +59,7 @@ export const BBSettingsModal: React.FC<Props> = ({
   onDeleteInstrumentProfile,
   onApplyCustomScale,
   onImportInstrumentProfiles,
+  onExportFullConfiguration,
 }) => {
   const activeProfile = instrumentProfiles.find((profile) => profile.id === activeInstrumentProfileId);
   const [newProfileName, setNewProfileName] = React.useState('');
@@ -250,27 +252,16 @@ export const BBSettingsModal: React.FC<Props> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const backup = {
-                    schemaVersion: 1,
-                    exportedAt: new Date().toISOString(),
-                    profiles: instrumentProfiles,
-                  };
-                  const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' }));
-                  const link = document.createElement('a');
-                  link.href = url;
-                  link.download = `BB_Tuner_Instrument_Profiles_${Date.now()}.json`;
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-                  setBackupMessage('A profilmentés letöltése elindult.');
+                  setBackupMessage(onExportFullConfiguration()
+                    ? 'A teljes Hangoal-konfiguráció mentésének letöltése elindult.'
+                    : 'Nem sikerült elkészíteni a mentést.');
                 }}
                 className="rounded-lg border border-white/10 bg-slate-800 px-2 py-2 text-[10px] font-semibold text-slate-200 hover:bg-slate-700"
               >
-                Profilok exportja
+                Teljes konfiguráció exportja
               </button>
               <label className="cursor-pointer rounded-lg border border-white/10 bg-slate-800 px-2 py-2 text-center text-[10px] font-semibold text-slate-200 hover:bg-slate-700">
-                Profilok importja
+                Konfiguráció importja
                 <input
                   type="file"
                   accept=".json,application/json"
@@ -285,7 +276,7 @@ export const BBSettingsModal: React.FC<Props> = ({
                       const backup: unknown = JSON.parse(await file.text());
                       const imported = onImportInstrumentProfiles(backup);
                       setBackupMessage(imported
-                        ? 'A profilokat beolvastam és érvényesítettem.'
+                        ? 'A konfigurációt vagy a régebbi profilmentést beolvastam és érvényesítettem.'
                         : 'A mentés formátuma vagy valamelyik profil hibás. A meglévő profilok megmaradtak.');
                     } catch {
                       setBackupMessage('A fájl nem olvasható JSON-formátumú. A meglévő profilok megmaradtak.');

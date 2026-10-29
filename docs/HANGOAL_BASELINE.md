@@ -24,7 +24,7 @@ This document defines the functional baseline for the Hangoal handpan tuner from
 | Hz / cents / note / just-ratio readout modes | Measurement cards now offer persisted Hz, cent, measured note-name and measured ratio-to-fundamental modes. Ratio mode also reports the corresponding target ratio; tests cover missing-data behavior. |
 | Keyboard control and front/rear settings panel | Global tuning shortcuts are implemented for note navigation, resonance selection, microphone start/stop, detection mode cycling/re-arming, and reference tone (only where safe), with an on-screen help panel. Keyboard support in settings/front-rear panel remains out of scope. |
 | Input clipping/level and performance feedback | Partial: input-level metadata exists; live clipping and frame-rate indicators remain. |
-| Save and restore tuning configuration | Partial: instrument profiles and preferences exist; full configuration restore needs acceptance tests. |
+| Save and restore tuning configuration | Full schema-versioned configuration export/import is implemented for profiles, active profile, A4 and partial calibration (via profiles), detection/readout/reference modes, tolerance, transposition, disabled tone fields, custom strobe bands and measurement logs. Entire bundle validation happens before applying app state; older profile-only backups remain importable. Browser-storage failure and large-backup behavior remain acceptance checks. |
 
 ## Quality gates
 

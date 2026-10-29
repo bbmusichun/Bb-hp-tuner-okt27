@@ -38,7 +38,10 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 
 ## 5. Adatmentés és hibakezelés
 
-- [ ] A profilok JSON-biztonsági mentése letölthető.
+- [ ] A teljes konfiguráció JSON-biztonsági mentése letölthető; ellenőrizd, hogy tartalmazza a profilokat, hangolási beállításokat, hangmező-aktiválást, egyedi stroboszkópsávokat és mérési naplót.
+- [ ] A teljes konfiguráció visszaállítása újratöltés után is megőrzi a célprofilt, A4-referenciát, transzponálást, módokat, hangmezőket és egyedi sávokat.
+- [ ] Hibás/támogatottlan teljes konfiguráció importja nem változtatja meg a jelenlegi állapotot.
+- [ ] Egy régi, csak hangszerprofilokat tartalmazó JSON-mentés továbbra is importálható.
 - [ ] Egy érvényes profilmentés importja frissíti az azonos ID-jú profilokat és megtartja a többi meglévő profilt.
 - [ ] Hibás JSON vagy hibás profil importja nem törli a meglévő beállításokat.
 - [ ] Újratöltés után a profil, az egyedi hangmező és a tűrésbeállítás megmarad.
