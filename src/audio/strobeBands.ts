@@ -1,4 +1,4 @@
-export type StrobeBandSource = 'fundamental' | 'fifth' | 'octave';
+export type StrobeBandSource = 'fundamental' | 'fifth' | 'octave' | 'custom';
 
 export interface StrobeBandConfig {
   id: string;
@@ -15,11 +15,12 @@ export const DEFAULT_STROBE_BANDS: StrobeBandConfig[] = [
   { id: 'octave', name: 'Oktáv', source: 'octave', targetHz: 293.664768, centsOffset: 0, enabled: true },
 ];
 
-const VALID_SOURCES = new Set<StrobeBandSource>(['fundamental', 'fifth', 'octave']);
+const VALID_SOURCES = new Set<StrobeBandSource>(['fundamental', 'fifth', 'octave', 'custom']);
 
 /** Validate user-editable strobe configuration without trusting localStorage. */
 export function normalizeStrobeBands(value: unknown): StrobeBandConfig[] {
   if (!Array.isArray(value)) return DEFAULT_STROBE_BANDS.map((band) => ({ ...band }));
+  if (value.length === 0) return [];
   const result: StrobeBandConfig[] = [];
   const ids = new Set<string>();
   for (const item of value) {
