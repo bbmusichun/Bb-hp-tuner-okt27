@@ -183,6 +183,12 @@ function formatAudioTime(seconds: number): string {
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
 }
 
+type AudioDeviceChoice = { deviceId: string; label: string };
+
+function loadAudioDevicePreference(key: string): string {
+  try { return localStorage.getItem(key) ?? ''; } catch { return ''; }
+}
+
 const TUNING_VIEW_PANELS = [
   { id: 'samplePlayback', label: 'Saját handpan-felvétel', description: '3 másodperces minta, loop és hangerő' },
   { id: 'recordingAnalysis', label: 'Felvétel-elemzés és kalibrálás', description: 'Hangfelismerés, felhangarány és kalibrálás' },
@@ -252,6 +258,54 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isKeyboardHelpOpen, setIsKeyboardHelpOpen] = useState(false);
+  const [audioInputDevices, setAudioInputDevices] = useState<AudioDeviceChoice[]>([]);
+  const [audioOutputDevices, setAudioOutputDevices] = useState<AudioDeviceChoice[]>([]);
+  const [selectedAudioInputDeviceId, setSelectedAudioInputDeviceId] = useState(() => loadAudioDevicePreference('hangoal-audio-input-device-v1'));
+  const [selectedAudioOutputDeviceId, setSelectedAudioOutputDeviceId] = useState(() => loadAudioDevicePreference('hangoal-audio-output-device-v1'));
+  const [audioIoMessage, setAudioIoMessage] = useState('');
+  const [isRefreshingAudioDevices, setIsRefreshingAudioDevices] = useState(false);
+  const [audioOutputSelectionSupported, setAudioOutputSelectionSupported] = useState(false);
+
+  const refreshAudioDevices = useCallback(async () => {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.enumerateDevices !== 'function') {
+      setAudioIoMessage('Ez a böngésző nem biztosít hangbemenet-listázást.');
+      return;
+    }
+    setIsRefreshingAudioDevices(true);
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setAudioInputDevices(devices.filter((device) => device.kind === 'audioinput').map((device, index) => ({
+        deviceId: device.deviceId,
+        label: device.label || 'Mikrofon ' + (index + 1),
+      })));
+      setAudioOutputDevices(devices.filter((device) => device.kind === 'audiooutput').map((device, index) => ({
+        deviceId: device.deviceId,
+        label: device.label || 'Hangkimenet ' + (index + 1),
+      })));
+      setAudioOutputSelectionSupported(bbAudioEngine.supportsOutputDeviceSelection());
+      setAudioIoMessage(devices.some((device) => device.kind.startsWith('audio') && !device.label)
+        ? 'Az eszközneveket a böngésző a mikrofonengedély megadása után mutathatja meg.'
+        : 'A hangbemenetek és -kimenetek listája frissült.');
+    } catch (error) {
+      setAudioIoMessage(error instanceof Error ? error.message : 'Nem sikerült felsorolni a hang-eszközöket.');
+    } finally {
+      setIsRefreshingAudioDevices(false);
+    }
+  }, []);
+  useEffect(() => {
+    void refreshAudioDevices();
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices || typeof mediaDevices.addEventListener !== 'function') return;
+    const onDeviceChange = () => { void refreshAudioDevices(); };
+    mediaDevices.addEventListener('devicechange', onDeviceChange);
+    return () => mediaDevices.removeEventListener('devicechange', onDeviceChange);
+  }, [refreshAudioDevices]);
+  useEffect(() => {
+    try {
+      localStorage.setItem('hangoal-audio-input-device-v1', selectedAudioInputDeviceId);
+      localStorage.setItem('hangoal-audio-output-device-v1', selectedAudioOutputDeviceId);
+    } catch { /* Device choices remain active for this session. */ }
+  }, [selectedAudioInputDeviceId, selectedAudioOutputDeviceId]);
   useEffect(() => {
     const handleBandPitchPipeToggle = () => setIsReferenceTonePlaying(false);
     window.addEventListener('hangoal-band-pitch-pipe-toggle', handleBandPitchPipeToggle);
@@ -902,6 +956,48 @@ export default function App() {
     return () => cancelAnimationFrame(animId);
   }, [isSignalInputActive, isReferenceTonePlaying, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
 
+  const handleSelectAudioInputDevice = useCallback(async (deviceId: string) => {
+    setSelectedAudioInputDeviceId(deviceId);
+    try { localStorage.setItem('hangoal-audio-input-device-v1', deviceId); } catch { /* Ignore storage failures. */ }
+    if (!isListening) {
+      setAudioIoMessage(deviceId ? 'A kiválasztott mikrofont a következő mérés indításakor használom.' : 'A mikrofonválasztás automatikus módra állítva.');
+      return;
+    }
+    bbAudioEngine.stopMicrophone();
+    setIsListening(false);
+    setHasSignal(false);
+    setInputLevelDb(-100);
+    const ok = await bbAudioEngine.startMicrophone(deviceId || null);
+    if (ok) {
+      setAutoGainControlStatus(bbAudioEngine.getAutoGainControlStatus());
+      setIsListening(true);
+      setMicError('');
+      setAudioIoMessage('A mikrofonváltás sikerült.');
+      void refreshAudioDevices();
+    } else {
+      setAutoGainControlStatus(null);
+      setMicError(bbAudioEngine.getErrorMessage() || 'A kiválasztott mikrofon nem indítható el.');
+      setAudioIoMessage('A mikrofonváltás nem sikerült. Válassz másik bemenetet, vagy állítsd automatikusra.');
+    }
+  }, [isListening, refreshAudioDevices]);
+
+  const handleSelectAudioOutputDevice = useCallback(async (deviceId: string) => {
+    if (!audioOutputSelectionSupported) {
+      setAudioIoMessage('A kimeneti eszköz külön választását ez a böngésző nem támogatja.');
+      return;
+    }
+    setAudioIoMessage('Kimeneti eszköz beállítása…');
+    const ok = await bbAudioEngine.setOutputDevice(deviceId || null);
+    if (ok) {
+      setSelectedAudioOutputDeviceId(deviceId);
+      try { localStorage.setItem('hangoal-audio-output-device-v1', deviceId); } catch { /* Ignore storage failures. */ }
+      setAudioIoMessage(deviceId ? 'A kiválasztott hangkimenet aktív.' : 'A rendszer alapértelmezett hangkimenete aktív.');
+    } else {
+      setAudioIoMessage(bbAudioEngine.getErrorMessage() || 'A kimeneti eszköz nem választható ki.');
+      void refreshAudioDevices();
+    }
+  }, [audioOutputSelectionSupported, refreshAudioDevices]);
+
   // Toggle microphone
   const handleToggleMic = async () => {
     if (isListening) {
@@ -937,12 +1033,14 @@ export default function App() {
         setOwnDAudioCurrentTime(0);
         setIsOwnDPlaying(false);
       }
-      const ok = await bbAudioEngine.startMicrophone();
+      if (selectedAudioOutputDeviceId && audioOutputSelectionSupported) await bbAudioEngine.setOutputDevice(selectedAudioOutputDeviceId);
+      const ok = await bbAudioEngine.startMicrophone(selectedAudioInputDeviceId || null);
       if (ok) {
         analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
         setAnalysisFps(null);
         setAutoGainControlStatus(bbAudioEngine.getAutoGainControlStatus());
         setIsListening(true);
+        void refreshAudioDevices();
       } else {
         setAutoGainControlStatus(null);
         setMicError(bbAudioEngine.getErrorMessage() || 'A mikrofon nem indítható el. Ellenőrizd az engedélyeket.');
