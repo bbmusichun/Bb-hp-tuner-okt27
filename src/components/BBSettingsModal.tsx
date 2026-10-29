@@ -24,6 +24,7 @@ interface Props {
   onResetPartialTargetOffsets: () => void;
   sampleRateKhz: number | null;
   isListening: boolean;
+  freezeTargetSettings?: boolean;
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
   onSelectInstrumentProfile: (profileId: string) => void;
@@ -51,6 +52,7 @@ export const BBSettingsModal: React.FC<Props> = ({
   onResetPartialTargetOffsets,
   sampleRateKhz,
   isListening,
+  freezeTargetSettings = false,
   instrumentProfiles,
   activeInstrumentProfileId,
   onSelectInstrumentProfile,
@@ -300,7 +302,8 @@ export const BBSettingsModal: React.FC<Props> = ({
                 <button
                   key={f}
                   onClick={() => onChangeA4(f)}
-                  className={`py-1.5 rounded-lg font-mono text-xs font-semibold border transition ${
+                  disabled={freezeTargetSettings}
+                  className={`py-1.5 rounded-lg font-mono text-xs font-semibold border transition disabled:cursor-not-allowed disabled:opacity-40 ${
                     a4Ref === f
                       ? 'bg-[#f59e0b] text-slate-950 border-[#f59e0b]'
                       : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-700'
@@ -318,7 +321,8 @@ export const BBSettingsModal: React.FC<Props> = ({
               step="0.5"
               value={a4Ref}
               onChange={(e) => onChangeA4(parseFloat(e.target.value))}
-              className="w-full accent-[#f59e0b] h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+              disabled={freezeTargetSettings}
+              className="w-full accent-[#f59e0b] h-1.5 bg-slate-700 rounded-lg cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
             />
           </div>
 
@@ -522,6 +526,7 @@ export const BBSettingsModal: React.FC<Props> = ({
                       max={MAX_PARTIAL_TARGET_OFFSET_CENTS}
                       step="0.1"
                       value={field === 'octaveCents' ? octaveDraft : thirdPartialDraft}
+                      disabled={freezeTargetSettings}
                       onChange={(event) => {
                         if (field === 'octaveCents') setOctaveDraft(event.target.value);
                         else setThirdPartialDraft(event.target.value);
