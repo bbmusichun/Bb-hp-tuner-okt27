@@ -151,8 +151,10 @@ export const BBStrobeBands: React.FC<Props> = ({
     };
   }, []);
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(customBands)); }
-    catch (error) { console.warn('Nem sikerült menteni az egyedi stroboszkópsávokat:', error); }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(customBands));
+      window.dispatchEvent(new Event('hangoal-custom-strobe-bands-changed'));
+    } catch (error) { console.warn('Nem sikerült menteni az egyedi stroboszkópsávokat:', error); }
   }, [customBands]);
   useEffect(() => {
     try { localStorage.setItem(PITCH_PIPE_STORAGE_KEY, JSON.stringify(pitchPipeModes)); }
