@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ResonanceMeasurement } from '../types/tuner';
 import { bbAudioEngine } from '../audio/audioEngine';
-import { isWithinTuningTolerance } from '../audio/tuningTolerance';
+import { isWithinTuningTolerance, type TuningToleranceMode } from '../audio/tuningTolerance';
 import { findSignificantSpectralPeaks, type SignificantSpectralPeak } from '../audio/peakSpectrum';
 
 interface Props {
@@ -10,7 +10,8 @@ interface Props {
   oktav: ResonanceMeasurement;
   hasSignal: boolean;
   toleranceOverrideCents?: number | null;
-  onSelectPeak?: (role: 'fundamental' | 'fifth' | 'octave') => void;
+  toleranceMode?: TuningToleranceMode;
+  onSelectPeak? (role: 'fundamental' | 'fifth' | 'octave') => void;
   zoomTargetHz?: number | null;
   onClearZoom?: () => void;
 }
@@ -49,12 +50,12 @@ interface HoverInfo {
 }
 
 export const BBSpectrum: React.FC<Props> = ({
-  alap, kvint, oktav, hasSignal, toleranceOverrideCents = null, onSelectPeak,
+  alap, kvint, oktav, hasSignal, toleranceOverrideCents = null, toleranceMode = 'auto', onSelectPeak,
   zoomTargetHz = null, onClearZoom,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latest = useRef({ alap, kvint, oktav, hasSignal, toleranceOverrideCents, zoomTargetHz });
-  latest.current = { alap, kvint, oktav, hasSignal, toleranceOverrideCents, zoomTargetHz };
+  const latest = useRef({ alap, kvint, oktav, hasSignal, toleranceOverrideCents, toleranceMode, zoomTargetHz });
+  latest.current = { alap, kvint, oktav, hasSignal, toleranceOverrideCents, toleranceMode, zoomTargetHz };
   const peaksRef = useRef<SignificantSpectralPeak[]>([]);
   const lastPeakUpdateRef = useRef(0);
   const [peakRows, setPeakRows] = useState<SignificantSpectralPeak[]>([]);
@@ -169,7 +170,7 @@ export const BBSpectrum: React.FC<Props> = ({
         ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 15px ui-monospace';
         ctx.fillText(s.hasSignal && p.m.measuredHz !== null ? p.m.measuredHz.toFixed(2) + ' Hz' : target.toFixed(2) + ' Hz', cx + cw / 2, cy + 37);
         const cents = p.m.deviationCents;
-        ctx.fillStyle = cents === null ? '#94a3b8' : isWithinTuningTolerance(cents, target, s.toleranceOverrideCents) ? '#34d399' : '#fbbf24';
+        ctx.fillStyle = cents === null ? '#94a3b8' : isWithinTuningTolerance(cents, target, s.toleranceOverrideCents, s.toleranceMode) ? '#34d399' : '#fbbf24';
         ctx.font = 'bold 14px ui-monospace'; ctx.fillText(cents === null ? '— cent' : (cents > 0 ? '+' : '') + cents.toFixed(1) + ' c', cx + cw / 2, cy + 54);
         ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.fill();
       });
