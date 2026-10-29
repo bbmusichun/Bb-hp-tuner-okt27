@@ -143,6 +143,36 @@ describe('offline WAV resonance analysis', () => {
     assert.equal(downmixChannels([]).length, 0);
   });
 
+
+  it('measures the 1x, 2x and 3x resonances independently when the partials are inharmonic', () => {
+    const rootCents = 2;
+    const octaveOffsetCents = 6;
+    const thirdOffsetCents = -4;
+    const f0 = D3 * Math.pow(2, rootCents / 1200);
+    const octaveHz = f0 * 2 * Math.pow(2, octaveOffsetCents / 1200);
+    const thirdHz = f0 * 3 * Math.pow(2, thirdOffsetCents / 1200);
+    const samples = new Float32Array(FFT_SIZE);
+    for (let i = 0; i < samples.length; i++) {
+      const t = i / RATE;
+      samples[i] = 0.45 * Math.sin(2 * Math.PI * f0 * t)
+        + 0.27 * Math.sin(2 * Math.PI * octaveHz * t)
+        + 0.18 * Math.sin(2 * Math.PI * thirdHz * t);
+    }
+
+    const result = analyzeWavWindow(samples, RATE, { targetHz: D3, peakFloorDb: -82 });
+    assert.ok(result);
+    assert.equal(result.resonances.length, 3);
+    const measured = result.resonances.map((resonance) => resonance.measuredHz);
+    assert.ok(measured.every((frequency) => frequency !== null), 'each resonance should be detected independently');
+    assert.ok(Math.abs(cents(measured[0]!, D3) - rootCents) < 1);
+    assert.ok(Math.abs(cents(measured[1]!, D3 * 2) - (rootCents + octaveOffsetCents)) < 1);
+    assert.ok(Math.abs(cents(measured[2]!, D3 * 3) - (rootCents + thirdOffsetCents)) < 1);
+    assert.notEqual(result.resonances[1].measuredHz, result.resonances[0].measuredHz! * 2,
+      'octave channel must preserve its own inharmonicity');
+    assert.notEqual(result.resonances[2].measuredHz, result.resonances[0].measuredHz! * 3,
+      'compound-fifth channel must preserve its own inharmonicity');
+  });
+
   it('measures a harmonic-rich handpan-like signal in deterministic broadband noise', () => {
     const sampleRate = RATE;
     const samples = new Float32Array(FFT_SIZE);
