@@ -175,7 +175,7 @@ function formatAudioTime(seconds: number): string {
 
 const TUNING_VIEW_PANELS = [
   { id: 'samplePlayback', label: 'Saját handpan-felvétel', description: '3 másodperces minta, loop és hangerő' },
-  { id: 'recordingAnalysis', label: 'Felvétel-elemzés és kalibrálás', description: 'Hangfelismerés, felhangarány, referenciát ellenőrző eszközök' },
+  { id: 'recordingAnalysis', label: 'Felvétel-elemzés és kalibrálás', description: 'Hangfelismerés, felhangarány és kalibrálás' },
   { id: 'pitchReadout', label: 'Hangmagasság és eltérés', description: 'Hangnév, Hz és centeltérés' },
   { id: 'referenceTone', label: 'Referencia-szinusz', description: 'Célfrekvencia, lejátszás és ütésjelzés módja' },
   { id: 'pitchDial', label: 'Kromatikus pitch tárcsa', description: 'Közvetlen célhang-kiválasztás' },
@@ -184,21 +184,14 @@ const TUNING_VIEW_PANELS = [
   { id: 'spectrum', label: 'Spektrum', description: 'Mért frekvencia-összetevők vizsgálata' },
   { id: 'diagnostics', label: 'Mérési diagnosztika', description: 'Jelszint, tranziensvédelem és mérési állapot' },
   { id: 'measurementCards', label: 'Mérési kártyák', description: 'Hz, cent, hangnév vagy frekvenciaarány' },
-  { id: 'stabilityGraph', label: 'Stabilitásgrafikon', description: 'Hangmagasság-ingadozás ellenőrzése' },
+  { id: 'stabilityGraph', label: 'Stabilitásgrafikon', description: 'Hangmagasság-ingadozás' },
   { id: 'keyboardShortcuts', label: 'Billentyűzetes súgó', description: 'Gyorsbillentyűk és vezérlés' },
 ] as const;
-
 type TuningViewPanelId = (typeof TUNING_VIEW_PANELS)[number]['id'];
-
-const DEFAULT_TUNING_VIEW_PANELS: TuningViewPanelId[] = [
-  'pitchReadout',
-  'referenceTone',
-  'stroboscope',
-  'measurementCards',
-];
+const DEFAULT_TUNING_VIEW_PANELS: TuningViewPanelId[] = ['pitchReadout', 'referenceTone', 'stroboscope', 'measurementCards'];
 
 function loadTuningViewPreferences(): { enabled: boolean; panels: TuningViewPanelId[] } {
-  const defaults = { enabled: true, panels: DEFAULT_TUNING_VIEW_PANELS };
+  const defaults = { enabled: true, panels: [...DEFAULT_TUNING_VIEW_PANELS] };
   try {
     const raw = localStorage.getItem('hangoal-custom-tuning-view-v1');
     if (!raw) return defaults;
@@ -209,13 +202,8 @@ function loadTuningViewPreferences(): { enabled: boolean; panels: TuningViewPane
       ? value.panels.filter((panel): panel is TuningViewPanelId =>
           typeof panel === 'string' && TUNING_VIEW_PANELS.some((item) => item.id === panel))
       : [...DEFAULT_TUNING_VIEW_PANELS];
-    return {
-      enabled: typeof value.enabled === 'boolean' ? value.enabled : true,
-      panels,
-    };
-  } catch {
-    return defaults;
-  }
+    return { enabled: typeof value.enabled === 'boolean' ? value.enabled : true, panels };
+  } catch { return defaults; }
 }
 
 function loadDisabledToneNotesByScale(): Record<string, string[]> {
@@ -256,8 +244,7 @@ export default function App() {
   const [isKeyboardHelpOpen, setIsKeyboardHelpOpen] = useState(false);
   const [customTuningView, setCustomTuningView] = useState(loadTuningViewPreferences);
   const [isTuningPanelPickerOpen, setIsTuningPanelPickerOpen] = useState(false);
-  const shouldShowTuningPanel = (panel: TuningViewPanelId) =>
-    !customTuningView.enabled || customTuningView.panels.includes(panel);
+  const shouldShowTuningPanel = (panel: TuningViewPanelId) => !customTuningView.enabled || customTuningView.panels.includes(panel);
   const [autoDetectionMode, setAutoDetectionMode] = useState<AutoDetectionMode>(() => loadTuningPreferences().autoDetectionMode);
   const [singleShotCaptured, setSingleShotCaptured] = useState(false);
   const autoDetect = autoDetectionMode !== 'off';
@@ -309,13 +296,9 @@ export default function App() {
   const previousTransientHoldoffRef = useRef(false);
 
   const [disabledToneNotesByScale, setDisabledToneNotesByScale] = useState<Record<string, string[]>>(loadDisabledToneNotesByScale);
-
   useEffect(() => {
-    try {
-      localStorage.setItem('hangoal-custom-tuning-view-v1', JSON.stringify(customTuningView));
-    } catch {
-      // Keep the custom workspace usable when browser storage is unavailable.
-    }
+    try { localStorage.setItem('hangoal-custom-tuning-view-v1', JSON.stringify(customTuningView)); }
+    catch { /* Keep custom view usable when browser storage is unavailable. */ }
   }, [customTuningView]);
 
   // Compute tone field notes with current A4
@@ -1446,27 +1429,15 @@ export default function App() {
             <section aria-label="Egyéni hangoló munkanézet" className="mx-1 mb-2 rounded-xl border border-cyan-400/25 bg-slate-900/70 px-3 py-3">
               <div className="flex items-center justify-between gap-2">
                 <label className="flex min-w-0 items-center gap-2 text-xs font-semibold text-white">
-                  <input
-                    type="checkbox"
-                    checked={customTuningView.enabled}
-                    onChange={(event) => setCustomTuningView((previous) => ({ ...previous, enabled: event.target.checked }))}
-                    className="h-4 w-4 shrink-0 accent-cyan-400"
-                  />
+                  <input type="checkbox" checked={customTuningView.enabled} onChange={(event) => setCustomTuningView((previous) => ({ ...previous, enabled: event.target.checked }))} className="h-4 w-4 shrink-0 accent-cyan-400" />
                   <span>Egyéni nézet</span>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setIsTuningPanelPickerOpen((open) => !open)}
-                  aria-expanded={isTuningPanelPickerOpen}
-                  className="shrink-0 rounded-full border border-cyan-400/30 px-3 py-2 text-[10px] font-semibold text-cyan-200"
-                >
+                <button type="button" onClick={() => setIsTuningPanelPickerOpen((open) => !open)} aria-expanded={isTuningPanelPickerOpen} className="shrink-0 rounded-full border border-cyan-400/30 px-3 py-2 text-[10px] font-semibold text-cyan-200">
                   Panelek · {customTuningView.panels.length}/{TUNING_VIEW_PANELS.length} {isTuningPanelPickerOpen ? '−' : '+'}
                 </button>
               </div>
               <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-                {customTuningView.enabled
-                  ? 'Csak a kipipált elemek jelennek meg a Hangolás fülön. A választásod automatikusan mentődik.'
-                  : 'Egyéni nézet kikapcsolva: minden panel megjelenik. A kijelölésed megmarad, ha újra bekapcsolod.'}
+                {customTuningView.enabled ? 'Csak a kipipált elemek jelennek meg a Hangolás fülön. A választásod automatikusan mentődik.' : 'Egyéni nézet kikapcsolva: minden panel megjelenik. A kijelölésed megmarad, ha újra bekapcsolod.'}
               </p>
               {customTuningView.enabled && customTuningView.panels.length === 0 && (
                 <p role="status" className="mt-2 rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-2 text-[10px] leading-relaxed text-amber-200">
@@ -1478,17 +1449,10 @@ export default function App() {
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                     {TUNING_VIEW_PANELS.map((panel) => (
                       <label key={panel.id} className="flex min-w-0 items-start gap-2 rounded-lg border border-white/5 bg-black/15 px-2.5 py-2">
-                        <input
-                          type="checkbox"
-                          checked={customTuningView.panels.includes(panel.id)}
-                          onChange={(event) => setCustomTuningView((previous) => ({
-                            ...previous,
-                            panels: event.target.checked
-                              ? [...previous.panels.filter((item) => item !== panel.id), panel.id]
-                              : previous.panels.filter((item) => item !== panel.id),
-                          }))}
-                          className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400"
-                        />
+                        <input type="checkbox" checked={customTuningView.panels.includes(panel.id)} onChange={(event) => setCustomTuningView((previous) => ({
+                          ...previous,
+                          panels: event.target.checked ? [...previous.panels.filter((item) => item !== panel.id), panel.id] : previous.panels.filter((item) => item !== panel.id),
+                        }))} className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400" />
                         <span className="min-w-0">
                           <span className="block text-[11px] font-semibold leading-tight text-slate-200">{panel.label}</span>
                           <span className="mt-0.5 block text-[10px] leading-snug text-slate-500">{panel.description}</span>
@@ -1497,33 +1461,15 @@ export default function App() {
                     ))}
                   </div>
                   <div className="flex flex-wrap gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setCustomTuningView({ enabled: true, panels: [...DEFAULT_TUNING_VIEW_PANELS] })}
-                      className="rounded-lg border border-cyan-400/25 px-3 py-2 text-[10px] font-semibold text-cyan-200"
-                    >
-                      Kompakt alapnézet
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCustomTuningView({ enabled: true, panels: TUNING_VIEW_PANELS.map((panel) => panel.id) })}
-                      className="rounded-lg border border-slate-600 px-3 py-2 text-[10px] font-semibold text-slate-300"
-                    >
-                      Mind kijelölése
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCustomTuningView((previous) => ({ ...previous, enabled: false }))}
-                      className="rounded-lg border border-slate-600 px-3 py-2 text-[10px] font-semibold text-slate-300"
-                    >
-                      Minden panel megjelenítése
-                    </button>
+                    <button type="button" onClick={() => setCustomTuningView({ enabled: true, panels: [...DEFAULT_TUNING_VIEW_PANELS] })} className="rounded-lg border border-cyan-400/25 px-3 py-2 text-[10px] font-semibold text-cyan-200">Kompakt alapnézet</button>
+                    <button type="button" onClick={() => setCustomTuningView({ enabled: true, panels: TUNING_VIEW_PANELS.map((panel) => panel.id) })} className="rounded-lg border border-slate-600 px-3 py-2 text-[10px] font-semibold text-slate-300">Mind kijelölése</button>
+                    <button type="button" onClick={() => setCustomTuningView((previous) => ({ ...previous, enabled: false }))} className="rounded-lg border border-slate-600 px-3 py-2 text-[10px] font-semibold text-slate-300">Minden panel megjelenítése</button>
                   </div>
                 </div>
               )}
             </section>
             {shouldShowTuningPanel('samplePlayback') && (
-            <section aria-label="Saját D handpan felvétele" className="mx-1 mb-2 rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-400/10 to-slate-900 px-3 py-3">
+<section aria-label="Saját D handpan felvétele" className="mx-1 mb-2 rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-400/10 to-slate-900 px-3 py-3">
 
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -1601,10 +1547,9 @@ export default function App() {
                 Loopolva (folyamatos ismétlés)
               </label>
             </section>
-            )}
-            
+              )}
 {shouldShowTuningPanel('recordingAnalysis') && (
-                        <OwnDRecordingAnalysis
+            <OwnDRecordingAnalysis
               audioRef={ownDPlayerRef}
               noteCandidates={enabledToneNotes.map((note) => ({
                 id: note.id,
@@ -1617,13 +1562,12 @@ export default function App() {
                 updateSelectedPartialOffset('thirdPartialCents', thirdPartialCents);
               }}
             />
-
-            )}
-                        {/* ================= SECTION B: MAIN PITCH & STROBE BANDS ================= */}
+              )}
+            {/* ================= SECTION B: MAIN PITCH & STROBE BANDS ================= */}
             <div>
               {/* Main Pitch Row (Large D3, +2.3 cent, Alaphang dropdown) */}
 {shouldShowTuningPanel('pitchReadout') && (
-                            <div className="flex items-start justify-between px-1 pt-1 pb-1">
+              <div className="flex items-start justify-between px-1 pt-1 pb-1">
                 {/* Note Name & Frequency */}
                 <div className="flex flex-col">
                   <span className="text-4xl sm:text-5xl font-black text-white tracking-tight leading-none">
@@ -1662,12 +1606,10 @@ export default function App() {
                 </button>
               </div>
 
-              )}
 
-{shouldShowTuningPanel('referenceTone') && (
-<>
-
-                            <div className="mb-1 flex items-center justify-between gap-2 px-1">
+              )}{shouldShowTuningPanel('referenceTone') && (
+              <>
+              <div className="mb-1 flex items-center justify-between gap-2 px-1">
                 <span className="text-[10px] text-slate-500">
                   Célreferencia · {referenceToneHz.toFixed(3)} Hz
                 </span>
@@ -1708,14 +1650,11 @@ export default function App() {
                 </p>
               )}
 
-              
-</>
-              )}
 
-{shouldShowTuningPanel('pitchDial') && (
-<>
-
-                            <div className="mb-1 flex justify-end px-1">
+              </>
+              )}{shouldShowTuningPanel('pitchDial') && (
+              <>
+              <div className="mb-1 flex justify-end px-1">
                 <button
                   type="button"
                   onClick={() => setIsPitchDialOpen((open) => !open)}
@@ -1726,12 +1665,11 @@ export default function App() {
                 </button>
               </div>
               {isPitchDialOpen && <BBPitchDial selectedMidi={selectedMidi} onSelectMidi={handleSelectChromaticMidi} />}
-              
-</>
+              </>
               )}
 
 {shouldShowTuningPanel('transposition') && (
-                            <section className="my-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
+              <section className="my-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-xs font-semibold text-white">Skála transzponálása</div>
@@ -1747,10 +1685,9 @@ export default function App() {
               </section>
               )}
 
-
               {/* Three Stroboscope Bands (Alap, Kvint, Oktáv) */}
 {shouldShowTuningPanel('stroboscope') && (
-                            <BBStrobeBands
+              <BBStrobeBands
                 alap={alap}
                 kvint={kvint}
                 oktav={oktav}
@@ -1765,12 +1702,11 @@ export default function App() {
                 onChangeStrobeSensitivity={setStrobeSensitivity}
               />
               )}
-
             </div>
 
             {/* ================= SECTION C: FREQUENCY SPECTRUM ================= */}
 {shouldShowTuningPanel('spectrum') && (
-                        <BBSpectrum
+            <BBSpectrum
               alap={alap}
               kvint={kvint}
               oktav={oktav}
@@ -1778,11 +1714,10 @@ export default function App() {
               toleranceOverrideCents={toleranceOverrideCents}
               onSelectPeak={setSelectedRole}
             />
-            )}
-
+              )}
 
 {shouldShowTuningPanel('diagnostics') && (
-                        <BBSpectrumDiagnostics
+            <BBSpectrumDiagnostics
               active={isSignalInputActive}
               hasSignal={hasSignal}
               transientHoldoff={transientHoldoff}
@@ -1790,13 +1725,11 @@ export default function App() {
               oktav={oktav}
               kvint={kvint}
             />
-            )}
-
+              )}
 
 {shouldShowTuningPanel('measurementCards') && (
-<>
-
-                        <div className="my-1 flex items-center justify-between gap-3 px-1">
+              <>
+            <div className="my-1 flex items-center justify-between gap-3 px-1">
               <label htmlFor="hangoal-readout-mode" className="text-[11px] text-slate-400">Mérési kártyák kijelzése</label>
               <select
                 id="hangoal-readout-mode"
@@ -1824,13 +1757,11 @@ export default function App() {
               a4Ref={a4Ref}
             />
 
-            
-</>
-              )}
 
-            {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
+              </>
+              )}            {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
 {shouldShowTuningPanel('stabilityGraph') && (
-                        <BBStabilityGraph
+            <BBStabilityGraph
               roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
               hasSignal={hasSignal}
               currentCents={activeCents ?? 0}
@@ -1838,8 +1769,7 @@ export default function App() {
               toleranceOverrideCents={toleranceOverrideCents}
               standardDeviationCents={standardDeviationCents}
             />
-            )}
-
+              )}
 
 {shouldShowTuningPanel('keyboardShortcuts') && (
             <div className="mt-2">
@@ -1868,515 +1798,6 @@ export default function App() {
               )}
             </div>
             )}
-
-          </div>
-        )}
-
-        {activeTab !== 'hangolas' && (
-          <section
-            aria-label="Közös hangforrás-vezérlés"
-            className="mb-3 rounded-xl border border-cyan-400/20 bg-cyan-950/20 px-3 py-3"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-white">Közös hangforrás</div>
-                <p className="mt-0.5 text-[10px] text-slate-400">
-                  {isOwnDPlaying ? 'A handpan-minta szól · az elemző aktív' : isReferenceTonePlaying ? 'A szinuszreferencia szól · az elemző aktív' : 'Indíts mintát: a minta minden fülön a közös elemzőt táplálja.'}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleToggleOwnDPlayback}
-                  disabled={isListening || isReferenceTonePlaying}
-                  className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-200 disabled:opacity-40"
-                >
-                  {isOwnDPlaying ? 'Minta leállítása' : 'Minta lejátszása'}
-                </button>
-                <label className="flex items-center gap-1.5 text-[10px] text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={ownDLoop}
-                    onChange={handleToggleOwnDLoop}
-                    className="h-4 w-4 accent-amber-400"
-                  />
-                  Loop
-                </label>
-                {isReferenceTonePlaying && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      bbAudioEngine.stopTone();
-                      setIsReferenceTonePlaying(false);
-                    }}
-                    className="rounded-full border border-rose-400/30 px-3 py-2 text-[11px] font-semibold text-rose-200"
-                  >
-                    Szinusz leállítása
-                  </button>
-                )}
-              </div>
-            </div>
-            {ownDAudioError && <p role="alert" className="mt-2 text-[10px] text-rose-300">{ownDAudioError}</p>}
-          </section>
-        )}
-
-              <audio
-                className="hidden"
-                aria-hidden="true"
-                ref={ownDPlayerRef}
-                src="/audio/sajat-d-handpan.mp3"
-                loop={false}
-                preload="metadata"
-                onLoadedMetadata={(event) => {
-                  const duration = event.currentTarget.duration;
-                  setOwnDAudioDuration(Number.isFinite(duration) ? Math.min(duration, 3) : 0);
-                }}
-                onDurationChange={(event) => {
-                  const duration = event.currentTarget.duration;
-                  setOwnDAudioDuration(Number.isFinite(duration) ? Math.min(duration, 3) : 0);
-                }}
-                onTimeUpdate={(event) => {
-                  const player = event.currentTarget;
-                  if (player.currentTime >= 3) {
-                    if (ownDLoop) {
-                      player.currentTime = 0;
-                      setOwnDAudioCurrentTime(0);
-                    } else {
-                      player.pause();
-                      player.currentTime = 0;
-                      bbAudioEngine.stopAudioElementInput();
-                      setIsFileInputActive(false);
-                      setIsOwnDPlaying(false);
-                      setOwnDAudioCurrentTime(0);
-                    }
-                  } else {
-                    setOwnDAudioCurrentTime(player.currentTime);
-                  }
-                }}
-                onCanPlay={() => setOwnDAudioError('')}
-                onError={() => {
-                  bbAudioEngine.stopAudioElementInput();
-                  setIsFileInputActive(false);
-                  setHasSignal(false);
-                  setIsOwnDPlaying(false);
-                  setOwnDAudioDuration(0);
-                  setOwnDAudioCurrentTime(0);
-                  setOwnDAudioError('A saját D-felvétel nem tölthető be. Frissítsd az oldalt, és próbáld újra.');
-                }}
-                onEnded={() => { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); setOwnDAudioCurrentTime(0); }}
-                onPause={(event) => { if (event.currentTarget.paused) { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); setHasSignal(false); setInputLevelDb(-100); setTransientHoldoff(false); } }}
-                onPlay={() => { setOwnDAudioError(''); setIsOwnDPlaying(true); }}
-              />
-
-        {/* ================= TAB 1: MAIN TUNING SCREEN ================= */}
-        {activeTab === 'hangolas' && (
-          <div className="flex flex-col gap-1.5 flex-1 justify-between">
-            <section aria-label="Egyéni hangoló munkanézet" className="mx-1 mb-2 rounded-xl border border-cyan-400/25 bg-slate-900/70 px-3 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <label className="flex min-w-0 items-center gap-2 text-xs font-semibold text-white">
-                  <input
-                    type="checkbox"
-                    checked={customTuningView.enabled}
-                    onChange={(event) => setCustomTuningView((previous) => ({ ...previous, enabled: event.target.checked }))}
-                    className="h-4 w-4 shrink-0 accent-cyan-400"
-                  />
-                  <span>Egyéni nézet</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsTuningPanelPickerOpen((open) => !open)}
-                  aria-expanded={isTuningPanelPickerOpen}
-                  className="shrink-0 rounded-full border border-cyan-400/30 px-3 py-2 text-[10px] font-semibold text-cyan-200"
-                >
-                  Panelek · {customTuningView.panels.length}/{TUNING_VIEW_PANELS.length} {isTuningPanelPickerOpen ? '−' : '+'}
-                </button>
-              </div>
-              <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-                {customTuningView.enabled
-                  ? 'Csak a kipipált elemek jelennek meg a Hangolás fülön. A választásod automatikusan mentődik.'
-                  : 'Egyéni nézet kikapcsolva: minden panel megjelenik. A kijelölésed megmarad, ha újra bekapcsolod.'}
-              </p>
-              {isTuningPanelPickerOpen && (
-                <div className="mt-3 space-y-1.5 border-t border-white/10 pt-3">
-                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                    {TUNING_VIEW_PANELS.map((panel) => (
-                      <label key={panel.id} className="flex min-w-0 items-start gap-2 rounded-lg border border-white/5 bg-black/15 px-2.5 py-2">
-                        <input
-                          type="checkbox"
-                          checked={customTuningView.panels.includes(panel.id)}
-                          onChange={(event) => setCustomTuningView((previous) => ({
-                            ...previous,
-                            panels: event.target.checked
-                              ? [...previous.panels.filter((item) => item !== panel.id), panel.id]
-                              : previous.panels.filter((item) => item !== panel.id),
-                          }))}
-                          className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-400"
-                        />
-                        <span className="min-w-0">
-                          <span className="block text-[11px] font-semibold leading-tight text-slate-200">{panel.label}</span>
-                          <span className="mt-0.5 block text-[10px] leading-snug text-slate-500">{panel.description}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setCustomTuningView({ enabled: true, panels: [...DEFAULT_TUNING_VIEW_PANELS] })}
-                      className="rounded-lg border border-cyan-400/25 px-3 py-2 text-[10px] font-semibold text-cyan-200"
-                    >
-                      Kompakt alapnézet
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCustomTuningView({ enabled: true, panels: TUNING_VIEW_PANELS.map((panel) => panel.id) })}
-                      className="rounded-lg border border-slate-600 px-3 py-2 text-[10px] font-semibold text-slate-300"
-                    >
-                      Mind kijelölése
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCustomTuningView((previous) => ({ ...previous, enabled: false }))}
-                      className="rounded-lg border border-slate-600 px-3 py-2 text-[10px] font-semibold text-slate-300"
-                    >
-                      Minden panel megjelenítése
-                    </button>
-                  </div>
-                </div>
-              )}
-            </section>
-            {shouldShowTuningPanel('samplePlayback') && (
-            <section aria-label="Saját D handpan felvétele" className="mx-1 mb-2 rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-400/10 to-slate-900 px-3 py-3">
-
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-white">Saját D lejátszása</div>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">A saját D Kurd handpan-felvétel első 3 másodperce fut át a teljes hangolóelemzésen.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleToggleOwnDPlayback}
-                  className="shrink-0 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20"
-                  aria-label={isOwnDPlaying ? "Saját D leállítása" : "Saját D lejátszása"}
-                  disabled={isListening || isReferenceTonePlaying}
-                  title={isListening ? 'A saját felvétel lejátszásához előbb állítsd le a mikrofonmérést.' : isReferenceTonePlaying ? 'Előbb állítsd le a szinuszreferenciát.' : undefined}
-                >
-                  <Volume2 className="h-4 w-4" />
-                  {isOwnDPlaying ? "Leállítás" : "Lejátszás"}
-                </button>
-              </div>
-              <div className="mt-3">
-                <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-slate-400">
-                  <label htmlFor="hangoal-own-d-position">Felvétel pozíciója</label>
-                  <span className="font-mono tabular-nums">{formatAudioTime(ownDAudioCurrentTime)} / {formatAudioTime(ownDAudioDuration)}</span>
-                </div>
-                <input
-                  id="hangoal-own-d-position"
-                  type="range"
-                  min={0}
-                  max={Math.max(ownDAudioDuration, 0.1)}
-                  step={0.05}
-                  value={Math.min(ownDAudioCurrentTime, ownDAudioDuration || 0)}
-                  onChange={(event) => {
-                    const nextTime = Number(event.target.value);
-                    if (ownDPlayerRef.current && Number.isFinite(nextTime)) {
-                      ownDPlayerRef.current.currentTime = nextTime;
-                      setOwnDAudioCurrentTime(nextTime);
-                    }
-                  }}
-                  disabled={!ownDAudioDuration}
-                  aria-label="Lejátszási pozíció"
-                  className="w-full accent-amber-400 disabled:opacity-40"
-                />
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-                <label htmlFor="hangoal-own-d-volume" className="shrink-0 text-xs text-slate-300">Hangerő</label>
-                <input
-                  id="hangoal-own-d-volume"
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={5}
-                  value={Math.round(ownDVolume * 100)}
-                  onChange={(event) => {
-                    const nextVolume = Math.max(0, Math.min(1, Number(event.target.value) / 100));
-                    setOwnDVolume(nextVolume);
-                    try {
-                      localStorage.setItem('hangoal-own-d-volume-v1', String(nextVolume));
-                    } catch {
-                      // Keep volume control usable when browser storage is unavailable.
-                    }
-                  }}
-                  aria-label="Saját D hangerő"
-                  className="min-w-0 flex-1 accent-amber-400"
-                />
-                <span className="w-9 text-right text-xs tabular-nums text-slate-400">{Math.round(ownDVolume * 100)}%</span>
-              </div>
-              {isListening && <p className="mt-2 text-[11px] text-amber-200/80">A mikrofonmérés aktív; a felvétel lejátszása ilyenkor le van tiltva, hogy a hangszóró ne zavarja a mérést.</p>}
-              {ownDAudioError && <p role="alert" className="mt-2 text-[11px] text-rose-300">{ownDAudioError}</p>}
-              <label className="mt-3 flex items-center gap-2 text-xs text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={ownDLoop}
-                  onChange={handleToggleOwnDLoop}
-                  className="h-4 w-4 accent-amber-400"
-                />
-                Loopolva (folyamatos ismétlés)
-              </label>
-            </section>
-            )}
-            
-{shouldShowTuningPanel('recordingAnalysis') && (
-                        <OwnDRecordingAnalysis
-              audioRef={ownDPlayerRef}
-              noteCandidates={enabledToneNotes.map((note) => ({
-                id: note.id,
-                noteName: note.noteName,
-                frequency: note.frequency,
-              }))}
-              targetFrequencyHz={selectedNote.frequency}
-              onApplyPartialOffsets={(octaveCents, thirdPartialCents) => {
-                updateSelectedPartialOffset('octaveCents', octaveCents);
-                updateSelectedPartialOffset('thirdPartialCents', thirdPartialCents);
-              }}
-            />
-
-            )}
-                        {/* ================= SECTION B: MAIN PITCH & STROBE BANDS ================= */}
-            <div>
-              {/* Main Pitch Row (Large D3, +2.3 cent, Alaphang dropdown) */}
-{shouldShowTuningPanel('pitchReadout') && (
-                            <div className="flex items-start justify-between px-1 pt-1 pb-1">
-                {/* Note Name & Frequency */}
-                <div className="flex flex-col">
-                  <span className="text-4xl sm:text-5xl font-black text-white tracking-tight leading-none">
-                    {selectedNote.noteName}
-                  </span>
-                  <span className="text-sm font-mono text-slate-300 font-semibold mt-1">
-                    {alap.measuredHz ? `${alap.measuredHz.toFixed(2)} Hz` : `${selectedNote.frequency.toFixed(2)} Hz`}
-                  </span>
-                </div>
-
-                {/* Deviation Cents & Assessment */}
-                <div className="flex flex-col items-center justify-center pt-0.5">
-                  <div
-                    className={`text-xl sm:text-2xl font-mono font-bold tracking-tight ${
-                      activeCents !== null && isNearTune ? 'text-[#10b981]' : activeCents !== null && Math.abs(activeCents) > 10 ? 'text-[#f43f5e]' : 'text-[#f59e0b]'
-                    }`}
-                  >
-                    {activeCents !== null && (activeResonance.status === 'valid' || isHeldReading) ? `${activeCents > 0 ? '+' : ''}${activeCents.toFixed(1)} cent` : '— cent'}
-                  </div>
-                  <div className="text-[11px] text-slate-400 font-medium">
-                    {assessmentText}
-                  </div>
-                </div>
-
-                {/* Resonance Role Selector Pill */}
-                <button
-                  onClick={() => {
-                    const roles: ('fundamental' | 'fifth' | 'octave')[] = ['fundamental', 'fifth', 'octave'];
-                    const nextIdx = (roles.indexOf(selectedRole) + 1) % roles.length;
-                    setSelectedRole(roles[nextIdx]);
-                  }}
-                  className="px-2.5 py-1.5 rounded-full border border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#f59e0b] text-xs font-medium flex items-center gap-1 hover:bg-[#f59e0b]/20 transition"
-                >
-                  <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}</span>
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              )}
-
-{shouldShowTuningPanel('referenceTone') && (
-                            <div className="mb-1 flex items-center justify-between gap-2 px-1">
-                <span className="text-[10px] text-slate-500">
-                  Célreferencia · {referenceToneHz.toFixed(3)} Hz
-                </span>
-                <button
-                  type="button"
-                  onClick={handleToggleReferenceTone}
-                  disabled={referenceToneMode !== 'continuous' || isListening || isFileInputActive || !Number.isFinite(referenceToneHz) || referenceToneHz <= 0}
-                  aria-pressed={referenceToneMode === 'continuous' && isReferenceTonePlaying}
-                  aria-label={isReferenceTonePlaying ? 'Referenciahang leállítása' : 'Referenciahang lejátszása'}
-                  title={referenceToneMode === 'off' ? 'A referenciahang ki van kapcsolva.' : referenceToneMode === 'strike' ? 'Minden érzékelt ütés kezdetén rövid referenciahang szól.' : isListening ? 'Mikrofonmérés közben a folyamatos referenciahang ki van kapcsolva.' : 'A kiválasztott rezonancia célfrekvenciájának lejátszása'}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                    isReferenceTonePlaying
-                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                      : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-[#f59e0b]/50 hover:text-[#f59e0b]'
-                  }`}
-                >
-                  <Volume2 className="h-3.5 w-3.5" />
-                  {referenceToneMode === 'off' ? 'Referenciahang: ki' : referenceToneMode === 'strike' ? 'Ütésjelzés aktív' : isReferenceTonePlaying ? 'Hang leállítása' : 'Referenciahang'}
-                </button>
-              </div>
-
-              <div className="mb-1 flex items-center justify-between gap-2 px-1">
-                <label htmlFor="hangoal-reference-tone-mode" className="text-[10px] text-slate-500">Referenciahang módja</label>
-                <select
-                  id="hangoal-reference-tone-mode"
-                  value={referenceToneMode}
-                  onChange={(event) => handleSetReferenceToneMode(normalizeReferenceToneMode(event.target.value))}
-                  className="max-w-[190px] rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[10px] text-slate-200 outline-none focus:border-amber-400"
-                >
-                  <option value="continuous">Folyamatos (kézi indítás)</option>
-                  <option value="strike">Ütésre rövid hang</option>
-                  <option value="off">Kikapcsolva</option>
-                </select>
-              </div>
-              {referenceToneMode === 'strike' && (
-                <p className="mb-2 px-1 text-[10px] leading-relaxed text-slate-500">
-                  A rövid hang a tranziensvédelmi ablak elején szól. A készülék hangszórójából visszajutó hang hibát okozhat; mérési átvételhez fejhallgatós és hangszórós teszt is szükséges.
-                </p>
-              )}
-
-              )}
-
-{shouldShowTuningPanel('pitchDial') && (
-                            <div className="mb-1 flex justify-end px-1">
-                <button
-                  type="button"
-                  onClick={() => setIsPitchDialOpen((open) => !open)}
-                  aria-expanded={isPitchDialOpen}
-                  className="rounded-full border border-cyan-400/30 bg-cyan-400/5 px-2.5 py-1.5 text-[10px] font-semibold text-cyan-200 hover:bg-cyan-400/10"
-                >
-                  {isPitchDialOpen ? 'Pitch tárcsa elrejtése' : 'Kromatikus pitch tárcsa'}
-                </button>
-              </div>
-              {isPitchDialOpen && <BBPitchDial selectedMidi={selectedMidi} onSelectMidi={handleSelectChromaticMidi} />}
-              )}
-
-{shouldShowTuningPanel('transposition') && (
-                            <section className="my-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-white">Skála transzponálása</div>
-                    <div className="mt-0.5 text-[10px] text-slate-400">Félhangok · a kromatikus tárcsa közvetlen célhangját nem módosítja</div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button type="button" aria-label="Transzponálás egy félhanggal lejjebb" onClick={() => handleSetTranspose(transposeSemitones - 1)} disabled={transposeSemitones <= -12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">−</button>
-                    <span className="min-w-[54px] text-center font-mono text-xs font-semibold text-amber-200">{transposeSemitones > 0 ? '+' : ''}{transposeSemitones} st</span>
-                    <button type="button" aria-label="Transzponálás egy félhanggal feljebb" onClick={() => handleSetTranspose(transposeSemitones + 1)} disabled={transposeSemitones >= 12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">+</button>
-                    <button type="button" onClick={() => handleSetTranspose(0)} disabled={transposeSemitones === 0} className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-400 disabled:opacity-30">Nullázás</button>
-                  </div>
-                </div>
-              </section>
-              )}
-
-
-              {/* Three Stroboscope Bands (Alap, Kvint, Oktáv) */}
-{shouldShowTuningPanel('stroboscope') && (
-                            <BBStrobeBands
-                alap={alap}
-                kvint={kvint}
-                oktav={oktav}
-                hasSignal={hasSignal}
-                active={isSignalInputActive}
-                transientHoldoff={transientHoldoff}
-                baseFrequencyHz={selectedNote.frequency}
-                selectedRole={selectedRole}
-                onSelectRole={setSelectedRole}
-                toleranceOverrideCents={toleranceOverrideCents}
-                strobeSensitivity={strobeSensitivity}
-                onChangeStrobeSensitivity={setStrobeSensitivity}
-              />
-              )}
-
-            </div>
-
-            {/* ================= SECTION C: FREQUENCY SPECTRUM ================= */}
-{shouldShowTuningPanel('spectrum') && (
-                        <BBSpectrum
-              alap={alap}
-              kvint={kvint}
-              oktav={oktav}
-              hasSignal={hasSignal}
-              toleranceOverrideCents={toleranceOverrideCents}
-              onSelectPeak={setSelectedRole}
-            />
-            )}
-
-
-{shouldShowTuningPanel('diagnostics') && (
-                        <BBSpectrumDiagnostics
-              active={isSignalInputActive}
-              hasSignal={hasSignal}
-              transientHoldoff={transientHoldoff}
-              alap={alap}
-              oktav={oktav}
-              kvint={kvint}
-            />
-            )}
-
-
-{shouldShowTuningPanel('measurementCards') && (
-                        <div className="my-1 flex items-center justify-between gap-3 px-1">
-              <label htmlFor="hangoal-readout-mode" className="text-[11px] text-slate-400">Mérési kártyák kijelzése</label>
-              <select
-                id="hangoal-readout-mode"
-                value={readoutMode}
-                onChange={(event) => setReadoutMode(normalizeTuningReadoutMode(event.target.value))}
-                className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] text-white outline-none focus:border-amber-400"
-              >
-                <option value="hz">Frekvencia (Hz)</option>
-                <option value="cents">Eltérés (cent)</option>
-                <option value="note">Hangnév</option>
-                <option value="ratio">Arány az alaphanghoz</option>
-              </select>
-            </div>
-
-            {/* ================= SECTION D: THREE MEASUREMENT CARDS ================= */}
-            <BBCards
-              alap={alap}
-              kvint={kvint}
-              oktav={oktav}
-              hasSignal={hasSignal}
-              selectedRole={selectedRole}
-              onSelectRole={setSelectedRole}
-              toleranceOverrideCents={toleranceOverrideCents}
-              readoutMode={readoutMode}
-              a4Ref={a4Ref}
-            />
-
-            )}
-
-            {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
-{shouldShowTuningPanel('stabilityGraph') && (
-                        <BBStabilityGraph
-              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
-              hasSignal={hasSignal}
-              currentCents={activeCents ?? 0}
-              targetHz={activeResonance.targetHz}
-              toleranceOverrideCents={toleranceOverrideCents}
-              standardDeviationCents={standardDeviationCents}
-            />
-            )}
-
-
-            <div className="mt-2">
-              <button
-                type="button"
-                onClick={() => setIsKeyboardHelpOpen((open) => !open)}
-                aria-expanded={isKeyboardHelpOpen}
-                className="w-full rounded-lg border border-white/10 bg-slate-900/50 px-3 py-2 text-left text-[11px] font-semibold text-slate-300 hover:border-amber-400/30 hover:text-white"
-              >
-                Billentyűzetes vezérlés · ? {isKeyboardHelpOpen ? '−' : '+'}
-              </button>
-              {isKeyboardHelpOpen && (
-                <div className="mt-2 rounded-xl border border-white/10 bg-[#0b111b] p-3">
-                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
-                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">← / →</kbd><p className="mt-1 text-slate-400">Előző/következő aktív hangmező</p></div>
-                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">↑ / ↓</kbd><p className="mt-1 text-slate-400">Rezonanciacsatorna váltása</p></div>
-                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">Space</kbd><p className="mt-1 text-slate-400">Mikrofonmérés indítása/leállítása</p></div>
-                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">D</kbd><p className="mt-1 text-slate-400">Detektálási mód váltása/újraélesítés</p></div>
-                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">R</kbd><p className="mt-1 text-slate-400">Referenciahang (folyamatos mód, mikrofon leállítva)</p></div>
-                    <div><kbd className="rounded border border-slate-600 bg-slate-900 px-1.5 py-1 font-mono text-amber-200">Shift + /</kbd><p className="mt-1 text-slate-400">Súgó megjelenítése/elrejtése</p></div>
-                  </div>
-                  <p className="mt-3 border-t border-white/5 pt-2 text-[10px] leading-relaxed text-slate-500">
-                    A gyorsbillentyűk nem aktívak a beállításablakban, illetve szövegmezőre, gombra vagy más interaktív elemre fókuszálva.
-                  </p>
-                </div>
-              )}
-            </div>
           </div>
         )}
 
