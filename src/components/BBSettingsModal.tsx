@@ -152,13 +152,15 @@ export const BBSettingsModal: React.FC<Props> = ({
     }
   };
   const [backupMessage, setBackupMessage] = React.useState('');
+  const [fundamentalDraft, setFundamentalDraft] = React.useState(String(partialTargetOffsets.fundamentalCents ?? 0));
   const [octaveDraft, setOctaveDraft] = React.useState(String(partialTargetOffsets.octaveCents));
   const [thirdPartialDraft, setThirdPartialDraft] = React.useState(String(partialTargetOffsets.thirdPartialCents));
 
   React.useEffect(() => {
+    setFundamentalDraft(String(partialTargetOffsets.fundamentalCents ?? 0));
     setOctaveDraft(String(partialTargetOffsets.octaveCents));
     setThirdPartialDraft(String(partialTargetOffsets.thirdPartialCents));
-  }, [selectedNoteName, partialTargetOffsets.octaveCents, partialTargetOffsets.thirdPartialCents]);
+  }, [selectedNoteName, partialTargetOffsets.fundamentalCents, partialTargetOffsets.octaveCents, partialTargetOffsets.thirdPartialCents]);
 
   React.useEffect(() => {
     setRenameProfileDraft(activeProfile?.name ?? '');
@@ -174,10 +176,12 @@ export const BBSettingsModal: React.FC<Props> = ({
     if (Number.isFinite(parsed)) {
       const value = Math.max(-MAX_PARTIAL_TARGET_OFFSET_CENTS, Math.min(MAX_PARTIAL_TARGET_OFFSET_CENTS, parsed));
       onChangePartialTargetOffset(field, value);
-      if (field === 'octaveCents') setOctaveDraft(String(value));
+      if (field === 'fundamentalCents') setFundamentalDraft(String(value));
+      else if (field === 'octaveCents') setOctaveDraft(String(value));
       else setThirdPartialDraft(String(value));
     } else {
-      if (field === 'octaveCents') setOctaveDraft(String(partialTargetOffsets.octaveCents));
+      if (field === 'fundamentalCents') setFundamentalDraft(String(partialTargetOffsets.fundamentalCents ?? 0));
+      else if (field === 'octaveCents') setOctaveDraft(String(partialTargetOffsets.octaveCents));
       else setThirdPartialDraft(String(partialTargetOffsets.thirdPartialCents));
     }
   };
@@ -579,35 +583,41 @@ export const BBSettingsModal: React.FC<Props> = ({
           {/* Independent partial targets */}
           <div className="p-3 rounded-xl bg-[#080b0f] border border-white/5 space-y-3">
             <div>
-              <div className="font-semibold text-slate-300">Egyedi felhangcélok</div>
+              <div className="font-semibold text-slate-300">Egyedi hangcélok és felhangkorrekciók</div>
               <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-                A(z) {selectedNoteName} hang mezőjének felhangjai külön is hangolhatók.
-                Az eltérések az ideális 2× és 3× frekvenciához képest értendők, és csak erre a hangra érvényesek.
+                A(z) {selectedNoteName} hang alaphangja (1×), oktávja (2×) és összetett kvintje (3×) külön kalibrálható.
+                A korrekció csak erre a hangra és hangszerprofilra érvényes.
               </p>
             </div>
             {([
+              { field: 'fundamentalCents', label: 'Alaphang (1×)', multiplier: null },
               { field: 'octaveCents', label: 'Oktáv (2×)', multiplier: 2 as const },
-              { field: 'thirdPartialCents', label: '3. parciális (3×)', multiplier: 3 as const },
+              { field: 'thirdPartialCents', label: 'Összetett kvint (3×)', multiplier: 3 as const },
             ] as const).map(({ field, label, multiplier }) => {
-              const offset = partialTargetOffsets[field];
-              const targetHz = partialTargetFrequency(selectedNoteFundamentalHz, multiplier, offset);
+              const offset = field === 'fundamentalCents' ? (partialTargetOffsets.fundamentalCents ?? 0) : partialTargetOffsets[field];
+              const targetHz = multiplier === null
+                ? selectedNoteFundamentalHz
+                : partialTargetFrequency(selectedNoteFundamentalHz, multiplier, offset);
+              const draft = field === 'fundamentalCents' ? fundamentalDraft
+                : field === 'octaveCents' ? octaveDraft : thirdPartialDraft;
               return (
                 <div key={field} className="grid grid-cols-[1fr_88px] gap-2 items-center">
                   <div>
-                    <label htmlFor={field} className="block text-[11px] text-slate-300">{label}</label>
+                    <label htmlFor={'partial-offset-' + field} className="block text-[11px] text-slate-300">{label}</label>
                     <div className="font-mono text-[10px] text-slate-500 mt-0.5">{targetHz.toFixed(3)} Hz célfrekvencia</div>
                   </div>
                   <div className="relative">
                     <input
-                      id={field}
+                      id={'partial-offset-' + field}
                       type="number"
                       min={-MAX_PARTIAL_TARGET_OFFSET_CENTS}
                       max={MAX_PARTIAL_TARGET_OFFSET_CENTS}
                       step="0.1"
-                      value={field === 'octaveCents' ? octaveDraft : thirdPartialDraft}
+                      value={draft}
                       disabled={freezeTargetSettings}
                       onChange={(event) => {
-                        if (field === 'octaveCents') setOctaveDraft(event.target.value);
+                        if (field === 'fundamentalCents') setFundamentalDraft(event.target.value);
+                        else if (field === 'octaveCents') setOctaveDraft(event.target.value);
                         else setThirdPartialDraft(event.target.value);
                       }}
                       onBlur={(event) => commitOffset(field, event.target.value)}
@@ -621,9 +631,10 @@ export const BBSettingsModal: React.FC<Props> = ({
             <button
               type="button"
               onClick={onResetPartialTargetOffsets}
-              className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-[11px] text-slate-300 hover:bg-slate-800"
+              disabled={freezeTargetSettings}
+              className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-[11px] text-slate-300 hover:bg-slate-800 disabled:opacity-40"
             >
-              Felhangcélok visszaállítása (2× / 3×)
+              Minden célkorrekció visszaállítása (1× / 2× / 3×)
             </button>
           </div>
 
