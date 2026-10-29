@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { strobeContrastFromDb, strobeSharpnessFromCents } from './strobeVisualMetrics';
 
-describe('Linotune-inspired strobe visual metrics', () => {
+describe('Hangoal-inspired strobe visual metrics', () => {
   it('maps dBFS peak levels to a bounded visual contrast range', () => {
     assert.equal(strobeContrastFromDb(null), 0);
     assert.equal(strobeContrastFromDb(Number.NaN), 0);
