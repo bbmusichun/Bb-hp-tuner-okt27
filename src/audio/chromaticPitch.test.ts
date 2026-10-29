@@ -20,6 +20,17 @@ test('applies saved per-note octave and third-partial calibration offsets', () =
   assert.ok(Math.abs(target.fifthFreq - target.frequency * 3 * Math.pow(2, 15 / 1200)) < 1e-8);
 });
 
+
+test('applies saved fundamental calibration before deriving its octave and compound fifth', () => {
+  const target = buildChromaticTargetNote(62, 440, 'd-kurd-9', {
+    'd-kurd-9:D4': { fundamentalCents: 7.5, octaveCents: -3, thirdPartialCents: 4 },
+  });
+  assert.ok(target);
+  assert.ok(Math.abs(1200 * Math.log2(target.frequency / 293.6647679174) - 7.5) < 1e-7);
+  assert.ok(Math.abs(1200 * Math.log2(target.octaveFreq / (target.frequency * 2)) + 3) < 1e-8);
+  assert.ok(Math.abs(1200 * Math.log2(target.fifthFreq / (target.frequency * 3)) - 4) < 1e-8);
+});
+
 test('rejects out-of-range and non-integer MIDI notes', () => {
   assert.equal(buildChromaticTargetNote(CHROMATIC_MIN_MIDI - 1, 440, 'scale', {}), null);
   assert.equal(buildChromaticTargetNote(CHROMATIC_MAX_MIDI + 1, 440, 'scale', {}), null);
