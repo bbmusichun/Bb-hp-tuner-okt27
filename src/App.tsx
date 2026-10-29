@@ -584,7 +584,7 @@ export default function App() {
   const selectedMidi = useMemo(() => midiFromFrequency(selectedNote.frequency, a4Ref), [selectedNote.frequency, a4Ref]);
 
   const handleSetTranspose = (value: number) => {
-    if (freezeTargets) return;
+    if (freezeTargets || windowSyncMode === 'slave') return;
     const next = Math.max(-12, Math.min(12, Math.round(value)));
     setTransposeSemitones(next);
     setChromaticTargetMidi(null);
@@ -592,6 +592,7 @@ export default function App() {
   };
 
   const handleSelectChromaticMidi = (midi: number) => {
+    if (windowSyncMode === 'slave') return;
     const target = buildChromaticTargetNote(midi, a4Ref, currentScale.id, partialTargetOffsets);
     if (!target) return;
     autoDetectionRef.current = null;
@@ -603,12 +604,14 @@ export default function App() {
   };
 
   const handleSelectToneFieldNote = (note: ToneFieldNote) => {
+    if (windowSyncMode === 'slave') return;
     setChromaticTargetMidi(null);
     autoDetectionRef.current = null;
     setSelectedNote(note);
   };
 
   const handleToggleToneNote = (noteId: string) => {
+    if (windowSyncMode === 'slave') return;
     const isCurrentlyDisabled = disabledToneNoteIds.has(noteId);
     if (!isCurrentlyDisabled && enabledToneNotes.length <= 1) return;
 
@@ -639,7 +642,7 @@ export default function App() {
   const selectedPartialOffsets = partialTargetOffsets[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
 
   const updateSelectedPartialOffset = (field: PartialTargetOffsetField, value: number) => {
-    if (freezeTargets) return;
+    if (freezeTargets || windowSyncMode === 'slave') return;
     setPartialTargetOffsets((previous) => {
       const current = previous[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
       const next: PartialTargetOffset = { ...current, [field]: value };
@@ -654,7 +657,7 @@ export default function App() {
 
 
   const handleCalibrateBuiltInRole = (role: 'fundamental' | 'fifth' | 'octave', targetHz: number, measuredHz: number) => {
-    if (freezeTargets) return;
+    if (freezeTargets || windowSyncMode === 'slave') return;
     const field: PartialTargetOffsetField = role === 'fundamental'
       ? 'fundamentalCents'
       : role === 'fifth' ? 'thirdPartialCents' : 'octaveCents';
@@ -681,6 +684,7 @@ export default function App() {
   });
 
   const handleSelectScale = (scale: HandpanScale) => {
+    if (windowSyncMode === 'slave') return;
     setChromaticTargetMidi(null);
     setCurrentScale(scale);
     setInstrumentProfiles((previous) => previous.map((profile) => profile.id === activeInstrumentProfileId
@@ -689,7 +693,7 @@ export default function App() {
   };
 
   const handleApplyCustomScale = (name: string, source: string): boolean => {
-    if (!activeInstrumentProfile) return false;
+    if (windowSyncMode === 'slave' || !activeInstrumentProfile) return false;
     const scaleId = 'custom-' + activeInstrumentProfileId;
     const parsed = parseCustomScale(name, source, scaleId);
     if (!parsed) return false;
@@ -703,6 +707,7 @@ export default function App() {
   };
 
   const handleSelectInstrumentProfile = (profileId: string) => {
+    if (windowSyncMode === 'slave') return;
     setChromaticTargetMidi(null);
     const profilesWithCurrentSettings = instrumentProfiles.map((profile) =>
       profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
@@ -1050,7 +1055,7 @@ export default function App() {
         analysisRateWindowRef.current = rateSample.window;
         if (rateSample.fps !== null) setAnalysisFps(rateSample.fps);
 
-        if (!isReferenceTonePlaying && isDetectionArmed(autoDetectionMode, singleShotCaptured) && chromaticTargetMidi === null) {
+        if (windowSyncMode !== 'slave' && !isReferenceTonePlaying && isDetectionArmed(autoDetectionMode, singleShotCaptured) && chromaticTargetMidi === null) {
           const detected = bbAudioEngine.detectNote(
             enabledToneNotes.map((note) => ({ id: note.id, noteName: note.noteName, frequency: note.frequency }))
           );
@@ -1110,7 +1115,7 @@ export default function App() {
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isSignalInputActive, isReferenceTonePlaying, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
+  }, [isSignalInputActive, isReferenceTonePlaying, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi, windowSyncMode]);
 
   const handleSelectAudioInputDevice = useCallback(async (deviceId: string) => {
     setSelectedAudioInputDeviceId(deviceId);
