@@ -14,6 +14,7 @@ interface Props {
   hasSignal: boolean;
   transientHoldoff: boolean;
   toleranceOverrideCents?: number | null;
+  referenceHz?: number;
 }
 
 interface BandReading {
@@ -48,6 +49,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
   hasSignal,
   transientHoldoff,
   toleranceOverrideCents = null,
+  referenceHz = 440,
 }) => {
   const [bands, setBands] = useState<StrobeBandConfig[]>(loadCustomBands);
   const [readings, setReadings] = useState<Record<string, BandReading>>({});
@@ -291,7 +293,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
                         onChange={(event) => {
                           const draft = event.target.value;
                           setTargetDrafts((previous) => ({ ...previous, [band.id]: draft }));
-                          const value = parseStrobeTargetExpression(draft);
+                          const value = parseStrobeTargetExpression(draft, referenceHz);
                           if (value !== null) updateBand(band.id, { targetHz: value });
                         }}
                         onBlur={() => setTargetDrafts((previous) => {
