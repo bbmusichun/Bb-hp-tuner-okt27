@@ -671,7 +671,7 @@ export default function App() {
   };
 
   const resetSelectedPartialOffsets = () => {
-    if (freezeTargets) return;
+    if (freezeTargets || windowSyncMode === 'slave') return;
     setPartialTargetOffsets((previous) => {
       const copy = { ...previous };
       delete copy[selectedPartialOffsetKey];
@@ -1438,6 +1438,7 @@ export default function App() {
           void keyboardActionsRef.current.handleToggleMic();
           return;
         case 'cycle-detection': {
+          if (windowSyncMode === 'slave') return;
           if (autoDetectionMode === 'single-shot' && singleShotCaptured) {
             setSingleShotCaptured(false);
             autoDetectionRef.current = null;
@@ -1531,6 +1532,7 @@ export default function App() {
                   ? 'Egyszeri felismerés újraélesítése'
                   : 'Módváltás: folyamatos → egyszeri → ki. Egyszeri módban az első stabil felismerés után kattintással újraélesíthető.'}
                 aria-label={autoDetectionMode === 'single-shot' && singleShotCaptured ? 'Egyszeri felismerés újraélesítése' : 'Automatikus hangfelismerés módja'}
+                disabled={windowSyncMode === 'slave'}
               >
                 {autoDetectionMode === 'off'
                   ? 'AUTO KI'
@@ -2026,7 +2028,7 @@ export default function App() {
                     <option value="slave">Slave · követő</option>
                   </select>
                 </div>
-                {windowSyncMode !== 'off' && (
+                {(windowSyncMode !== 'off' || windowSyncStatus === 'unsupported') && (
                   <p role="status" className={'mt-2 text-[10px] ' + (windowSyncStatus === 'connected' || windowSyncStatus === 'master' ? 'text-emerald-300' : windowSyncStatus === 'unsupported' || windowSyncStatus === 'error' ? 'text-rose-300' : 'text-amber-200')}>
                     {windowSyncStatus === 'master'
                       ? 'Ez az ablak a Master; a követő ablakok kérésre megkapják az aktuális célhangot.'
