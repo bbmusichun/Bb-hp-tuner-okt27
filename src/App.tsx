@@ -452,7 +452,7 @@ export default function App() {
         profile.id === activeInstrumentProfileId ? saveActiveProfileSettings(profile) : profile,
       );
       const rawBands = localStorage.getItem('hangoal-custom-strobe-bands-v1');
-      let customStrobeBands: unknown = [];
+      let customStrobeBands: ReturnType<typeof normalizeStrobeBands> = [];
       if (rawBands) {
         const storedBands: unknown = JSON.parse(rawBands);
         if (!Array.isArray(storedBands)) throw new Error('Az egyedi sávbeállítás sérült.');
