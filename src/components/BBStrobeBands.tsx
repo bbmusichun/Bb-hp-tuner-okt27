@@ -387,7 +387,7 @@ export const BBStrobeBands: React.FC<Props> = ({
       {(selectedRole === 'fundamental' || selectedRole === 'fifth' || selectedRole === 'octave') && (() => {
         const reading = readings[selectedRole];
         const targetHz = selectedRole === 'fifth' ? kvint.targetHz : selectedRole === 'octave' ? oktav.targetHz : alap.targetHz;
-        const ready = active && hasSignal && !transientHoldoff &&
+        const ready = active && hasSignal && !transientHoldoff && !isPaused &&
           reading?.measuredHz !== null && reading?.measuredHz !== undefined &&
           Number.isFinite(reading.measuredHz) && reading.measuredHz > 0 &&
           targetHz !== null && Number.isFinite(targetHz) && targetHz > 0;
