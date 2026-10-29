@@ -1002,6 +1002,7 @@ export default function App() {
           <div className="flex-1 flex flex-col justify-center">
             <BBHangmezoView
               notes={enabledToneNotes}
+              totalNoteCount={toneNotes.length}
               selectedNote={selectedNote}
               onSelectNote={handleSelectToneFieldNote}
               hasSignal={hasSignal}
