@@ -225,6 +225,7 @@ export default function App() {
   const ownDPlayerRef = useRef<HTMLAudioElement | null>(null);
   const [ownDLoop, setOwnDLoop] = useState(false);
   const [isOwnDPlaying, setIsOwnDPlaying] = useState(false);
+  const [ownDAudioError, setOwnDAudioError] = useState('');
   const strikeToneTimerRef = useRef<number | null>(null);
   const previousTransientHoldoffRef = useRef(false);
 
@@ -821,6 +822,12 @@ export default function App() {
       setOktav(clearMeasurement(oktav, selectedNote.octaveFreq));
     } else {
       setMicError('');
+      // Stop the reference recording before opening the microphone to avoid speaker-to-mic feedback.
+      if (ownDPlayerRef.current && !ownDPlayerRef.current.paused) {
+        ownDPlayerRef.current.pause();
+        ownDPlayerRef.current.currentTime = 0;
+        setIsOwnDPlaying(false);
+      }
       const ok = await bbAudioEngine.startMicrophone();
       if (ok) {
         analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
@@ -1183,9 +1190,11 @@ export default function App() {
                 src="/audio/sajat-d-handpan.mp3"
                 loop={ownDLoop}
                 preload="metadata"
+                onCanPlay={() => setOwnDAudioError('')}
+                onError={() => setOwnDAudioError('A saját D-felvétel nem tölthető be. Frissítsd az oldalt, és próbáld újra.')}
                 onEnded={() => setIsOwnDPlaying(false)}
                 onPause={() => setIsOwnDPlaying(false)}
-                onPlay={() => setIsOwnDPlaying(true)}
+                onPlay={() => { setOwnDAudioError(''); setIsOwnDPlaying(true); }}
               />
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -1201,17 +1210,25 @@ export default function App() {
                       player.pause();
                       player.currentTime = 0;
                       setIsOwnDPlaying(false);
-                    } else {
-                      void player.play().then(() => setIsOwnDPlaying(true)).catch(() => setIsOwnDPlaying(false));
+                    } else if (!isListening) {
+                      setOwnDAudioError('');
+                      void player.play().then(() => setIsOwnDPlaying(true)).catch(() => {
+                        setIsOwnDPlaying(false);
+                        setOwnDAudioError('A lejátszás nem indult el. Érintsd meg újra a Lejátszás gombot.');
+                      });
                     }
                   }}
                   className="shrink-0 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20"
                   aria-label={isOwnDPlaying ? "Saját D leállítása" : "Saját D lejátszása"}
+                  disabled={isListening}
+                  title={isListening ? 'A saját felvétel lejátszásához előbb állítsd le a mikrofonmérést.' : undefined}
                 >
                   <Volume2 className="h-4 w-4" />
                   {isOwnDPlaying ? "Leállítás" : "Lejátszás"}
                 </button>
               </div>
+              {isListening && <p className="mt-2 text-[11px] text-amber-200/80">A mikrofonmérés aktív; a felvétel lejátszása ilyenkor le van tiltva, hogy a hangszóró ne zavarja a mérést.</p>}
+              {ownDAudioError && <p role="alert" className="mt-2 text-[11px] text-rose-300">{ownDAudioError}</p>}
               <label className="mt-3 flex items-center gap-2 text-xs text-slate-300">
                 <input
                   type="checkbox"
