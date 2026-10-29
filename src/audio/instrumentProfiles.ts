@@ -103,3 +103,33 @@ export function resolveActiveInstrumentProfileId(
   if (typeof value === 'string' && profiles.some((profile) => profile.id === value)) return value;
   return profiles[0]?.id ?? 'instrument-default';
 }
+
+/** Parse and fully validate an exported profile backup before the UI changes state. */
+export function parseInstrumentProfileBackup(
+  value: unknown,
+  knownScaleIds: readonly string[],
+  fallback: InstrumentProfile,
+): InstrumentProfile[] | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const backup = value as Record<string, unknown>;
+  if (backup.schemaVersion !== 1 || !Array.isArray(backup.profiles) || backup.profiles.length < 1 || backup.profiles.length > 100) {
+    return null;
+  }
+  const rawProfiles = backup.profiles;
+  const sentinelId = '__bb_tuner_invalid_backup_fallback__';
+  if (rawProfiles.some((item) => !item || typeof item !== 'object' || Array.isArray(item) ||
+    typeof (item as Record<string, unknown>).id !== 'string' ||
+    (item as Record<string, unknown>).id === sentinelId)) return null;
+
+  const normalized = normalizeInstrumentProfiles(rawProfiles, knownScaleIds, {
+    ...fallback,
+    id: sentinelId,
+    name: 'Import-validation fallback',
+  });
+  if (normalized.length !== rawProfiles.length) return null;
+  for (let index = 0; index < normalized.length; index += 1) {
+    const raw = rawProfiles[index] as Record<string, unknown>;
+    if (normalized[index].id !== raw.id) return null;
+  }
+  return normalized;
+}
