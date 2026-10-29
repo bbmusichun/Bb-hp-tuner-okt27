@@ -76,7 +76,9 @@ export class BBAudioEngine {
         audio: {
           echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: false,
+          // Ask the browser/OS to normalize microphone level for quiet strikes.
+          // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
+          autoGainControl: true,
         },
       });
 
