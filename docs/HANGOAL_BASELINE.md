@@ -22,7 +22,7 @@ This document defines the functional baseline for the Hangoal handpan tuner from
 | Automatic pitch detection and single-shot/continuous modes | Added continuous, single-shot and off modes. Single-shot latches after three consistent frames and can be re-armed with the mode button; state is backward-compatible with the previous AUTO boolean preference. Real-device timing acceptance remains open. |
 | Exact peak spectrum, peak hover values, noise-floor suppression, doubled-peak inspection | Full spectrum/waterfall and live diagnostic panel are present. The panel estimates the median noise floor and flags possible near-target double peaks without changing the tuning result; heuristic and physical-device validation remain open. |
 | Hz / cents / note / just-ratio readout modes | Measurement cards now offer persisted Hz, cent, measured note-name and measured ratio-to-fundamental modes. Ratio mode also reports the corresponding target ratio; tests cover missing-data behavior. |
-| Keyboard control and front/rear settings panel | Not yet implemented to acceptance level. |
+| Keyboard control and front/rear settings panel | Global tuning shortcuts are implemented for note navigation, resonance selection, microphone start/stop, detection mode cycling/re-arming, and reference tone (only where safe), with an on-screen help panel. Keyboard support in settings/front-rear panel remains out of scope. |
 | Input clipping/level and performance feedback | Partial: input-level metadata exists; live clipping and frame-rate indicators remain. |
 | Save and restore tuning configuration | Partial: instrument profiles and preferences exist; full configuration restore needs acceptance tests. |
 
