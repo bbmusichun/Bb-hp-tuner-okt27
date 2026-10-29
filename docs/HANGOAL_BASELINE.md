@@ -14,7 +14,7 @@ This document defines the functional baseline for the Hangoal handpan tuner from
 
 | Capability | Current baseline / remaining work |
 | --- | --- |
-| Strobe bands with arbitrary offsets | Partial: three resonance bands exist; configurable band data validation is now defined; editor and live arbitrary-frequency analysis remain to implement. |
+| Strobe bands with arbitrary offsets | The three original resonance bands remain, with an additional editor for up to eight custom target-frequency bands. Custom bands support enable/disable, rename, Hz target, cent offset, live FFT peak search, cents readout and local persistence. Physical-device accuracy acceptance remains open. |
 | Continuous / strike-triggered / off reference tone | Partial: target sine tone exists; per-band three-state modes remain to implement. |
 | Base frequency, cents offset, concert reference | Partial: A4 calibration and per-note 2x/3x offsets exist; full global base/transposition model remains. |
 | Pitch dial with note and octave selection | Partial: handpan tone-field selection exists; full chromatic dial/octave/transposition remains. |
