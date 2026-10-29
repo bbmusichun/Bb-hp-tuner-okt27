@@ -6,26 +6,16 @@ import { isWithinTuningTolerance, tuningToleranceCents, type TuningToleranceMode
 import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
 import type { ResonanceMeasurement } from '../types/tuner';
+import { getStrikePitchPipeTargets, nextPitchPipeMode, normalizePitchPipeModes, pitchPipeModeLabel, pitchPipeVoiceId, type PitchPipeMode } from '../audio/pitchPipeModes';
 
 const STORAGE_KEY = 'hangoal-custom-strobe-bands-v1';
 const MAX_CUSTOM_BANDS = 8;
-type PitchPipeMode = 'continuous' | 'strike' | 'off';
 const PITCH_PIPE_STORAGE_KEY = 'hangoal-strobe-pitch-pipe-modes-v1';
 function loadPitchPipeModes(): Record<string, PitchPipeMode> {
   try {
     const raw = localStorage.getItem(PITCH_PIPE_STORAGE_KEY);
-    if (!raw) return {};
-    const value: unknown = JSON.parse(raw);
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
-      .filter((entry): entry is [string, PitchPipeMode] => entry[0].length <= 80 && (entry[1] === 'continuous' || entry[1] === 'strike' || entry[1] === 'off')));
+    return raw ? normalizePitchPipeModes(JSON.parse(raw)) : {};
   } catch { return {}; }
-}
-function nextPitchPipeMode(mode: PitchPipeMode): PitchPipeMode {
-  return mode === 'off' ? 'continuous' : mode === 'continuous' ? 'strike' : 'off';
-}
-function pitchPipeModeLabel(mode: PitchPipeMode): string {
-  return mode === 'continuous' ? 'Folyamatos hang' : mode === 'strike' ? 'Ütésre rövid hang' : 'Kikapcsolva';
 }
 const ROW_HEIGHT = 38;
 const BAND_COLORS = ['#f59e0b', '#22d3ee', '#c084fc', '#34d399', '#fb7185', '#60a5fa', '#eab308', '#a3e635'];
@@ -106,8 +96,6 @@ export const BBStrobeBands: React.FC<Props> = ({
     const band = customBands.find((item) => item.id === id);
     return band ? getStrobeBandTargetHz(band, baseFrequencyHz) : null;
   };
-  const pitchPipeVoiceId = (id: string) => 'strobe:' + id;
-
   const cyclePitchPipe = (id: string, fallbackHz: number) => {
     const nextMode = nextPitchPipeMode(modeForPipe(id));
     const voiceId = pitchPipeVoiceId(id);
@@ -131,11 +119,8 @@ export const BBStrobeBands: React.FC<Props> = ({
     if (!active) return;
 
     // Every band set to strike mode gets a short tone on the same rising edge.
-    Object.entries(pitchPipeModes).forEach(([id, mode]) => {
-      if (mode !== 'strike') return;
-      const targetHz = targetForPipe(id);
-      if (targetHz === null || !Number.isFinite(targetHz) || targetHz <= 0) return;
-      bbAudioEngine.playPitchPipeTone(pitchPipeVoiceId(id), targetHz, 180);
+    getStrikePitchPipeTargets(pitchPipeModes, targetForPipe).forEach(({ id, frequencyHz }) => {
+      bbAudioEngine.playPitchPipeTone(pitchPipeVoiceId(id), frequencyHz, 180);
     });
   }, [transientHoldoff, active, pitchPipeModes, alap.targetHz, kvint.targetHz, oktav.targetHz, customBands, baseFrequencyHz]);
 
