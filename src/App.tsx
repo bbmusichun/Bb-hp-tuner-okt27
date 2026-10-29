@@ -1,5 +1,5 @@
 /**
- * BB Tuner – Handpan hangoló és felhangelemző
+ * Hangoal – Handpan hangoló és felhangelemző
  * Pixel-perfect implementation of the functional specification and visual design.
  */
 
@@ -156,6 +156,23 @@ function loadTuningPreferences(): {
     return defaults;
   }
 }
+function loadOwnDVolumePreference(): number {
+  try {
+    const stored = localStorage.getItem('hangoal-own-d-volume-v1');
+    if (stored === null) return 0.8;
+    const value = Number(stored);
+    return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.8;
+  } catch {
+    return 0.8;
+  }
+}
+
+function formatAudioTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const totalSeconds = Math.floor(seconds);
+  return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`;
+}
+
 function loadDisabledToneNotesByScale(): Record<string, string[]> {
   try {
     return normalizeDisabledToneNotes(JSON.parse(localStorage.getItem('hangoal-disabled-tone-notes-v1') ?? '{}'));
@@ -223,8 +240,22 @@ export default function App() {
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
   const [isReferenceTonePlaying, setIsReferenceTonePlaying] = useState(false);
   const ownDPlayerRef = useRef<HTMLAudioElement | null>(null);
-  const [ownDLoop, setOwnDLoop] = useState(false);
+  const [ownDLoop, setOwnDLoop] = useState(() => {
+    try {
+      return localStorage.getItem('hangoal-own-d-loop-v1') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isOwnDPlaying, setIsOwnDPlaying] = useState(false);
+  const [ownDAudioError, setOwnDAudioError] = useState('');
+  const [ownDVolume, setOwnDVolume] = useState<number>(loadOwnDVolumePreference);
+  const [ownDAudioCurrentTime, setOwnDAudioCurrentTime] = useState(0);
+  const [ownDAudioDuration, setOwnDAudioDuration] = useState(0);
+  useEffect(() => {
+    if (ownDPlayerRef.current) ownDPlayerRef.current.volume = ownDVolume;
+  }, [ownDVolume]);
+
   const strikeToneTimerRef = useRef<number | null>(null);
   const previousTransientHoldoffRef = useRef(false);
 
@@ -614,6 +645,7 @@ export default function App() {
 
   // Live Audio Analysis State
   const [isListening, setIsListening] = useState(false);
+  const [autoGainControlStatus, setAutoGainControlStatus] = useState<boolean | null>(null);
   const [micError, setMicError] = useState('');
   const [hasSignal, setHasSignal] = useState(false);
   const [inputLevelDb, setInputLevelDb] = useState(-100);
@@ -804,6 +836,7 @@ export default function App() {
     if (isListening) {
       bbAudioEngine.stopMicrophone();
       setIsListening(false);
+      setAutoGainControlStatus(null);
       setMicError('');
       setHasSignal(false);
       setInputLevelDb(-100);
@@ -821,12 +854,21 @@ export default function App() {
       setOktav(clearMeasurement(oktav, selectedNote.octaveFreq));
     } else {
       setMicError('');
+      // Stop the reference recording before opening the microphone to avoid speaker-to-mic feedback.
+      if (ownDPlayerRef.current && !ownDPlayerRef.current.paused) {
+        ownDPlayerRef.current.pause();
+        ownDPlayerRef.current.currentTime = 0;
+        setOwnDAudioCurrentTime(0);
+        setIsOwnDPlaying(false);
+      }
       const ok = await bbAudioEngine.startMicrophone();
       if (ok) {
         analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
         setAnalysisFps(null);
+        setAutoGainControlStatus(bbAudioEngine.getAutoGainControlStatus());
         setIsListening(true);
       } else {
+        setAutoGainControlStatus(null);
         setMicError(bbAudioEngine.getErrorMessage() || 'A mikrofon nem indítható el. Ellenőrizd az engedélyeket.');
       }
     }
@@ -1055,14 +1097,11 @@ export default function App() {
               <Menu className="w-5 h-5" />
             </button>
 
-            {/* BB Tuner title */}
+            {/* Hangoal title */}
             <div className="text-center leading-none">
-              <div className="text-lg font-black tracking-tight flex items-center justify-center gap-1">
-                <span className="text-[#f59e0b]">BB</span>
-                <span className="text-white">Tuner</span>
-              </div>
+              <div className="text-lg font-black tracking-tight text-white">Hangoal</div>
               <div className="text-[10px] text-slate-400 font-normal tracking-wide mt-0.5">
-                Handpan tuning analyzer
+                Handpan hangoló és felhangelemző
               </div>
             </div>
 
@@ -1160,6 +1199,15 @@ export default function App() {
             </div>
           </div>
         </div>
+        {isListening && autoGainControlStatus === false && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mx-1 mb-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200"
+          >
+            A böngésző nem aktiválta az automatikus mikrofonerősítést. Halk ütéseknél a hangfelismerés bizonytalanabb lehet.
+          </div>
+        )}
         {isListening && (transientHoldoff || highInputLevel || inputNearClip) && (
           <div
             role="status"
@@ -1183,9 +1231,25 @@ export default function App() {
                 src="/audio/sajat-d-handpan.mp3"
                 loop={ownDLoop}
                 preload="metadata"
-                onEnded={() => setIsOwnDPlaying(false)}
-                onPause={() => setIsOwnDPlaying(false)}
-                onPlay={() => setIsOwnDPlaying(true)}
+                onLoadedMetadata={(event) => {
+                  const duration = event.currentTarget.duration;
+                  setOwnDAudioDuration(Number.isFinite(duration) ? duration : 0);
+                }}
+                onDurationChange={(event) => {
+                  const duration = event.currentTarget.duration;
+                  setOwnDAudioDuration(Number.isFinite(duration) ? duration : 0);
+                }}
+                onTimeUpdate={(event) => setOwnDAudioCurrentTime(event.currentTarget.currentTime)}
+                onCanPlay={() => setOwnDAudioError('')}
+                onError={() => {
+                  setIsOwnDPlaying(false);
+                  setOwnDAudioDuration(0);
+                  setOwnDAudioCurrentTime(0);
+                  setOwnDAudioError('A saját D-felvétel nem tölthető be. Frissítsd az oldalt, és próbáld újra.');
+                }}
+                onEnded={() => { setIsOwnDPlaying(false); setOwnDAudioCurrentTime(0); }}
+                onPause={(event) => { if (event.currentTarget.paused) setIsOwnDPlaying(false); }}
+                onPlay={() => { setOwnDAudioError(''); setIsOwnDPlaying(true); }}
               />
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -1200,23 +1264,87 @@ export default function App() {
                     if (isOwnDPlaying) {
                       player.pause();
                       player.currentTime = 0;
+                      setOwnDAudioCurrentTime(0);
                       setIsOwnDPlaying(false);
-                    } else {
-                      void player.play().then(() => setIsOwnDPlaying(true)).catch(() => setIsOwnDPlaying(false));
+                    } else if (!isListening) {
+                      setOwnDAudioError('');
+                      void player.play().then(() => setIsOwnDPlaying(true)).catch(() => {
+                        setIsOwnDPlaying(false);
+                        setOwnDAudioError('A lejátszás nem indult el. Érintsd meg újra a Lejátszás gombot.');
+                      });
                     }
                   }}
                   className="shrink-0 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20"
                   aria-label={isOwnDPlaying ? "Saját D leállítása" : "Saját D lejátszása"}
+                  disabled={isListening}
+                  title={isListening ? 'A saját felvétel lejátszásához előbb állítsd le a mikrofonmérést.' : undefined}
                 >
                   <Volume2 className="h-4 w-4" />
                   {isOwnDPlaying ? "Leállítás" : "Lejátszás"}
                 </button>
               </div>
+              <div className="mt-3">
+                <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                  <label htmlFor="hangoal-own-d-position">Felvétel pozíciója</label>
+                  <span className="font-mono tabular-nums">{formatAudioTime(ownDAudioCurrentTime)} / {formatAudioTime(ownDAudioDuration)}</span>
+                </div>
+                <input
+                  id="hangoal-own-d-position"
+                  type="range"
+                  min={0}
+                  max={Math.max(ownDAudioDuration, 0.1)}
+                  step={0.05}
+                  value={Math.min(ownDAudioCurrentTime, ownDAudioDuration || 0)}
+                  onChange={(event) => {
+                    const nextTime = Number(event.target.value);
+                    if (ownDPlayerRef.current && Number.isFinite(nextTime)) {
+                      ownDPlayerRef.current.currentTime = nextTime;
+                      setOwnDAudioCurrentTime(nextTime);
+                    }
+                  }}
+                  disabled={!ownDAudioDuration}
+                  aria-label="Lejátszási pozíció"
+                  className="w-full accent-amber-400 disabled:opacity-40"
+                />
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <label htmlFor="hangoal-own-d-volume" className="shrink-0 text-xs text-slate-300">Hangerő</label>
+                <input
+                  id="hangoal-own-d-volume"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={Math.round(ownDVolume * 100)}
+                  onChange={(event) => {
+                    const nextVolume = Math.max(0, Math.min(1, Number(event.target.value) / 100));
+                    setOwnDVolume(nextVolume);
+                    try {
+                      localStorage.setItem('hangoal-own-d-volume-v1', String(nextVolume));
+                    } catch {
+                      // Keep volume control usable when browser storage is unavailable.
+                    }
+                  }}
+                  aria-label="Saját D hangerő"
+                  className="min-w-0 flex-1 accent-amber-400"
+                />
+                <span className="w-9 text-right text-xs tabular-nums text-slate-400">{Math.round(ownDVolume * 100)}%</span>
+              </div>
+              {isListening && <p className="mt-2 text-[11px] text-amber-200/80">A mikrofonmérés aktív; a felvétel lejátszása ilyenkor le van tiltva, hogy a hangszóró ne zavarja a mérést.</p>}
+              {ownDAudioError && <p role="alert" className="mt-2 text-[11px] text-rose-300">{ownDAudioError}</p>}
               <label className="mt-3 flex items-center gap-2 text-xs text-slate-300">
                 <input
                   type="checkbox"
                   checked={ownDLoop}
-                  onChange={(event) => setOwnDLoop(event.target.checked)}
+                  onChange={(event) => {
+                    const nextLoop = event.target.checked;
+                    setOwnDLoop(nextLoop);
+                    try {
+                      localStorage.setItem('hangoal-own-d-loop-v1', String(nextLoop));
+                    } catch {
+                      // Keep playback usable when browser storage is unavailable.
+                    }
+                  }}
                   className="h-4 w-4 accent-amber-400"
                 />
                 Loopolva (folyamatos ismétlés)

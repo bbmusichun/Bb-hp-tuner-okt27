@@ -293,7 +293,7 @@ export default function SineReferenceBench() {
       <div className="mx-auto max-w-3xl space-y-5">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[.2em] text-amber-400">BB Tuner · Digitális labor</p>
+            <p className="text-xs font-bold uppercase tracking-[.2em] text-amber-400">Hangoal · digitális labor</p>
             <h1 className="mt-1 text-2xl font-bold">Szinuszreferencia önellenőrzés</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-400">
               Két külön teszt: hangtalan digitális önellenőrzés és halk, hangszórón lejátszott szinusz mikrofonos visszamérése.

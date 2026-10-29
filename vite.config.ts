@@ -13,11 +13,17 @@ export default defineConfig(() => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
+        // Keep the personal reference recording available after the app has been installed/offline-cached.
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,txt,woff2,mp3}'],
+          // An unrelated 6 MB AI Studio image is too large for precache; omit it but keep the small handpan MP3.
+          globIgnores: ['**/assets/aistudio/IMG_5394_912014bf.png'],
+        },
         manifest: {
           id: '/',
-          name: 'BB Tuner – Handpan Hangoló és Akusztikai Labor',
-          short_name: 'BB Tuner',
-          description: 'Professzionális munkára tervezett handpan hangoló, felhangelemző és mérési napló.',
+          name: 'Hangoal – Handpan hangoló és felhangelemző',
+          short_name: 'Hangoal',
+          description: 'Mobil handpan hangoló valós idejű hangfelismeréssel, felhangelemzéssel, hangszerprofilokkal és mérési naplóval.',
           theme_color: '#0d1117',
           background_color: '#090d16',
           display: 'standalone',

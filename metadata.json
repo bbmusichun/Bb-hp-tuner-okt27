@@ -1,6 +1,6 @@
 {
-  "name": "BB Tuner – Handpan Hangoló és Akusztikai Labor",
-  "description": "Mobil handpan hangoló élő felhangelemzéssel, fizikai hangszerprofilokkal, egyedi célfrekvenciákkal és exportálható mérési naplóval.",
+  "name": "Hangoal – Handpan hangoló és felhangelemző",
+  "description": "Mobil handpan hangoló automatikus hangfelismeréssel, élő felhangelemzéssel, fizikai hangszerprofilokkal, egyedi célfrekvenciákkal és exportálható mérési naplóval.",
   "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

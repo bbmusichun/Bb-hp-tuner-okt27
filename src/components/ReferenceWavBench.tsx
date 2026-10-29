@@ -162,7 +162,7 @@ export default function ReferenceWavBench() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'bb-tuner-wav-analysis.csv';
+    link.download = 'hangoal-wav-analysis.csv';
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -171,7 +171,7 @@ export default function ReferenceWavBench() {
     <div className="mx-auto max-w-5xl space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.2em] text-amber-400">BB Tuner · referencia labor</p>
+          <p className="text-xs font-bold uppercase tracking-[.2em] text-amber-400">Hangoal · referencia labor</p>
           <h1 className="mt-1 text-2xl font-bold">Valós handpan WAV-elemzés</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">Offline elemzés rögzített hangfájlból. Nincs szükség mikrofonra; a felvétel nem kerül feltöltésre szerverre.</p>
         </div>

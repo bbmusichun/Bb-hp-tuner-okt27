@@ -1,14 +1,17 @@
-# BB Tuner — kiadás előtti átvételi ellenőrzőlista
+# Hangoal — kiadás előtti átvételi ellenőrzőlista
 
 Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefonon/böngészőben. A GitHub CI sikeres buildet és automatizált teszteket jelent; nem helyettesíti a valós mikrofonos átvételi mérést.
 
-## 1. Telepítés és mikrofon
+## 1. Telepítés, mikrofon és saját referenciafelvétel
 
 - [ ] HTTPS-en nyílik meg a végleges URL.
 - [ ] iPhone/Safari és a célként megadott másik böngésző megnyitja az appot.
 - [ ] A mikrofonengedély elfogadása után a mikrofon állapota aktív, a mintavételi frekvencia megjelenik.
 - [ ] Elutasított mikrofonengedélynél érthető hibaüzenet jelenik meg, az app nem fagy le.
 - [ ] A mikrofon leállítása után a mérési állapot visszatér várakozó módba.
+- [ ] A saját D-felvétel lejátszható, a hangerő és a pozíció csúszkával állítható.
+- [ ] A Loop beállítás újratöltés után is megmarad.
+- [ ] A mikrofonmérés indításakor a saját felvétel leáll, így a hangszóró nem zavarja a mérést.
 
 ## 2. Valós hangolás
 
