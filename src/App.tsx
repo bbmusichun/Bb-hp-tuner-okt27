@@ -32,6 +32,7 @@ import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogE
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBConfigurableStrobeBands } from './components/BBConfigurableStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
+import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
 import { BBCards } from './components/BBCards';
 import { BBStabilityGraph } from './components/BBStabilityGraph';
 import { BBHangmezoView } from './components/BBHangmezoView';
@@ -831,6 +832,15 @@ export default function App() {
               hasSignal={hasSignal}
               toleranceOverrideCents={toleranceOverrideCents}
               onSelectPeak={setSelectedRole}
+            />
+
+            <BBSpectrumDiagnostics
+              active={isListening}
+              hasSignal={hasSignal}
+              transientHoldoff={transientHoldoff}
+              alap={alap}
+              oktav={oktav}
+              kvint={kvint}
             />
 
             {/* ================= SECTION D: THREE MEASUREMENT CARDS ================= */}
