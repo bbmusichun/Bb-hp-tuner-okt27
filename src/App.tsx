@@ -42,7 +42,6 @@ import {
 import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
 import type { WavFrameAnalysis } from './audio/wavAnalysis';
 import { BBStrobeBands } from './components/BBStrobeBands';
-import { BBConfigurableStrobeBands } from './components/BBConfigurableStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
 import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
 import { BBPitchDial } from './components/BBPitchDial';
@@ -1500,19 +1499,14 @@ export default function App() {
                   status: playbackStrobe.frame.resonances[1]?.measuredHz !== null && playbackStrobe.frame.resonances[1]?.measuredHz !== undefined ? 'valid' : 'no-signal',
                 } : oktav}
                 hasSignal={playbackStrobe.playing && !isListening ? Boolean(playbackStrobe.frame?.resonances.some((resonance) => resonance.measuredHz !== null)) : hasSignal}
+                active={isListening}
+                transientHoldoff={transientHoldoff}
+                baseFrequencyHz={selectedNote.frequency}
                 selectedRole={selectedRole}
                 onSelectRole={setSelectedRole}
                 toleranceOverrideCents={toleranceOverrideCents}
                 strobeSensitivity={strobeSensitivity}
                 onChangeStrobeSensitivity={setStrobeSensitivity}
-              />
-              <BBConfigurableStrobeBands
-                active={isListening}
-                hasSignal={hasSignal}
-                transientHoldoff={transientHoldoff}
-                toleranceOverrideCents={toleranceOverrideCents}
-                baseFrequencyHz={selectedNote.frequency}
-                strobeSensitivity={strobeSensitivity}
               />
             </div>
 
