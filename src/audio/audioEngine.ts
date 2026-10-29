@@ -9,6 +9,7 @@ import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 import { detectTransientOnset, isTransientHoldoffActive, StablePitchTracker } from './transientGuard';
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
+import { isNearDigitalClipPeak } from './inputClipping';
 import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
 import { findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
@@ -197,6 +198,7 @@ export class BBAudioEngine {
     standardDeviationCents: number;
     transientHoldoff: boolean;
     highInputLevel: boolean;
+    clippingLikely: boolean;
     yinFrequencyHz: number | null;
     yinClarity: number;
     yinAgreementCents: number | null;
@@ -214,6 +216,7 @@ export class BBAudioEngine {
         standardDeviationCents: 0,
         transientHoldoff: false,
         highInputLevel: false,
+        clippingLikely: false,
         yinFrequencyHz: null,
         yinClarity: 0,
         yinAgreementCents: null,
@@ -229,10 +232,14 @@ export class BBAudioEngine {
 
     // Compute RMS input level and dB
     let sumSquares = 0;
+    let peakAbsolute = 0;
     for (let i = 0; i < this.timeData.length; i++) {
-      sumSquares += this.timeData[i] * this.timeData[i];
+      const sample = this.timeData[i];
+      sumSquares += sample * sample;
+      peakAbsolute = Math.max(peakAbsolute, Math.abs(sample));
     }
     const rms = Math.sqrt(sumSquares / this.timeData.length);
+    const clippingLikely = isNearDigitalClipPeak(peakAbsolute);
     const db = rms > 1e-5 ? Math.max(-100, Math.min(0, 20 * Math.log10(rms))) : -100;
     this.inputLevelDb = Math.round(db);
 
@@ -341,6 +348,7 @@ export class BBAudioEngine {
       standardDeviationCents,
       transientHoldoff,
       highInputLevel,
+      clippingLikely,
       yinFrequencyHz: yinEstimate.frequencyHz,
       yinClarity: yinEstimate.clarity,
       yinAgreementCents: yinEstimate.frequencyHz !== null && alap.measuredHz !== null
