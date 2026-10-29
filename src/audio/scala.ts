@@ -47,7 +47,7 @@ export function normalizeScalaNoteLabel(source: string): string {
     '#': '♯',
     x: '𝄪',
   };
-  return source.replace(/\^([Bb d+#x])/g, (_match, accidental: string) => symbols[accidental] ?? accidental);
+  return source.replace(/\^([A-Za-z+#])/g, (_match, accidental: string) => symbols[accidental] ?? accidental);
 }
 
 /**
