@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { bbAudioEngine } from './audio/audioEngine';
 import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
-import { isWithinTuningTolerance } from './audio/tuningTolerance';
+import { isWithinTuningTolerance, normalizeTuningToleranceMode, type TuningToleranceMode } from './audio/tuningTolerance';
 import { buildChromaticTargetNote, midiFromFrequency } from './audio/chromaticPitch';
 import { transposeFrequencyBySemitones } from './audio/transposition';
 import { normalizeTuningReadoutMode, type TuningReadoutMode } from './audio/readoutModes';
@@ -167,6 +167,11 @@ function loadOwnDVolumePreference(): number {
   }
 }
 
+function loadTuningToleranceMode(): TuningToleranceMode {
+  try { return normalizeTuningToleranceMode(localStorage.getItem('hangoal-tolerance-mode-v1')); }
+  catch { return 'auto'; }
+}
+
 function formatAudioTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const totalSeconds = Math.floor(seconds);
@@ -251,6 +256,11 @@ export default function App() {
   const [toleranceOverrideCents, setToleranceOverrideCents] = useState<number | null>(
     () => loadTuningPreferences().toleranceOverrideCents,
   );
+  const [toleranceMode, setToleranceMode] = useState<TuningToleranceMode>(loadTuningToleranceMode);
+  useEffect(() => {
+    try { localStorage.setItem('hangoal-tolerance-mode-v1', toleranceMode); }
+    catch { /* The current session remains usable if storage is disabled. */ }
+  }, [toleranceMode]);
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
   const [transposeSemitones, setTransposeSemitones] = useState<number>(() => loadTuningPreferences().transposeSemitones);
   const [strobeSensitivity, setStrobeSensitivity] = useState<number>(() => loadTuningPreferences().strobeSensitivity);
@@ -1081,7 +1091,7 @@ export default function App() {
   };
 
   const activeCents = activeResonance.deviationCents;
-  const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz, toleranceOverrideCents);
+  const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz, toleranceOverrideCents, toleranceMode);
 
   // Textual assessment (e.g. "(kissé magas)", "(kissé mély)", "(pontos)")
   const isHeldReading = activeResonance.status === 'held' && activeCents !== null;
@@ -1687,6 +1697,20 @@ export default function App() {
               )}
 
               {/* Three Stroboscope Bands (Alap, Kvint, Oktáv) */}
+              <section aria-label="Hangolási toleranciamód" className="my-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white">Stroboszkóp toleranciája</div>
+                    <p className="mt-0.5 text-[10px] leading-relaxed text-slate-400">Csak a színjelzést módosítja, a mért Hz- és centértékeket nem.</p>
+                  </div>
+                  <select aria-label="Stroboszkóp tolerancia módja" value={toleranceMode} onChange={(event) => setToleranceMode(normalizeTuningToleranceMode(event.target.value))} className="max-w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-[11px] text-white">
+                    <option value="auto">Automatikus / rögzített cent</option>
+                    <option value="any">Mindig elfogadott (mindig zöld)</option>
+                    <option value="off">Soha ne legyen zöld</option>
+                  </select>
+                </div>
+              </section>
+
 {shouldShowTuningPanel('stroboscope') && (
               <BBStrobeBands
                 alap={alap}
@@ -1699,6 +1723,7 @@ export default function App() {
                 selectedRole={selectedRole}
                 onSelectRole={setSelectedRole}
                 toleranceOverrideCents={toleranceOverrideCents}
+                toleranceMode={toleranceMode}
                 strobeSensitivity={strobeSensitivity}
                 onChangeStrobeSensitivity={setStrobeSensitivity}
                 onZoomTargetHz={setSpectrumZoomTargetHz}
@@ -1714,6 +1739,7 @@ export default function App() {
               oktav={oktav}
               hasSignal={hasSignal}
               toleranceOverrideCents={toleranceOverrideCents}
+              toleranceMode={toleranceMode}
               onSelectPeak={setSelectedRole}
               zoomTargetHz={spectrumZoomTargetHz}
               onClearZoom={() => setSpectrumZoomTargetHz(null)}
@@ -1757,6 +1783,7 @@ export default function App() {
               selectedRole={selectedRole}
               onSelectRole={setSelectedRole}
               toleranceOverrideCents={toleranceOverrideCents}
+              toleranceMode={toleranceMode}
               readoutMode={readoutMode}
               a4Ref={a4Ref}
             />
