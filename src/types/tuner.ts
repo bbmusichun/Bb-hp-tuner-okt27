@@ -1,5 +1,5 @@
 /**
- * BB Tuner – Handpan tuning analyzer
+ * Hangoal – Handpan hangolási adatok
  * Data model and types according to the functional specification
  */
 
