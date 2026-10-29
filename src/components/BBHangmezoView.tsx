@@ -10,6 +10,7 @@ interface Props {
   hasSignal: boolean;
   alapCents: number | null;
   totalNoteCount?: number;
+  allowReferenceTonePreview?: boolean;
 }
 
 export const BBHangmezoView: React.FC<Props> = ({
@@ -19,6 +20,7 @@ export const BBHangmezoView: React.FC<Props> = ({
   hasSignal,
   alapCents,
   totalNoteCount,
+  allowReferenceTonePreview = true,
 }) => {
   const ding = notes.find((note) => note.positionIndex === 0);
   const perimeter = notes.filter((note) => note.positionIndex !== 0);
@@ -26,6 +28,7 @@ export const BBHangmezoView: React.FC<Props> = ({
   const toneStopTimerRef = useRef<number | null>(null);
 
   const playReferenceTone = (frequency: number, durationMs: number) => {
+    if (!allowReferenceTonePreview) return;
     if (toneStopTimerRef.current !== null) {
       window.clearTimeout(toneStopTimerRef.current);
       toneStopTimerRef.current = null;
@@ -36,6 +39,15 @@ export const BBHangmezoView: React.FC<Props> = ({
       toneStopTimerRef.current = null;
     }, durationMs);
   };
+
+  useEffect(() => {
+    if (allowReferenceTonePreview) return;
+    if (toneStopTimerRef.current !== null) {
+      window.clearTimeout(toneStopTimerRef.current);
+      toneStopTimerRef.current = null;
+    }
+    bbAudioEngine.stopTone();
+  }, [allowReferenceTonePreview]);
 
   useEffect(() => () => {
     if (toneStopTimerRef.current !== null) window.clearTimeout(toneStopTimerRef.current);

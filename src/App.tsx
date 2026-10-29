@@ -22,6 +22,7 @@ import { isWithinTuningTolerance } from './audio/tuningTolerance';
 import { buildChromaticTargetNote, midiFromFrequency } from './audio/chromaticPitch';
 import { transposeFrequencyBySemitones } from './audio/transposition';
 import { normalizeTuningReadoutMode, type TuningReadoutMode } from './audio/readoutModes';
+import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
   DEFAULT_PARTIAL_TARGET_OFFSET,
@@ -63,6 +64,7 @@ function loadTuningPreferences(): {
   toleranceOverrideCents: number | null;
   transposeSemitones: number;
   readoutMode: TuningReadoutMode;
+  referenceToneMode: ReferenceToneMode;
   scale: HandpanScale;
 } {
   const defaultProfile: InstrumentProfile = {
@@ -82,6 +84,7 @@ function loadTuningPreferences(): {
     toleranceOverrideCents: null,
     transposeSemitones: 0,
     readoutMode: 'hz' as TuningReadoutMode,
+    referenceToneMode: 'continuous' as ReferenceToneMode,
     scale: PRESET_SCALES[0],
   };
   try {
@@ -99,6 +102,7 @@ function loadTuningPreferences(): {
       toleranceOverrideCents?: unknown;
       transposeSemitones?: unknown;
       readoutMode?: unknown;
+      referenceToneMode?: unknown;
     };
     const legacyA4 = typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
       ? prefs.a4Ref : defaultProfile.a4Ref;
@@ -131,6 +135,7 @@ function loadTuningPreferences(): {
       transposeSemitones: typeof prefs.transposeSemitones === 'number' && Number.isInteger(prefs.transposeSemitones) && prefs.transposeSemitones >= -12 && prefs.transposeSemitones <= 12
         ? prefs.transposeSemitones : 0,
       readoutMode: normalizeTuningReadoutMode(prefs.readoutMode),
+      referenceToneMode: normalizeReferenceToneMode(prefs.referenceToneMode),
       scale: activeProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId) ?? PRESET_SCALES[0],
     };
   } catch {
@@ -179,6 +184,7 @@ export default function App() {
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
   const [transposeSemitones, setTransposeSemitones] = useState<number>(() => loadTuningPreferences().transposeSemitones);
   const [readoutMode, setReadoutMode] = useState<TuningReadoutMode>(() => loadTuningPreferences().readoutMode);
+  const [referenceToneMode, setReferenceToneMode] = useState<ReferenceToneMode>(() => loadTuningPreferences().referenceToneMode);
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(() => loadTuningPreferences().a4Ref);
@@ -198,6 +204,8 @@ export default function App() {
   // Selected resonance focus for the main display and stability graph
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
   const [isReferenceTonePlaying, setIsReferenceTonePlaying] = useState(false);
+  const strikeToneTimerRef = useRef<number | null>(null);
+  const previousTransientHoldoffRef = useRef(false);
 
   const [disabledToneNotesByScale, setDisabledToneNotesByScale] = useState<Record<string, string[]>>(loadDisabledToneNotesByScale);
 
@@ -569,6 +577,7 @@ export default function App() {
         toleranceOverrideCents,
         transposeSemitones,
         readoutMode,
+        referenceToneMode,
         partialTargetOffsets,
         instrumentProfiles: profilesToSave,
         activeInstrumentProfileId,
@@ -576,7 +585,7 @@ export default function App() {
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale, autoDetect, toleranceOverrideCents, transposeSemitones, readoutMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+  }, [a4Ref, currentScale, autoDetect, toleranceOverrideCents, transposeSemitones, readoutMode, referenceToneMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
 
   useEffect(() => {
     try {
@@ -718,15 +727,57 @@ export default function App() {
   );
 
   useEffect(() => {
-    // Stop the reference pitch when its target changes or measurement begins,
-    // otherwise the generated tone could contaminate the live microphone input.
+    // Stop any manual/previous tone when its target or listening state changes.
     bbAudioEngine.stopTone();
     setIsReferenceTonePlaying(false);
-    return () => bbAudioEngine.stopTone();
-  }, [selectedNote.id, selectedRole, activeInstrumentProfileId, referenceToneHz, isListening]);
+    if (strikeToneTimerRef.current !== null) {
+      window.clearTimeout(strikeToneTimerRef.current);
+      strikeToneTimerRef.current = null;
+    }
+    previousTransientHoldoffRef.current = transientHoldoff;
+    return () => {
+      if (strikeToneTimerRef.current !== null) {
+        window.clearTimeout(strikeToneTimerRef.current);
+        strikeToneTimerRef.current = null;
+      }
+      bbAudioEngine.stopTone();
+    };
+  }, [selectedNote.id, selectedRole, activeInstrumentProfileId, referenceToneHz, isListening, referenceToneMode]);
+
+  useEffect(() => {
+    const shouldPlay = shouldTriggerStrikeReferenceTone(
+      referenceToneMode,
+      isListening,
+      transientHoldoff,
+      previousTransientHoldoffRef.current,
+    );
+    previousTransientHoldoffRef.current = transientHoldoff;
+    if (!shouldPlay || !Number.isFinite(referenceToneHz) || referenceToneHz <= 0) return;
+
+    if (strikeToneTimerRef.current !== null) window.clearTimeout(strikeToneTimerRef.current);
+    bbAudioEngine.playTone(referenceToneHz);
+    setIsReferenceTonePlaying(true);
+    // The analyzer's transient guard holds tuning output during the attack; keep the cue brief.
+    strikeToneTimerRef.current = window.setTimeout(() => {
+      bbAudioEngine.stopTone();
+      setIsReferenceTonePlaying(false);
+      strikeToneTimerRef.current = null;
+    }, 120);
+  }, [referenceToneMode, isListening, transientHoldoff, referenceToneHz]);
+
+  const handleSetReferenceToneMode = (mode: ReferenceToneMode) => {
+    bbAudioEngine.stopTone();
+    setIsReferenceTonePlaying(false);
+    if (strikeToneTimerRef.current !== null) {
+      window.clearTimeout(strikeToneTimerRef.current);
+      strikeToneTimerRef.current = null;
+    }
+    previousTransientHoldoffRef.current = transientHoldoff;
+    setReferenceToneMode(mode);
+  };
 
   const handleToggleReferenceTone = () => {
-    if (isListening) return;
+    if (referenceToneMode !== 'continuous' || isListening) return;
     if (isReferenceTonePlaying) {
       bbAudioEngine.stopTone();
       setIsReferenceTonePlaying(false);
@@ -911,10 +962,10 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleToggleReferenceTone}
-                  disabled={isListening || !Number.isFinite(referenceToneHz) || referenceToneHz <= 0}
-                  aria-pressed={isReferenceTonePlaying}
+                  disabled={referenceToneMode !== 'continuous' || isListening || !Number.isFinite(referenceToneHz) || referenceToneHz <= 0}
+                  aria-pressed={referenceToneMode === 'continuous' && isReferenceTonePlaying}
                   aria-label={isReferenceTonePlaying ? 'Referenciahang leállítása' : 'Referenciahang lejátszása'}
-                  title={isListening ? 'Mikrofonmérés alatt a referenciahang ki van kapcsolva.' : 'A kiválasztott rezonancia célfrekvenciájának lejátszása'}
+                  title={referenceToneMode === 'off' ? 'A referenciahang ki van kapcsolva.' : referenceToneMode === 'strike' ? 'Minden érzékelt ütés kezdetén rövid referenciahang szól.' : isListening ? 'Mikrofonmérés közben a folyamatos referenciahang ki van kapcsolva.' : 'A kiválasztott rezonancia célfrekvenciájának lejátszása'}
                   className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
                     isReferenceTonePlaying
                       ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
@@ -922,9 +973,28 @@ export default function App() {
                   }`}
                 >
                   <Volume2 className="h-3.5 w-3.5" />
-                  {isReferenceTonePlaying ? 'Hang leállítása' : 'Referenciahang'}
+                  {referenceToneMode === 'off' ? 'Referenciahang: ki' : referenceToneMode === 'strike' ? 'Ütésjelzés aktív' : isReferenceTonePlaying ? 'Hang leállítása' : 'Referenciahang'}
                 </button>
               </div>
+
+              <div className="mb-1 flex items-center justify-between gap-2 px-1">
+                <label htmlFor="hangoal-reference-tone-mode" className="text-[10px] text-slate-500">Referenciahang módja</label>
+                <select
+                  id="hangoal-reference-tone-mode"
+                  value={referenceToneMode}
+                  onChange={(event) => handleSetReferenceToneMode(normalizeReferenceToneMode(event.target.value))}
+                  className="max-w-[190px] rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[10px] text-slate-200 outline-none focus:border-amber-400"
+                >
+                  <option value="continuous">Folyamatos (kézi indítás)</option>
+                  <option value="strike">Ütésre rövid hang</option>
+                  <option value="off">Kikapcsolva</option>
+                </select>
+              </div>
+              {referenceToneMode === 'strike' && (
+                <p className="mb-2 px-1 text-[10px] leading-relaxed text-slate-500">
+                  A rövid hang a tranziensvédelmi ablak elején szól. A készülék hangszórójából visszajutó hang hibát okozhat; mérési átvételhez fejhallgatós és hangszórós teszt is szükséges.
+                </p>
+              )}
 
               <div className="mb-1 flex justify-end px-1">
                 <button
@@ -1060,6 +1130,7 @@ export default function App() {
             <BBHangmezoView
               notes={enabledToneNotes}
               totalNoteCount={toneNotes.length}
+              allowReferenceTonePreview={referenceToneMode === 'continuous' && !isListening}
               selectedNote={selectedNote}
               onSelectNote={handleSelectToneFieldNote}
               hasSignal={hasSignal}
