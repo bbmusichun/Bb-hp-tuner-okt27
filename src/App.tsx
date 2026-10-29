@@ -25,6 +25,7 @@ import { normalizeTuningReadoutMode, type TuningReadoutMode } from './audio/read
 import { isDetectionArmed, nextAutoDetectionMode, normalizeAutoDetectionMode, type AutoDetectionMode } from './audio/detectionModes';
 import { isEditableKeyboardTarget, resolveHangoalKeyboardAction } from './audio/keyboardShortcuts';
 import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
+import { normalizeStrobeBands } from './audio/strobeBands';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
@@ -453,7 +454,13 @@ export default function App() {
       const rawBands = localStorage.getItem('hangoal-custom-strobe-bands-v1');
       let customStrobeBands: unknown = [];
       if (rawBands) {
-        customStrobeBands = JSON.parse(rawBands);
+        const storedBands: unknown = JSON.parse(rawBands);
+        if (!Array.isArray(storedBands)) throw new Error('Az egyedi sávbeállítás sérült.');
+        const normalizedBands = normalizeStrobeBands(storedBands);
+        customStrobeBands = normalizedBands.filter((band) => band.source === 'custom');
+        if (customStrobeBands.length !== storedBands.length) {
+          throw new Error('Egy vagy több egyedi sávbeállítás érvénytelen.');
+        }
       }
       const backup = {
         schemaVersion: 2,
