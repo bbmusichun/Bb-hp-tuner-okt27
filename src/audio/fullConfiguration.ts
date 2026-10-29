@@ -1,4 +1,4 @@
-import type { HandpanScale, TuningLogEntry } from '../types/tuner';
+import type { TuningLogEntry } from '../types/tuner';
 import { parseInstrumentProfileBackup, type InstrumentProfile } from './instrumentProfiles';
 import { normalizeDisabledToneNotes } from './scaleNoteSelection';
 import { normalizeStrobeBands, type StrobeBandConfig } from './strobeBands';
