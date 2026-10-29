@@ -25,6 +25,8 @@ interface Props {
   onChangePartialTargetOffset: (field: PartialTargetOffsetField, value: number) => void;
   onResetPartialTargetOffsets: () => void;
   sampleRateKhz: number | null;
+  fftSize: number;
+  autoGainControlStatus: boolean | null;
   isListening: boolean;
   freezeTargetSettings?: boolean;
   audioInputDevices: AudioDeviceOption[];
@@ -63,6 +65,8 @@ export const BBSettingsModal: React.FC<Props> = ({
   onChangePartialTargetOffset,
   onResetPartialTargetOffsets,
   sampleRateKhz,
+  fftSize,
+  autoGainControlStatus,
   isListening,
   freezeTargetSettings = false,
   audioInputDevices,
@@ -645,8 +649,9 @@ export const BBSettingsModal: React.FC<Props> = ({
               <span>Akusztikai Mérési Környezet</span>
             </div>
             <div>{isListening ? 'Aktuális mintavételezés' : 'Legutóbbi mintavételezés'}: <span className="font-mono text-white">{sampleRateKhz !== null ? `${sampleRateKhz} kHz (Web Audio API)` : '— (a mérés indításakor jelenik meg)'}</span></div>
-            <div>FFT felbontás: <span className="font-mono text-white">32768 pont + parabolikus csúcsinterpoláció</span></div>
-            <div>Zajcsökkentés / AGC: <span className="font-mono text-[#10b981]">Kikapcsolva (Nyers jel)</span></div>
+            <div>FFT-ablak: <span className="font-mono text-white">{fftSize.toLocaleString('hu-HU')} pont</span>{sampleRateKhz !== null && fftSize > 0 ? <span className="text-slate-500"> · nyers binlépés ≈ {(sampleRateKhz * 1000 / fftSize).toFixed(2)} Hz</span> : null} <span className="text-slate-500">· parabolikus csúcsinterpoláció</span></div>
+            <div>Echo cancellation / zajszűrés: <span className="font-mono text-emerald-300">kikapcsolás kérve</span></div>
+            <div>Automatikus mikrofonjelerősítés (AGC): <span className="font-mono text-white">{autoGainControlStatus === null ? 'nem jelezhető / nem aktív mikrofon' : autoGainControlStatus ? 'a böngésző szerint bekapcsolva' : 'a böngésző szerint kikapcsolva'}</span></div>
           </div>
         </div>
 
