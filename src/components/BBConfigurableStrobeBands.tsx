@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
-import { getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, type StrobeBandConfig } from '../audio/strobeBands';
+import { formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
 
 const STORAGE_KEY = 'hangoal-custom-strobe-bands-v1';
@@ -14,7 +14,7 @@ interface Props {
   hasSignal: boolean;
   transientHoldoff: boolean;
   toleranceOverrideCents?: number | null;
-  referenceHz?: number;
+  baseFrequencyHz?: number;
 }
 
 interface BandReading {
@@ -49,7 +49,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
   hasSignal,
   transientHoldoff,
   toleranceOverrideCents = null,
-  referenceHz = 440,
+  baseFrequencyHz = 440,
 }) => {
   const [bands, setBands] = useState<StrobeBandConfig[]>(loadCustomBands);
   const [readings, setReadings] = useState<Record<string, BandReading>>({});
@@ -104,7 +104,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
       ctx.clearRect(0, 0, width, height);
       current.bands.forEach((band, index) => {
         const y = index * rowHeight;
-        const targetHz = getStrobeBandTargetHz(band);
+        const targetHz = getStrobeBandTargetHz(band, baseFrequencyHz);
         const peak = spectrum
           ? findSpectralPeakInWindow(targetHz, 150, spectrum, sampleRate, -82)
           : null;
@@ -208,7 +208,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
         <div>
           <h3 className="text-sm font-bold text-white">Egyedi stroboszkópsávok</h3>
           <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">
-            Célfrekvencia Hz-ben, arányként (3/2 vagy x1.5), illetve centeltérésként (700c) is megadható a beállított A4 referenciafrekvenciához képest. A csúcsot az élő FFT-spektrum keresi.
+            Célfrekvencia Hz-ben, arányként (3/2 vagy x1.5), illetve centeltérésként (700c) is megadható a kiválasztott alaphanghoz képest. Az arány- és centcél együtt változik a hangváltással.
           </p>
         </div>
         <button
@@ -289,12 +289,19 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
                         aria-label="Célfrekvencia vagy arány"
                         type="text"
                         inputMode="decimal"
-                        value={targetDrafts[band.id] ?? String(band.targetHz)}
+                        value={targetDrafts[band.id] ?? formatStrobeTargetExpression(band)}
                         onChange={(event) => {
                           const draft = event.target.value;
                           setTargetDrafts((previous) => ({ ...previous, [band.id]: draft }));
-                          const value = parseStrobeTargetExpression(draft, referenceHz);
-                          if (value !== null) updateBand(band.id, { targetHz: value });
+                          const parsed = parseStrobeTargetExpressionParts(draft);
+                          const value = parseStrobeTargetExpression(draft, baseFrequencyHz);
+                          if (parsed && value !== null) {
+                            updateBand(band.id, {
+                              targetHz: value,
+                              targetMode: parsed.mode,
+                              targetValue: parsed.mode === 'absolute' ? undefined : parsed.value,
+                            });
+                          }
                         }}
                         onBlur={() => setTargetDrafts((previous) => {
                           const next = { ...previous };
