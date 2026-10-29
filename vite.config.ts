@@ -15,9 +15,9 @@ export default defineConfig(() => {
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
           id: '/',
-          name: 'BB Tuner – Handpan Hangoló és Akusztikai Labor',
-          short_name: 'BB Tuner',
-          description: 'Professzionális munkára tervezett handpan hangoló, felhangelemző és mérési napló.',
+          name: 'Hangoal – Handpan hangoló és felhangelemző',
+          short_name: 'Hangoal',
+          description: 'Mobil handpan hangoló valós idejű hangfelismeréssel, felhangelemzéssel, hangszerprofilokkal és mérési naplóval.',
           theme_color: '#0d1117',
           background_color: '#090d16',
           display: 'standalone',
