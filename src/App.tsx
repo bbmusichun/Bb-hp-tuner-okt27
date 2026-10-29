@@ -59,6 +59,7 @@ function loadTuningPreferences(): {
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
   toleranceOverrideCents: number | null;
+  transposeSemitones: number;
   scale: HandpanScale;
 } {
   const defaultProfile: InstrumentProfile = {
@@ -76,6 +77,7 @@ function loadTuningPreferences(): {
     instrumentProfiles: [defaultProfile],
     activeInstrumentProfileId: defaultProfile.id,
     toleranceOverrideCents: null,
+    transposeSemitones: 0,
     scale: PRESET_SCALES[0],
   };
   try {
@@ -91,6 +93,7 @@ function loadTuningPreferences(): {
       instrumentProfiles?: unknown;
       activeInstrumentProfileId?: unknown;
       toleranceOverrideCents?: unknown;
+      transposeSemitones?: unknown;
     };
     const legacyA4 = typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
       ? prefs.a4Ref : defaultProfile.a4Ref;
@@ -120,6 +123,8 @@ function loadTuningPreferences(): {
       toleranceOverrideCents: typeof prefs.toleranceOverrideCents === 'number' &&
         Number.isFinite(prefs.toleranceOverrideCents) && prefs.toleranceOverrideCents >= 0.5 && prefs.toleranceOverrideCents <= 20
         ? prefs.toleranceOverrideCents : null,
+      transposeSemitones: typeof prefs.transposeSemitones === 'number' && Number.isInteger(prefs.transposeSemitones) && prefs.transposeSemitones >= -12 && prefs.transposeSemitones <= 12
+        ? prefs.transposeSemitones : 0,
       scale: activeProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId) ?? PRESET_SCALES[0],
     };
   } catch {
@@ -166,6 +171,7 @@ export default function App() {
     () => loadTuningPreferences().toleranceOverrideCents,
   );
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
+  const [transposeSemitones, setTransposeSemitones] = useState<number>(() => loadTuningPreferences().transposeSemitones);
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(() => loadTuningPreferences().a4Ref);
@@ -191,9 +197,11 @@ export default function App() {
   // Compute tone field notes with current A4
   const toneNotes: ToneFieldNote[] = useMemo(() => {
     return currentScale.notes.map((n, idx) => {
-      const f0 = typeof n.frequencyHz === 'number' && Number.isFinite(n.frequencyHz) && n.frequencyHz > 0
+      const sourceFrequency = typeof n.frequencyHz === 'number' && Number.isFinite(n.frequencyHz) && n.frequencyHz > 0
         ? n.frequencyHz
         : midiToFreq(n.midi, a4Ref);
+      const f0 = sourceFrequency * Math.pow(2, transposeSemitones / 12);
+      const displayNoteName = freqToNoteAndCents(f0, a4Ref).note;
       // Handpan acoustic resonances:
       // Fundamental: f0 (e.g. D3 = 146.83 Hz)
       // Traditional handpan partials: fundamental (1x), octave (2x), compound fifth (3x).
@@ -202,14 +210,15 @@ export default function App() {
       const offsets = partialTargetOffsets[key] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
       return {
         id: `note_${idx}_${n.name}`,
-        noteName: n.name,
+        noteName: displayNoteName,
+        sourceNoteName: n.name,
         frequency: f0,
         fifthFreq: partialTargetFrequency(f0, 3, offsets.thirdPartialCents),
         octaveFreq: partialTargetFrequency(f0, 2, offsets.octaveCents),
         positionIndex: idx,
       };
     });
-  }, [currentScale, a4Ref, partialTargetOffsets]);
+  }, [currentScale, a4Ref, partialTargetOffsets, transposeSemitones]);
 
   const disabledToneNoteIds = useMemo(
     () => new Set(disabledToneNotesByScale[currentScale.id] ?? []),
@@ -241,6 +250,13 @@ export default function App() {
   }, [toneNotes, enabledToneNotes, chromaticTargetMidi, a4Ref, currentScale.id, partialTargetOffsets]);
 
   const selectedMidi = useMemo(() => midiFromFrequency(selectedNote.frequency, a4Ref), [selectedNote.frequency, a4Ref]);
+
+  const handleSetTranspose = (value: number) => {
+    const next = Math.max(-12, Math.min(12, Math.round(value)));
+    setTransposeSemitones(next);
+    setChromaticTargetMidi(null);
+    autoDetectionRef.current = null;
+  };
 
   const handleSelectChromaticMidi = (midi: number) => {
     const target = buildChromaticTargetNote(midi, a4Ref, currentScale.id, partialTargetOffsets);
@@ -284,7 +300,7 @@ export default function App() {
     });
   };
 
-  const selectedPartialOffsetKey = partialTargetOffsetKey(currentScale.id, selectedNote.noteName);
+  const selectedPartialOffsetKey = partialTargetOffsetKey(currentScale.id, selectedNote.sourceNoteName ?? selectedNote.noteName);
   const selectedPartialOffsets = partialTargetOffsets[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
 
   const updateSelectedPartialOffset = (field: PartialTargetOffsetField, value: number) => {
@@ -544,6 +560,7 @@ export default function App() {
         scaleId: currentScale.id,
         autoDetect,
         toleranceOverrideCents,
+        transposeSemitones,
         partialTargetOffsets,
         instrumentProfiles: profilesToSave,
         activeInstrumentProfileId,
@@ -551,7 +568,7 @@ export default function App() {
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale, autoDetect, toleranceOverrideCents, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+  }, [a4Ref, currentScale, autoDetect, toleranceOverrideCents, transposeSemitones, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
 
   useEffect(() => {
     try {
@@ -912,6 +929,21 @@ export default function App() {
                 </button>
               </div>
               {isPitchDialOpen && <BBPitchDial selectedMidi={selectedMidi} onSelectMidi={handleSelectChromaticMidi} />}
+
+              <section className="my-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white">Skála transzponálása</div>
+                    <div className="mt-0.5 text-[10px] text-slate-400">Félhangok · a kromatikus tárcsa közvetlen célhangját nem módosítja</div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button type="button" aria-label="Transzponálás egy félhanggal lejjebb" onClick={() => handleSetTranspose(transposeSemitones - 1)} disabled={transposeSemitones <= -12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">−</button>
+                    <span className="min-w-[54px] text-center font-mono text-xs font-semibold text-amber-200">{transposeSemitones > 0 ? '+' : ''}{transposeSemitones} st</span>
+                    <button type="button" aria-label="Transzponálás egy félhanggal feljebb" onClick={() => handleSetTranspose(transposeSemitones + 1)} disabled={transposeSemitones >= 12} className="h-8 w-8 rounded-lg border border-slate-700 bg-slate-900 text-lg text-white disabled:opacity-30">+</button>
+                    <button type="button" onClick={() => handleSetTranspose(0)} disabled={transposeSemitones === 0} className="rounded-lg border border-slate-700 px-2 py-2 text-[10px] text-slate-400 disabled:opacity-30">Nullázás</button>
+                  </div>
+                </div>
+              </section>
 
               {/* Three Stroboscope Bands (Alap, Kvint, Oktáv) */}
               <BBStrobeBands
