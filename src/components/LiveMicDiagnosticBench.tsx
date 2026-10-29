@@ -163,7 +163,7 @@ export default function LiveMicDiagnosticBench() {
 
   return (
     <main style={{ maxWidth: 900, margin: '0 auto', padding: 24, color: '#e8eaf0', background: '#111318', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
-      <p style={{ color: '#93a4bd', letterSpacing: 2, fontSize: 12, fontWeight: 700 }}>BB TUNER · ENGINE DIAGNOSTICS</p>
+      <p style={{ color: '#93a4bd', letterSpacing: 2, fontSize: 12, fontWeight: 700 }}>HANGOAL · MOTOR DIAGNOSZTIKA</p>
       <h1 style={{ fontSize: 28, marginBottom: 8 }}>Élő mikrofon – nyers mérési teszt</h1>
       <p style={{ color: '#b7c0ce', lineHeight: 1.6 }}>
         Ez a teszt közvetlenül a mikrofon spektrumát méri, a fő hangoló simítása és korábbi értéket megtartó logikája nélkül.
