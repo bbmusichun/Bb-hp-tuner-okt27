@@ -46,7 +46,7 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] Ugyanazt a hangot többször megütve ellenőrizzük az eredmények stabilitását, azonos mikrofonelhelyezéssel.
 - [ ] Az eredményt egy dokumentált, külső frekvencia-referenciával vetjük össze a tényleges célkészüléken.
 - [ ] Feljegyezzük a készüléket, böngészőt/OS-t, mikrofonforrást, távolságot, helyiséget, bemeneti szintet és az összehasonlítás eredményét.
-- [ ] Csak ezután állítunk abszolút pontosságot vagy Linotune-val egyenértékű mérési teljesítményt.
+- [ ] Csak ezután állítunk abszolút pontosságot vagy professzionális referenciaeszközzel egyenértékű mérési teljesítményt.
 
 ## Kiadhatósági döntés
 
