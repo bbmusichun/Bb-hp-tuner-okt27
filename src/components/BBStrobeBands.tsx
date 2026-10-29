@@ -1,313 +1,348 @@
-import React, { useEffect, useRef } from 'react';
-import { ResonanceMeasurement } from '../types/tuner';
+import React, { useEffect, useRef, useState } from 'react';
+import { bbAudioEngine } from '../audio/audioEngine';
+import { findSpectralPeakInWindow } from '../audio/spectralPeak';
+import { formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
 import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
+import type { ResonanceMeasurement } from '../types/tuner';
+
+const STORAGE_KEY = 'hangoal-custom-strobe-bands-v1';
+const MAX_CUSTOM_BANDS = 8;
+const ROW_HEIGHT = 38;
+const BAND_COLORS = ['#f59e0b', '#22d3ee', '#c084fc', '#34d399', '#fb7185', '#60a5fa', '#eab308', '#a3e635'];
 
 interface Props {
   alap: ResonanceMeasurement;
   kvint: ResonanceMeasurement;
   oktav: ResonanceMeasurement;
   hasSignal: boolean;
+  active?: boolean;
+  transientHoldoff?: boolean;
+  baseFrequencyHz?: number;
   toleranceOverrideCents?: number | null;
   selectedRole?: string;
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
   strobeSensitivity?: number;
   onChangeStrobeSensitivity?: (value: number) => void;
 }
+interface Reading { measuredHz: number | null; deviationCents: number | null; amplitudeDb: number | null; }
+interface Row {
+  id: string; name: string; note: string; targetHz: number;
+  measuredHz: number | null; cents: number | null; db: number | null;
+  timestamp: number; stripeWidth: number; valid: boolean; role?: 'fundamental' | 'fifth' | 'octave';
+}
+
+function loadCustomBands(): StrobeBandConfig[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    return normalizeStrobeBands(JSON.parse(raw)).filter((band) => band.source === 'custom').slice(0, MAX_CUSTOM_BANDS);
+  } catch { return []; }
+}
+function createBandId(): string {
+  return 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+function formatCents(cents: number | null): string {
+  if (cents === null || !Number.isFinite(cents)) return '— cent';
+  return (cents > 0 ? '+' : '') + cents.toFixed(1) + ' cent';
+}
 
 export const BBStrobeBands: React.FC<Props> = ({
-  alap,
-  kvint,
-  oktav,
-  hasSignal,
-  selectedRole,
-  onSelectRole,
-  toleranceOverrideCents = null,
-  strobeSensitivity = 1,
-  onChangeStrobeSensitivity,
+  alap, kvint, oktav, hasSignal, active = false, transientHoldoff = false,
+  baseFrequencyHz = 146.832384, toleranceOverrideCents = null, selectedRole, onSelectRole,
+  strobeSensitivity = 1, onChangeStrobeSensitivity,
 }) => {
+  const [customBands, setCustomBands] = useState<StrobeBandConfig[]>(loadCustomBands);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [readings, setReadings] = useState<Record<string, Reading>>({});
+  const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestMeasurementsRef = useRef({ alap, kvint, oktav, hasSignal, toleranceOverrideCents, strobeSensitivity });
-  latestMeasurementsRef.current = { alap, kvint, oktav, hasSignal, toleranceOverrideCents, strobeSensitivity };
-
-  // Time-integrated phases for each band
-  const phasesRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
-  const lastTimeRef = useRef<number>(performance.now());
-  const lastMeasurementTimeRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
-  const stabilitySamplesRef = useRef<{ alap: number[]; kvint: number[]; oktav: number[] }>({ alap: [], kvint: [], oktav: [] });
-  const stabilitySampleTimestampRef = useRef({ alap: -1, kvint: -1, oktav: -1 });
-  const stabilityTargetHzRef = useRef<{ alap: number | null; kvint: number | null; oktav: number | null }>({ alap: null, kvint: null, oktav: null });
-
-  // Smoothed deviation cents
-  const smoothCentsRef = useRef({ alap: 0, kvint: 0, oktav: 0 });
-  // A green state requires a continuously valid, frequency-dependent in-tolerance measurement for 1 s.
-  const greenSinceRef = useRef<{ alap: number | null; kvint: number | null; oktav: number | null }>({ alap: null, kvint: null, oktav: null });
+  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands });
+  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands };
+  const phasesRef = useRef<Record<string, number>>({});
+  const smoothRef = useRef<Record<string, number>>({});
+  const lastValidRef = useRef<Record<string, number>>({});
+  const sampleRef = useRef<Record<string, number[]>>({});
+  const greenSinceRef = useRef<Record<string, number | null>>({});
+  const lastTickRef = useRef(performance.now());
+  const lastReadoutRef = useRef(0);
+  const canvasHeight = ROW_HEIGHT * (3 + customBands.length);
 
   useEffect(() => {
-    let animId = 0;
+    const reload = () => setCustomBands(loadCustomBands());
+    const onStorage = (event: StorageEvent) => { if (event.key === STORAGE_KEY) reload(); };
+    window.addEventListener('hangoal-custom-strobe-bands-updated', reload);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('hangoal-custom-strobe-bands-updated', reload);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(customBands)); }
+    catch (error) { console.warn('Nem sikerült menteni az egyedi stroboszkópsávokat:', error); }
+  }, [customBands]);
+
+  useEffect(() => {
+    let animationId = 0;
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    function render(currentTime: number) {
-      if (!ctx || !canvas) return;
-      const measurement = latestMeasurementsRef.current;
-
-      const dt = Math.min(0.1, (currentTime - lastTimeRef.current) / 1000); // in seconds
-      lastTimeRef.current = currentTime;
-
-      const w = canvas.width;
-      const h = canvas.height;
-      const rowHeight = (h - 8) / 3; // 3 rows with 4px gap
-
-      // Smooth cents toward measured values
-      // Keep the last deviation during the short held-reading period. Only live
-      // valid measurements update the value; held values must not drift toward zero.
-      const targetCentsAlap = measurement.hasSignal && measurement.alap.status === 'valid' && measurement.alap.deviationCents !== null ? measurement.alap.deviationCents : smoothCentsRef.current.alap;
-      const targetCentsKvint = measurement.hasSignal && measurement.kvint.status === 'valid' && measurement.kvint.deviationCents !== null ? measurement.kvint.deviationCents : smoothCentsRef.current.kvint;
-      const targetCentsOktav = measurement.hasSignal && measurement.oktav.status === 'valid' && measurement.oktav.deviationCents !== null ? measurement.oktav.deviationCents : smoothCentsRef.current.oktav;
-
-      smoothCentsRef.current.alap += (targetCentsAlap - smoothCentsRef.current.alap) * 0.15;
-      smoothCentsRef.current.kvint += (targetCentsKvint - smoothCentsRef.current.kvint) * 0.15;
-      smoothCentsRef.current.oktav += (targetCentsOktav - smoothCentsRef.current.oktav) * 0.15;
-
-      // Strobe drift follows physical frequency error (beat Hz) with one shared pixels-per-Hz
-      // scale. Higher partials naturally drift faster for the same cents error because Δf is larger.
-      const validAlap = measurement.hasSignal && measurement.alap.status === 'valid' && measurement.alap.deviationCents !== null && Number.isFinite(measurement.alap.deviationCents);
-      const validKvint = measurement.hasSignal && measurement.kvint.status === 'valid' && measurement.kvint.deviationCents !== null && Number.isFinite(measurement.kvint.deviationCents);
-      const validOktav = measurement.hasSignal && measurement.oktav.status === 'valid' && measurement.oktav.deviationCents !== null && Number.isFinite(measurement.oktav.deviationCents);
-      if (validAlap) lastMeasurementTimeRef.current.alap = currentTime;
-      if (validKvint) lastMeasurementTimeRef.current.kvint = currentTime;
-      if (validOktav) lastMeasurementTimeRef.current.oktav = currentTime;
-      const integrate = (valid: boolean, lastTime: number, cents: number, targetHz: number, key: 'alap' | 'kvint' | 'oktav') => {
-        if (!valid && currentTime - lastTime > 250) return;
-        const deltaHz = targetHz * (Math.pow(2, cents / 1200) - 1);
-        const speed = Math.max(-220, Math.min(220, deltaHz * 65 * measurement.strobeSensitivity));
-        phasesRef.current[key] += speed * dt;
-      };
-      integrate(validAlap, lastMeasurementTimeRef.current.alap, smoothCentsRef.current.alap, measurement.alap.targetHz ?? 146.83, 'alap');
-      integrate(validKvint, lastMeasurementTimeRef.current.kvint, smoothCentsRef.current.kvint, measurement.kvint.targetHz ?? 440.50, 'kvint');
-      integrate(validOktav, lastMeasurementTimeRef.current.oktav, smoothCentsRef.current.oktav, measurement.oktav.targetHz ?? 293.66, 'oktav');
-
-      ctx.clearRect(0, 0, w, h);
-
-      // Colors matching screenshot: Lighter brick/ruby red vs near-black dark red
-      const redColor = '#a8323c';
-      const redLightColor = '#c44852';
-      const darkColor = '#120507';
-      const darkMidColor = '#1e080b';
-
-      const rows = [
-        {
-          key: 'alap',
-          role: 'fundamental' as const,
-          name: 'Alap',
-          note: measurement.alap.noteName || 'D3',
-          noteColor: '#f59e0b',
-          phase: phasesRef.current.alap,
-          stripeWidth: 20, // Fine stripes for Alaphang
-          cents: smoothCentsRef.current.alap,
-          rawCents: measurement.alap.deviationCents,
-          targetHz: measurement.alap.targetHz ?? measurement.alap.measuredHz ?? 146.83,
-          amplitudeDb: measurement.alap.amplitudeDb,
-          timestampMs: measurement.alap.timestampMs,
-          isValid: measurement.hasSignal && measurement.alap.status === 'valid',
-        },
-        {
-          key: 'kvint',
-          role: 'fifth' as const,
-          name: '3× parciális',
-          note: measurement.kvint.noteName || 'A4',
-          noteColor: '#c084fc',
-          phase: phasesRef.current.kvint,
-          stripeWidth: 34, // Medium stripes for Kvint
-          cents: smoothCentsRef.current.kvint,
-          rawCents: measurement.kvint.deviationCents,
-          targetHz: measurement.kvint.targetHz ?? measurement.kvint.measuredHz ?? 440.50,
-          amplitudeDb: measurement.kvint.amplitudeDb,
-          timestampMs: measurement.kvint.timestampMs,
-          isValid: measurement.hasSignal && measurement.kvint.status === 'valid',
-        },
-        {
-          key: 'oktav',
-          role: 'octave' as const,
-          name: 'Oktáv',
-          note: measurement.oktav.noteName || 'D4',
-          noteColor: '#38bdf8',
-          phase: phasesRef.current.oktav,
-          stripeWidth: 54, // Wide block stripes for Oktáv
-          cents: smoothCentsRef.current.oktav,
-          rawCents: measurement.oktav.deviationCents,
-          targetHz: measurement.oktav.targetHz ?? measurement.oktav.measuredHz ?? 293.66,
-          amplitudeDb: measurement.oktav.amplitudeDb,
-          timestampMs: measurement.oktav.timestampMs,
-          isValid: measurement.hasSignal && measurement.oktav.status === 'valid',
-        },
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const render = (now: number) => {
+      const current = latestRef.current;
+      const dt = Math.min(0.1, Math.max(0, (now - lastTickRef.current) / 1000));
+      lastTickRef.current = now;
+      const width = canvas.width;
+      const rowHeight = canvas.height / Math.max(1, 3 + current.customBands.length);
+      const spectrum = current.active && current.hasSignal && !current.transientHoldoff ? bbAudioEngine.getFloatFrequencyData() : null;
+      const sampleRate = bbAudioEngine.getSampleRate();
+      const builtIns: Row[] = [
+        { id: 'fifth', name: 'Kvint · 3×', note: current.kvint.noteName || 'A3', targetHz: current.kvint.targetHz ?? current.baseFrequencyHz * 3, measuredHz: current.kvint.measuredHz, cents: current.kvint.deviationCents, db: current.kvint.amplitudeDb, timestamp: current.kvint.timestampMs, stripeWidth: 34, valid: current.hasSignal && current.kvint.status === 'valid', role: 'fifth' },
+        { id: 'octave', name: 'Oktáv · 2×', note: current.oktav.noteName || 'D4', targetHz: current.oktav.targetHz ?? current.baseFrequencyHz * 2, measuredHz: current.oktav.measuredHz, cents: current.oktav.deviationCents, db: current.oktav.amplitudeDb, timestamp: current.oktav.timestampMs, stripeWidth: 54, valid: current.hasSignal && current.oktav.status === 'valid', role: 'octave' },
+        { id: 'fundamental', name: 'Alap · 1×', note: current.alap.noteName || 'D3', targetHz: current.alap.targetHz ?? current.baseFrequencyHz, measuredHz: current.alap.measuredHz, cents: current.alap.deviationCents, db: current.alap.amplitudeDb, timestamp: current.alap.timestampMs, stripeWidth: 20, valid: current.hasSignal && current.alap.status === 'valid', role: 'fundamental' },
       ];
-
-      rows.forEach((row, idx) => {
-        const now = currentTime;
-        const key = row.key as 'alap' | 'kvint' | 'oktav';
-        const stabilitySamples = stabilitySamplesRef.current[key];
-        const previousTargetHz = stabilityTargetHzRef.current[key];
-        if (previousTargetHz !== null && Math.abs(previousTargetHz - row.targetHz) > 0.001) {
-          stabilitySamples.length = 0;
-          stabilitySampleTimestampRef.current[key] = -1;
+      const extras: Row[] = current.customBands.map((band, index) => {
+        const targetHz = getStrobeBandTargetHz(band, current.baseFrequencyHz);
+        const peak = spectrum ? findSpectralPeakInWindow(targetHz, 150, spectrum, sampleRate, -82) : null;
+        const measuredHz = peak && Number.isFinite(peak.freq) && peak.freq > 0 ? peak.freq : null;
+        const cents = measuredHz === null ? null : 1200 * Math.log2(measuredHz / targetHz);
+        return {
+          id: band.id, name: band.name, note: formatStrobeTargetExpression(band), targetHz,
+          measuredHz, cents, db: peak?.magDb ?? null, timestamp: now,
+          stripeWidth: 18 + (index % 3) * 9,
+          valid: Boolean(band.enabled && current.active && current.hasSignal && !current.transientHoldoff && cents !== null),
+        };
+      });
+      const rows = [...builtIns, ...extras];
+      ctx.clearRect(0, 0, width, canvas.height);
+      const nextReadings: Record<string, Reading> = {};
+      rows.forEach((row, index) => {
+        const y = index * rowHeight;
+        const key = row.id;
+        if (row.valid && row.cents !== null && Number.isFinite(row.cents)) {
+          lastValidRef.current[key] = now;
+          if (smoothRef.current[key] === undefined) smoothRef.current[key] = row.cents;
+          smoothRef.current[key] += (row.cents - smoothRef.current[key]) * 0.15;
+          sampleRef.current[key] ??= [];
+          if (sampleRef.current[key].length >= 15) sampleRef.current[key].shift();
+          sampleRef.current[key].push(row.cents);
         }
-        stabilityTargetHzRef.current[key] = row.targetHz;
-        if (row.isValid && row.rawCents !== null && Number.isFinite(row.rawCents) && row.timestampMs !== stabilitySampleTimestampRef.current[key]) {
-          stabilitySamples.push(row.rawCents);
-          if (stabilitySamples.length > 15) stabilitySamples.shift();
-          stabilitySampleTimestampRef.current[key] = row.timestampMs;
-        } else if (!row.isValid && currentTime - lastMeasurementTimeRef.current[key] > 1000) {
-          stabilitySamples.length = 0;
-          stabilitySampleTimestampRef.current[key] = -1;
-        }
-        const signalContrast = strobeContrastFromDb(row.isValid ? row.amplitudeDb : null);
-        const sharpness = strobeSharpnessFromCents(stabilitySamples);
-        // Smooth frequency-dependent product threshold; not presented as a proven JND model.
-        const toleranceCents = tuningToleranceCents(row.targetHz, measurement.toleranceOverrideCents);
-        const inTolerance = row.isValid && Number.isFinite(row.cents) && Math.abs(row.cents) <= toleranceCents;
-        if (inTolerance) {
-          if (greenSinceRef.current[key] === null) greenSinceRef.current[key] = now;
-        } else {
-          greenSinceRef.current[key] = null;
-        }
-        const isConfirmedGreen = inTolerance && greenSinceRef.current[key] !== null && now - greenSinceRef.current[key]! >= 1000;
-        const isNearButUnconfirmed = row.isValid && Math.abs(row.cents) <= toleranceCents && !isConfirmedGreen;
-        const y = idx * (rowHeight + 4);
-        const stripeW = row.stripeWidth;
-        const period = stripeW * 2;
-        const offset = ((row.phase % period) + period) % period;
-
-        // Clip rounded rectangle for track
+        const lastValid = lastValidRef.current[key] ?? 0;
+        const held = !row.valid && now - lastValid <= 250;
+        const centsForMotion = row.valid || held ? (smoothRef.current[key] ?? row.cents ?? 0) : 0;
+        const speed = row.valid || held
+          ? Math.max(-220, Math.min(220, row.targetHz * (Math.pow(2, centsForMotion / 1200) - 1) * 65 * current.strobeSensitivity))
+          : 0;
+        phasesRef.current[key] = (phasesRef.current[key] ?? 0) + speed * dt;
+        const contrast = strobeContrastFromDb(row.valid ? row.db : null);
+        const sharpness = strobeSharpnessFromCents(sampleRef.current[key] ?? []);
+        const tolerance = tuningToleranceCents(row.targetHz, current.toleranceOverrideCents);
+        const inTolerance = row.valid && row.cents !== null && Math.abs(row.cents) <= tolerance;
+        if (inTolerance) greenSinceRef.current[key] ??= now;
+        else greenSinceRef.current[key] = null;
+        const green = inTolerance && greenSinceRef.current[key] !== null && now - (greenSinceRef.current[key] ?? now) >= 1000;
+        const near = row.valid && row.cents !== null && Math.abs(row.cents) <= tolerance && !green;
+        const stripeWidth = row.stripeWidth;
+        const period = stripeWidth * 2;
+        const offset = ((phasesRef.current[key] % period) + period) % period;
         ctx.save();
         ctx.beginPath();
-        const radius = 6;
-        ctx.moveTo(radius, y);
-        ctx.lineTo(w - radius, y);
-        ctx.quadraticCurveTo(w, y, w, y + radius);
-        ctx.lineTo(w, y + rowHeight - radius);
-        ctx.quadraticCurveTo(w, y + rowHeight, w - radius, y + rowHeight);
-        ctx.lineTo(radius, y + rowHeight);
-        ctx.quadraticCurveTo(0, y + rowHeight, 0, y + rowHeight - radius);
-        ctx.lineTo(0, y + radius);
-        ctx.quadraticCurveTo(0, y, radius, y);
-        ctx.closePath();
+        ctx.roundRect(0, y + 2, width, Math.max(1, rowHeight - 4), 6);
         ctx.clip();
-
-        // 1. Dark base background
-        ctx.fillStyle = darkColor;
-        ctx.fillRect(0, y, w, rowHeight);
-
-        // 2. Alternating red stripes
-          const stripeBase = isConfirmedGreen ? '#147a48' : isNearButUnconfirmed ? '#a36b16' : redColor;
-        const stripeLight = isConfirmedGreen ? '#31d889' : isNearButUnconfirmed ? '#e4ad43' : redLightColor;
-        ctx.fillStyle = stripeBase;
-
-        // reference-app-style cues: signal level changes contrast; frame-to-frame cents
-        // spread changes edge sharpness. These cues do not affect the measurement.
-        ctx.globalAlpha = 0.18 + 0.82 * signalContrast;
+        ctx.fillStyle = '#120507';
+        ctx.fillRect(0, y + 2, width, rowHeight - 4);
+        const stripeBase = green ? '#147a48' : near ? '#a36b16' : '#a8323c';
+        const stripeLight = green ? '#31d889' : near ? '#e4ad43' : '#c44852';
+        ctx.globalAlpha = 0.18 + 0.82 * contrast;
         const edge = 0.12 + (1 - sharpness) * 0.22;
-        for (let x = -period + offset; x < w + period; x += period) {
-          const grad = ctx.createLinearGradient(x, y, x + stripeW, y);
-          grad.addColorStop(0, darkMidColor);
+        for (let x = -period + offset; x < width + period; x += period) {
+          const grad = ctx.createLinearGradient(x, y, x + stripeWidth, y);
+          grad.addColorStop(0, '#1e080b');
           grad.addColorStop(edge, stripeLight);
           grad.addColorStop(1 - edge, stripeBase);
-          grad.addColorStop(1, darkMidColor);
+          grad.addColorStop(1, '#1e080b');
           ctx.fillStyle = grad;
-          ctx.fillRect(x, y, stripeW, rowHeight);
+          ctx.fillRect(x, y + 2, stripeWidth, rowHeight - 4);
         }
         ctx.globalAlpha = 1;
-
-        // 3. Subtle inner shadow / border
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(0, y, w, rowHeight);
-
-        // 4. Glowing Center Reference Line (White vertical hairline with amber/coral glow)
-        const centerX = w / 2;
-        // Outer glow
-        const glowGrad = ctx.createRadialGradient(centerX, y + rowHeight / 2, 0, centerX, y + rowHeight / 2, 16);
-        glowGrad.addColorStop(0, 'rgba(255, 230, 200, 0.45)');
-        glowGrad.addColorStop(1, 'rgba(255, 100, 100, 0)');
-        ctx.fillStyle = glowGrad;
-        ctx.fillRect(centerX - 16, y, 32, rowHeight);
-
-        // White hairline
-        ctx.fillStyle = isConfirmedGreen ? '#eafff2' : '#ffeedd';
-        ctx.fillRect(centerX - 1, y, 2, rowHeight);
-
+        const centerX = width / 2;
+        const glow = ctx.createRadialGradient(centerX, y + rowHeight / 2, 0, centerX, y + rowHeight / 2, 16);
+        glow.addColorStop(0, green ? 'rgba(255,255,255,.48)' : 'rgba(255,230,200,.45)');
+        glow.addColorStop(1, 'rgba(255,100,100,0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(centerX - 16, y + 2, 32, rowHeight - 4);
+        ctx.fillStyle = green ? '#eafff2' : '#ffeedd';
+        ctx.fillRect(centerX - 1, y + 2, 2, rowHeight - 4);
         ctx.restore();
+        nextReadings[key] = { measuredHz: row.measuredHz, deviationCents: row.cents, amplitudeDb: row.db };
       });
+      if (now - lastReadoutRef.current >= 120) { lastReadoutRef.current = now; setReadings(nextReadings); }
+      animationId = requestAnimationFrame(render);
+    };
+    animationId = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animationId);
+  }, [canvasHeight]);
 
-      animId = requestAnimationFrame(render);
-    }
+  const updateBand = (id: string, patch: Partial<StrobeBandConfig>) => {
+    setCustomBands((previous) => normalizeStrobeBands(previous.map((band) => band.id === id ? { ...band, ...patch } : band))
+      .filter((band) => band.source === 'custom').slice(0, MAX_CUSTOM_BANDS));
+  };
+  const addBand = () => {
+    if (customBands.length >= MAX_CUSTOM_BANDS) return;
+    setCustomBands((previous) => [...previous, {
+      id: createBandId(), name: 'Egyedi sáv ' + (previous.length + 1), source: 'custom',
+      targetHz: Math.max(20, Math.min(20000, baseFrequencyHz * 1.5)), centsOffset: 0, enabled: true,
+    }]);
+    setIsEditorOpen(true);
+  };
+  const deleteBand = (id: string) => {
+    setCustomBands((previous) => previous.filter((band) => band.id !== id));
+    setReadings((previous) => { const next = { ...previous }; delete next[id]; return next; });
+  };
 
-    animId = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(animId);
-  }, []);
-
-  const rows = [
-    { role: 'fundamental' as const, name: 'Alap', note: alap.noteName || 'D3', color: '#f59e0b' },
-    { role: 'fifth' as const, name: '3× parciális', note: kvint.noteName || 'A4', color: '#c084fc' },
-    { role: 'octave' as const, name: 'Oktáv', note: oktav.noteName || 'D4', color: '#38bdf8' },
+  const builtInLabels = [
+    { id: 'fifth', name: 'Kvint · 3×', note: kvint.noteName || 'A3', color: '#c084fc', role: 'fifth' as const },
+    { id: 'octave', name: 'Oktáv · 2×', note: oktav.noteName || 'D4', color: '#38bdf8', role: 'octave' as const },
+    { id: 'fundamental', name: 'Alap · 1×', note: alap.noteName || 'D3', color: '#f59e0b', role: 'fundamental' as const },
   ];
 
   return (
-    <>
-    <div className="w-full flex items-stretch gap-2.5 my-1">
-      {/* Left Labels Column */}
-      <div className="flex flex-col justify-between py-1 shrink-0 w-12 text-left select-none">
-        {rows.map((r) => (
-          <button
-            key={r.role}
-            onClick={() => onSelectRole?.(r.role)}
-            className="flex flex-col items-start leading-tight hover:opacity-80 transition cursor-pointer"
-          >
-            <span className="text-xs font-semibold text-white/90">{r.name}</span>
-            <span className="text-[11px] font-mono font-medium" style={{ color: r.color }}>
-              {r.note}
-            </span>
-          </button>
-        ))}
+    <section className="my-2 rounded-2xl border border-white/10 bg-[#0b111b] p-3 shadow-lg">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-white">Stroboszkóp</h3>
+          <p className="mt-0.5 text-[10px] text-slate-400">Felül kvint, középen oktáv, alul alap. A további sávok is ebben a nézetben jelennek meg.</p>
+        </div>
+        <button type="button" onClick={() => setIsEditorOpen((open) => !open)} aria-expanded={isEditorOpen}
+          className="shrink-0 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-xs font-semibold text-amber-200">
+          {isEditorOpen ? 'Szerkesztés bezárása' : 'Sávok szerkesztése'}
+        </button>
       </div>
 
-      {/* Main Canvas containing the 3 Stroboscope bands */}
-      <div className="flex-1 relative">
-        <canvas
-          ref={canvasRef}
-          width={320}
-          height={116}
-          className="w-full h-[116px] block rounded-lg overflow-hidden border border-white/5 shadow-inner"
-        />
+      <div className="flex w-full items-stretch gap-2">
+        <div className="flex w-[78px] shrink-0 flex-col select-none" style={{ height: canvasHeight }}>
+          {builtInLabels.map((row) => (
+            <button key={row.id} style={{ height: ROW_HEIGHT }} onClick={() => onSelectRole?.(row.role)}
+              className={'flex flex-col justify-center items-start leading-tight hover:opacity-80 transition ' + (selectedRole === row.role ? 'opacity-100' : 'opacity-90')}>
+              <span className="text-[11px] font-semibold text-white/90">{row.name}</span>
+              <span className="text-[10px] font-mono font-medium" style={{ color: row.color }}>{row.note}</span>
+            </button>
+          ))}
+          {customBands.map((band, index) => (
+            <div key={band.id} style={{ height: ROW_HEIGHT }} className="flex flex-col justify-center leading-tight overflow-hidden">
+              <span className="truncate text-[11px] font-semibold text-white/80">{band.name || 'Egyedi sáv ' + (index + 1)}</span>
+              <span className="truncate text-[10px] font-mono text-slate-400">{formatStrobeTargetExpression(band)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-white/5 shadow-inner">
+          <canvas ref={canvasRef} width={600} height={canvasHeight}
+            aria-label="A kvint, oktáv, alap és további frekvenciák egyetlen élő stroboszkópos nézetben"
+            className="block h-auto w-full" />
+        </div>
       </div>
-    </div>
-    <section className="mt-2 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
-      <div className="flex items-center justify-between gap-3">
-        <label htmlFor="hangoal-strobe-sensitivity" className="text-[11px] font-semibold text-slate-200">
-          Stroboszkóp sodródási érzékenysége
-        </label>
-        <span className="shrink-0 font-mono text-[11px] text-amber-200">{strobeSensitivity.toFixed(2)}×</span>
-      </div>
-      <input
-        id="hangoal-strobe-sensitivity"
-        aria-label="Stroboszkóp sodródási érzékenysége"
-        type="range"
-        min={MIN_STROBE_SENSITIVITY}
-        max={MAX_STROBE_SENSITIVITY}
-        step="0.25"
-        value={strobeSensitivity}
-        onChange={(event) => onChangeStrobeSensitivity?.(Number(event.target.value))}
-        className="mt-2 w-full cursor-pointer accent-amber-400"
-      />
-      <div className="flex justify-between text-[9px] text-slate-500">
-        <span>Finomabb mozgás</span>
-        <span>Gyorsabb mozgás</span>
+
+      {customBands.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500">
+          {customBands.map((band, index) => {
+            const reading = readings[band.id];
+            const valid = band.enabled && active && hasSignal && !transientHoldoff && reading?.deviationCents !== null && reading?.deviationCents !== undefined;
+            return <span key={band.id} className="font-mono">
+              <span style={{ color: BAND_COLORS[index % BAND_COLORS.length] }}>{band.name}: </span>
+              {valid && reading?.measuredHz !== null && reading?.measuredHz !== undefined
+                ? reading.measuredHz.toFixed(2) + ' Hz · ' + formatCents(reading.deviationCents)
+                : '— · mikrofonos mérésre vár'}
+            </span>;
+          })}
+        </div>
+      )}
+
+      {isEditorOpen && (
+        <div className="mt-3 space-y-3 rounded-xl border border-white/10 bg-slate-950/70 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h4 className="text-xs font-bold text-white">Sávok szerkesztése</h4>
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-400">A három alap sáv állandó. Az új sávok az alap alá kerülnek, és ugyanebben a stroboszkópban jelennek meg.</p>
+            </div>
+            <button type="button" onClick={addBand} disabled={customBands.length >= MAX_CUSTOM_BANDS}
+              className="shrink-0 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-xs font-semibold text-amber-200 disabled:opacity-40">+ Új sáv</button>
+          </div>
+          {customBands.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-slate-700 px-3 py-3 text-center text-xs text-slate-400">Nincs további sáv. A három alap sáv használatra kész.</p>
+          ) : customBands.map((band, index) => {
+            const reading = readings[band.id];
+            const targetHz = getStrobeBandTargetHz(band, baseFrequencyHz);
+            const measured = reading?.measuredHz ?? null;
+            const cents = reading?.deviationCents ?? null;
+            const valid = band.enabled && active && hasSignal && !transientHoldoff && cents !== null;
+            const inTolerance = valid && Math.abs(cents ?? Infinity) <= tuningToleranceCents(targetHz, toleranceOverrideCents);
+            return (
+              <div key={band.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: BAND_COLORS[index % BAND_COLORS.length] }} />
+                  <label className="min-w-0 flex-1 text-[10px] text-slate-400">Név
+                    <input aria-label="Sáv neve" type="text" maxLength={48} value={band.name}
+                      onChange={(event) => { const value = event.target.value.slice(0, 48); if (value.trim()) updateBand(band.id, { name: value }); }}
+                      className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white outline-none focus:border-amber-400" />
+                  </label>
+                  <label className="flex shrink-0 items-center gap-1.5 text-[10px] text-slate-400">
+                    <input aria-label={band.name + ' bekapcsolása'} type="checkbox" checked={band.enabled}
+                      onChange={(event) => updateBand(band.id, { enabled: event.target.checked })} className="accent-amber-400" />Aktív
+                  </label>
+                  <button type="button" onClick={() => deleteBand(band.id)} aria-label={band.name + ' törlése'}
+                    className="rounded-md px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/10">Törlés</button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <label className="min-w-0 text-[10px] text-slate-400">Cél (Hz / arány / cent)
+                    <input aria-label="Célfrekvencia vagy arány" type="text" inputMode="decimal"
+                      value={targetDrafts[band.id] ?? formatStrobeTargetExpression(band)}
+                      onChange={(event) => {
+                        const draft = event.target.value;
+                        setTargetDrafts((previous) => ({ ...previous, [band.id]: draft }));
+                        const parsed = parseStrobeTargetExpressionParts(draft);
+                        const value = parseStrobeTargetExpression(draft, baseFrequencyHz);
+                        if (parsed && value !== null) updateBand(band.id, { targetHz: value, targetMode: parsed.mode, targetValue: parsed.mode === 'absolute' ? undefined : parsed.value });
+                      }}
+                      onBlur={() => setTargetDrafts((previous) => { const next = { ...previous }; delete next[band.id]; return next; })}
+                      placeholder="440 / 3/2 / 702c"
+                      className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs text-white outline-none focus:border-amber-400" />
+                  </label>
+                  <label className="min-w-0 text-[10px] text-slate-400">Korrekció (cent)
+                    <input aria-label="Centkorrekció" type="number" min={-1200} max={1200} step="0.1" value={band.centsOffset}
+                      onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= -1200 && value <= 1200) updateBand(band.id, { centsOffset: value }); }}
+                      className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs text-white outline-none focus:border-amber-400" />
+                  </label>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-black/25 px-2.5 py-2 font-mono text-[11px]">
+                  <span className="text-slate-400">Cél: {targetHz.toFixed(3)} Hz</span>
+                  <span className="text-white">{valid && measured !== null ? measured.toFixed(3) + ' Hz' : '— Hz'}</span>
+                  <span className={valid ? (inTolerance ? 'text-emerald-300' : 'text-amber-300') : 'text-slate-500'}>
+                    {valid ? formatCents(cents) : active && transientHoldoff ? 'Ütés utáni várakozás' : active && hasSignal ? 'Nincs megbízható csúcs' : 'Mérésre vár'}
+                  </span>
+                </div>
+                {valid && reading?.amplitudeDb !== null && reading?.amplitudeDb !== undefined && <div className="mt-1 text-right text-[10px] text-slate-500">Csúcs: {reading.amplitudeDb.toFixed(1)} dB (FFT-becslés)</div>}
+              </div>
+            );
+          })}
+          {customBands.length >= MAX_CUSTOM_BANDS && <p className="text-[10px] text-amber-300">Legfeljebb {MAX_CUSTOM_BANDS} további sáv adható hozzá.</p>}
+          <p className="text-[10px] leading-relaxed text-slate-500">Az egyedi sávok a mikrofonos spektrumból mérnek. A cél Hz-ben, arányként (például 3/2), vagy centértékként adható meg.</p>
+        </div>
+      )}
+
+      <div className="mt-3 rounded-xl border border-white/10 bg-[#0b111b] px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <label htmlFor="hangoal-strobe-sensitivity" className="text-[11px] font-semibold text-slate-200">Stroboszkóp sodródási érzékenysége</label>
+          <span className="shrink-0 font-mono text-[11px] text-amber-200">{strobeSensitivity.toFixed(2)}×</span>
+        </div>
+        <input id="hangoal-strobe-sensitivity" aria-label="Stroboszkóp sodródási érzékenysége" type="range"
+          min={MIN_STROBE_SENSITIVITY} max={MAX_STROBE_SENSITIVITY} step="0.25" value={strobeSensitivity}
+          onChange={(event) => onChangeStrobeSensitivity?.(Number(event.target.value))}
+          className="mt-2 w-full cursor-pointer accent-amber-400" />
+        <div className="flex justify-between text-[9px] text-slate-500"><span>Finomabb mozgás</span><span>Gyorsabb mozgás</span></div>
       </div>
     </section>
-    </>
   );
 };
+
+export default BBStrobeBands;
