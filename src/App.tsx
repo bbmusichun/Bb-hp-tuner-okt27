@@ -22,6 +22,7 @@ import { isWithinTuningTolerance } from './audio/tuningTolerance';
 import { buildChromaticTargetNote, midiFromFrequency } from './audio/chromaticPitch';
 import { transposeFrequencyBySemitones } from './audio/transposition';
 import { normalizeTuningReadoutMode, type TuningReadoutMode } from './audio/readoutModes';
+import { isDetectionArmed, nextAutoDetectionMode, normalizeAutoDetectionMode, type AutoDetectionMode } from './audio/detectionModes';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
@@ -58,6 +59,7 @@ function loadTuningPreferences(): {
   a4Ref: number;
   scaleId: string;
   autoDetect: boolean;
+  autoDetectionMode: AutoDetectionMode;
   partialTargetOffsets: PartialTargetOffsetMap;
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
@@ -78,6 +80,7 @@ function loadTuningPreferences(): {
     a4Ref: defaultProfile.a4Ref,
     scaleId: defaultProfile.scaleId,
     autoDetect: true,
+    autoDetectionMode: 'continuous' as AutoDetectionMode,
     partialTargetOffsets: defaultProfile.partialTargetOffsets,
     instrumentProfiles: [defaultProfile],
     activeInstrumentProfileId: defaultProfile.id,
@@ -96,6 +99,7 @@ function loadTuningPreferences(): {
       a4Ref?: unknown;
       scaleId?: unknown;
       autoDetect?: unknown;
+      autoDetectionMode?: unknown;
       partialTargetOffsets?: unknown;
       instrumentProfiles?: unknown;
       activeInstrumentProfileId?: unknown;
@@ -126,6 +130,7 @@ function loadTuningPreferences(): {
       a4Ref: activeProfile.a4Ref,
       scaleId: activeProfile.scaleId,
       autoDetect: typeof prefs.autoDetect === 'boolean' ? prefs.autoDetect : defaults.autoDetect,
+      autoDetectionMode: normalizeAutoDetectionMode(prefs.autoDetectionMode, prefs.autoDetect),
       partialTargetOffsets: activeProfile.partialTargetOffsets,
       instrumentProfiles: profiles,
       activeInstrumentProfileId,
@@ -177,7 +182,9 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
 export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [autoDetect, setAutoDetect] = useState(() => loadTuningPreferences().autoDetect);
+  const [autoDetectionMode, setAutoDetectionMode] = useState<AutoDetectionMode>(() => loadTuningPreferences().autoDetectionMode);
+  const [singleShotCaptured, setSingleShotCaptured] = useState(false);
+  const autoDetect = autoDetectionMode !== 'off';
   const [toleranceOverrideCents, setToleranceOverrideCents] = useState<number | null>(
     () => loadTuningPreferences().toleranceOverrideCents,
   );
@@ -277,7 +284,8 @@ export default function App() {
     const target = buildChromaticTargetNote(midi, a4Ref, currentScale.id, partialTargetOffsets);
     if (!target) return;
     autoDetectionRef.current = null;
-    setAutoDetect(false);
+    setAutoDetectionMode('off');
+    setSingleShotCaptured(false);
     setChromaticTargetMidi(midi);
     setSelectedNote(target);
     setSelectedRole('fundamental');
@@ -285,6 +293,7 @@ export default function App() {
 
   const handleSelectToneFieldNote = (note: ToneFieldNote) => {
     setChromaticTargetMidi(null);
+    autoDetectionRef.current = null;
     setSelectedNote(note);
   };
 
@@ -574,6 +583,7 @@ export default function App() {
         a4Ref,
         scaleId: currentScale.id,
         autoDetect,
+        autoDetectionMode,
         toleranceOverrideCents,
         transposeSemitones,
         readoutMode,
@@ -585,7 +595,7 @@ export default function App() {
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale, autoDetect, toleranceOverrideCents, transposeSemitones, readoutMode, referenceToneMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+  }, [a4Ref, currentScale, autoDetect, autoDetectionMode, toleranceOverrideCents, transposeSemitones, readoutMode, referenceToneMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
 
   useEffect(() => {
     try {
@@ -604,7 +614,7 @@ export default function App() {
       if (now - lastTick >= 33) {
         lastTick = now;
 
-        if (autoDetect && chromaticTargetMidi === null) {
+        if (isDetectionArmed(autoDetectionMode, singleShotCaptured) && chromaticTargetMidi === null) {
           const detected = bbAudioEngine.detectNote(
             enabledToneNotes.map((note) => ({ id: note.id, noteName: note.noteName, frequency: note.frequency }))
           );
@@ -616,10 +626,15 @@ export default function App() {
             }
             const matched = enabledToneNotes.find((note) => note.id === detected.id);
             // Require three consecutive matching frames to avoid note changes from a single transient.
-            if (matched && matched.id !== selectedNote.id && autoDetectionRef.current.count >= 3) setSelectedNote(matched);
+            if (matched && autoDetectionRef.current.count >= 3) {
+              if (matched.id !== selectedNote.id) setSelectedNote(matched);
+              if (autoDetectionMode === 'single-shot' && !singleShotCaptured) setSingleShotCaptured(true);
+            }
           } else {
             autoDetectionRef.current = null;
           }
+        } else {
+          autoDetectionRef.current = null;
         }
 
         const result = bbAudioEngine.analyze(
@@ -658,7 +673,7 @@ export default function App() {
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isListening, selectedNote, resonanceNoteNames, autoDetect, toneNotes, enabledToneNotes, chromaticTargetMidi]);
+  }, [isListening, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
 
   // Toggle microphone
   const handleToggleMic = async () => {
@@ -841,14 +856,36 @@ export default function App() {
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => {
-                  const next = !autoDetect;
-                  setAutoDetect(next);
-                  if (next && chromaticTargetMidi !== null) setChromaticTargetMidi(null);
+                  if (autoDetectionMode === 'single-shot' && singleShotCaptured) {
+                    setSingleShotCaptured(false);
+                    autoDetectionRef.current = null;
+                    return;
+                  }
+                  const next = nextAutoDetectionMode(autoDetectionMode);
+                  setAutoDetectionMode(next);
+                  setSingleShotCaptured(false);
+                  autoDetectionRef.current = null;
+                  if (next !== 'off' && chromaticTargetMidi !== null) setChromaticTargetMidi(null);
                 }}
-                className={`px-2 py-1 rounded-full border text-[10px] font-semibold ${autoDetect ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 text-slate-400'}`}
-                title="Automatikus hangfelismerés kapcsolása"
+                className={`px-2 py-1 rounded-full border text-[10px] font-semibold ${
+                  autoDetectionMode === 'continuous'
+                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                    : autoDetectionMode === 'single-shot'
+                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+                    : 'border-slate-700 text-slate-400'
+                }`}
+                title={autoDetectionMode === 'single-shot' && singleShotCaptured
+                  ? 'Egyszeri felismerés újraélesítése'
+                  : 'Módváltás: folyamatos → egyszeri → ki. Egyszeri módban az első stabil felismerés után kattintással újraélesíthető.'}
+                aria-label={autoDetectionMode === 'single-shot' && singleShotCaptured ? 'Egyszeri felismerés újraélesítése' : 'Automatikus hangfelismerés módja'}
               >
-                AUTO {autoDetect ? 'BE' : 'KI'}
+                {autoDetectionMode === 'off'
+                  ? 'AUTO KI'
+                  : autoDetectionMode === 'continuous'
+                  ? 'AUTO BE'
+                  : singleShotCaptured
+                  ? 'RÖGZÍTVE'
+                  : 'AUTO 1×'}
               </button>
               <button onClick={() => setIsSettingsOpen(true)} className="p-1 text-slate-300 hover:text-white transition" title="Beállítások">
                 <Settings className="w-5 h-5" />
