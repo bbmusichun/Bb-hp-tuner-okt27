@@ -16,6 +16,8 @@ export default defineConfig(() => {
         // Keep the personal reference recording available after the app has been installed/offline-cached.
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,txt,woff2,mp3}'],
+          // An unrelated 6 MB AI Studio image is too large for precache; omit it but keep the small handpan MP3.
+          globIgnores: ['**/assets/aistudio/IMG_5394_912014bf.png'],
         },
         manifest: {
           id: '/',
