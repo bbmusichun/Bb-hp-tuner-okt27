@@ -89,8 +89,11 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
           { length: decoded.numberOfChannels },
           (_, channel) => decoded.getChannelData(channel),
         );
-        const samples = downmixChannels(channels);
-        if (samples.length < 16384) throw new Error('A felvétel túl rövid az elemzéshez.');
+        const decodedSamples = downmixChannels(channels);
+        // The opening 3 seconds contain the useful handpan strike; later material is noise.
+        const testLength = Math.min(decodedSamples.length, Math.floor(decoded.sampleRate * 3));
+        const samples = decodedSamples.slice(0, testLength);
+        if (samples.length < 16384) throw new Error('A felvétel első 3 másodperce túl rövid az elemzéshez.');
         audioSamplesRef.current = { samples, sampleRate: decoded.sampleRate };
         setRecordingLoaded(true);
         setProgress(0);
@@ -177,6 +180,7 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
     };
     const start = () => {
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      syncToPlayback();
       animationFrame = window.requestAnimationFrame(tick);
     };
     const stop = () => {
@@ -202,6 +206,7 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
   }, [audioRef, syncToPlayback]);
 
   const current = frames[Math.min(frameIndex, Math.max(0, frames.length - 1))];
+
   const detected = current?.detectedNote ?? null;
   const labels = ['Alaphang · 1×', 'Oktáv · 2×', '3. parciális · 3×'];
   const resultRows = current?.resonances ?? [];
@@ -212,7 +217,7 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
         <div>
           <h3 className="text-sm font-bold text-white">Felvétel-alapú hangfelismerési teszt</h3>
           <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-            A hangfájl közvetlen elemzése mikrofon nélkül. A kijelzés a lejátszás pozíciójához igazodik.
+            A felvétel első 3 másodpercét elemezzük. Lejátszáskor a teljes hangoló motor is ezt a bemenetet kapja, mikrofonengedély nélkül.
           </p>
         </div>
         <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold text-cyan-200">
@@ -220,7 +225,7 @@ export function OwnDRecordingAnalysis({ audioRef, noteCandidates, targetFrequenc
         </span>
       </div>
 
-      {state === 'loading' && <p className="text-xs text-slate-300">A saját handpanfelvétel dekódolása…</p>}
+      {state === 'loading' && <p className="text-xs text-slate-300">A hangfájl dekódolása (csak az első 3 másodperc)…</p>}
       {state === 'analyzing' && (
         <div className="space-y-1.5">
           <div className="flex justify-between gap-2 text-xs text-slate-300">

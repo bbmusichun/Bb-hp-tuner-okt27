@@ -3,7 +3,7 @@
  * Pixel-perfect implementation of the functional specification and visual design.
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Menu,
   Settings,
@@ -41,7 +41,6 @@ import {
 } from './audio/partialTargets';
 import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
-import { BBConfigurableStrobeBands } from './components/BBConfigurableStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
 import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
 import { BBPitchDial } from './components/BBPitchDial';
@@ -646,6 +645,7 @@ export default function App() {
 
   // Live Audio Analysis State
   const [isListening, setIsListening] = useState(false);
+  const [isFileInputActive, setIsFileInputActive] = useState(false);
   const [autoGainControlStatus, setAutoGainControlStatus] = useState<boolean | null>(null);
   const [micError, setMicError] = useState('');
   const [hasSignal, setHasSignal] = useState(false);
@@ -820,17 +820,17 @@ export default function App() {
         }
       }
 
-      if (isListening) {
+      if (isListening || isFileInputActive) {
         animId = requestAnimationFrame(loop);
       }
     }
 
-    if (isListening) {
+    if (isListening || isFileInputActive) {
       animId = requestAnimationFrame(loop);
     }
 
     return () => cancelAnimationFrame(animId);
-  }, [isListening, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
+  }, [isListening, isFileInputActive, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
 
   // Toggle microphone
   const handleToggleMic = async () => {
@@ -855,6 +855,11 @@ export default function App() {
       setOktav(clearMeasurement(oktav, selectedNote.octaveFreq));
     } else {
       setMicError('');
+      // Stop the file-input analysis before opening the microphone.
+      if (isFileInputActive) {
+        bbAudioEngine.stopAudioElementInput();
+        setIsFileInputActive(false);
+      }
       // Stop the reference recording before opening the microphone to avoid speaker-to-mic feedback.
       if (ownDPlayerRef.current && !ownDPlayerRef.current.paused) {
         ownDPlayerRef.current.pause();
@@ -1157,23 +1162,23 @@ export default function App() {
                     : 'bg-slate-600'
                 }`}
               />
-              <span className={`text-[11px] font-medium ${isListening ? 'text-slate-200' : 'text-slate-400'}`}>
-                {isListening ? 'Mikrofon aktív' : 'Mikrofon inaktív'}
+              <span className={`text-[11px] font-medium ${(isListening || isFileInputActive) ? 'text-slate-200' : 'text-slate-400'}`}>
+                {isListening ? 'Mikrofon aktív' : isFileInputActive ? 'Hangfájl tesztelése' : 'Mikrofon inaktív'}
               </span>
             </div>
 
             {/* Right: Sample rate, input level dB, and LED meter */}
             <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
-              <span title="A mikrofon mintavételezési frekvenciája">{sampleRateKhz !== null ? `${sampleRateKhz} kHz` : '— kHz'}</span>
+              <span title="A hangbemenet mintavételezési frekvenciája">{sampleRateKhz !== null ? `${sampleRateKhz} kHz` : '— kHz'}</span>
               <span className="text-slate-600">|</span>
               <span
                 title="A fő elemzési ciklus mért frissítési üteme"
                 aria-label={analysisFps !== null ? `Elemzési frissítés: ${analysisFps} képkocka másodpercenként` : 'Elemzési frissítési ütem még nem mérhető'}
                 className={analysisFps !== null && analysisFps < 20 ? 'text-amber-300' : ''}
-              >{isListening && analysisFps !== null ? `${analysisFps} FPS` : '— FPS'}</span>
+              >{(isListening || isFileInputActive) && analysisFps !== null ? `${analysisFps} FPS` : '— FPS'}</span>
               <span className="text-slate-600">|</span>
               <span className={inputNearClip ? 'w-11 text-right text-red-300' : 'w-11 text-right'}>
-                {isListening && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}
+                {(isListening || isFileInputActive) && hasSignal ? `${inputLevelDb} dB` : '-∞ dB'}
               </span>
 
               {/* 8-segment LED VU meter matching screenshot */}
@@ -1181,7 +1186,7 @@ export default function App() {
                 {[0, 1, 2, 3, 4, 5, 6, 7].map((barIdx) => {
                   // Thresholds: -60, -50, -40, -30, -20, -12, -6, -2 dB
                   const thresholds = [-60, -50, -40, -30, -22, -14, -8, -3];
-                  const isLit = isListening && hasSignal && inputLevelDb >= thresholds[barIdx];
+                  const isLit = (isListening || isFileInputActive) && hasSignal && inputLevelDb >= thresholds[barIdx];
 
                   let colorClass = 'bg-[#10b981]'; // Green (bars 0-4)
                   if (barIdx >= 5 && barIdx <= 6) colorClass = 'bg-[#f59e0b]'; // Yellow/Amber
@@ -1230,32 +1235,52 @@ export default function App() {
               <audio
                 ref={ownDPlayerRef}
                 src="/audio/sajat-d-handpan.mp3"
-                loop={ownDLoop}
+                loop={false}
                 preload="metadata"
                 onLoadedMetadata={(event) => {
                   const duration = event.currentTarget.duration;
-                  setOwnDAudioDuration(Number.isFinite(duration) ? duration : 0);
+                  setOwnDAudioDuration(Number.isFinite(duration) ? Math.min(duration, 3) : 0);
                 }}
                 onDurationChange={(event) => {
                   const duration = event.currentTarget.duration;
-                  setOwnDAudioDuration(Number.isFinite(duration) ? duration : 0);
+                  setOwnDAudioDuration(Number.isFinite(duration) ? Math.min(duration, 3) : 0);
                 }}
-                onTimeUpdate={(event) => setOwnDAudioCurrentTime(event.currentTarget.currentTime)}
+                onTimeUpdate={(event) => {
+                  const player = event.currentTarget;
+                  if (player.currentTime >= 3) {
+                    if (ownDLoop) {
+                      player.currentTime = 0;
+                      setOwnDAudioCurrentTime(0);
+                    } else {
+                      player.pause();
+                      player.currentTime = 0;
+                      bbAudioEngine.stopAudioElementInput();
+                      setIsFileInputActive(false);
+                      setIsOwnDPlaying(false);
+                      setOwnDAudioCurrentTime(0);
+                    }
+                  } else {
+                    setOwnDAudioCurrentTime(player.currentTime);
+                  }
+                }}
                 onCanPlay={() => setOwnDAudioError('')}
                 onError={() => {
+                  bbAudioEngine.stopAudioElementInput();
+                  setIsFileInputActive(false);
+                  setHasSignal(false);
                   setIsOwnDPlaying(false);
                   setOwnDAudioDuration(0);
                   setOwnDAudioCurrentTime(0);
                   setOwnDAudioError('A saját D-felvétel nem tölthető be. Frissítsd az oldalt, és próbáld újra.');
                 }}
-                onEnded={() => { setIsOwnDPlaying(false); setOwnDAudioCurrentTime(0); }}
-                onPause={(event) => { if (event.currentTarget.paused) setIsOwnDPlaying(false); }}
+                onEnded={() => { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); setOwnDAudioCurrentTime(0); }}
+                onPause={(event) => { if (event.currentTarget.paused) { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); setHasSignal(false); setInputLevelDb(-100); setTransientHoldoff(false); } }}
                 onPlay={() => { setOwnDAudioError(''); setIsOwnDPlaying(true); }}
               />
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-white">Saját D lejátszása</div>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">A saját D Kurd handpan-felvételed, hangolási referencia nélkül.</p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">A saját D Kurd handpan-felvétel első 3 másodperce fut át a teljes hangolóelemzésen.</p>
                 </div>
                 <button
                   type="button"
@@ -1265,13 +1290,30 @@ export default function App() {
                     if (isOwnDPlaying) {
                       player.pause();
                       player.currentTime = 0;
+                      bbAudioEngine.stopAudioElementInput();
+                      setIsFileInputActive(false);
                       setOwnDAudioCurrentTime(0);
                       setIsOwnDPlaying(false);
                     } else if (!isListening) {
                       setOwnDAudioError('');
-                      void player.play().then(() => setIsOwnDPlaying(true)).catch(() => {
+                      const startPlayback = async () => {
+                        const playPromise = player.play();
+                        const inputPromise = bbAudioEngine.startAudioElementInput(player);
+                        const [, inputReady] = await Promise.all([playPromise, inputPromise]);
+                        if (!inputReady) throw new Error('A hangfájl nem kapcsolható az elemzőhöz.');
+                        analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
+                        setAnalysisFps(null);
+                        setIsFileInputActive(true);
+                        setIsOwnDPlaying(true);
+                      };
+                      void startPlayback().catch((error) => {
+                        player.pause();
+                        bbAudioEngine.stopAudioElementInput();
+                        setIsFileInputActive(false);
                         setIsOwnDPlaying(false);
-                        setOwnDAudioError('A lejátszás nem indult el. Érintsd meg újra a Lejátszás gombot.');
+                        setOwnDAudioError(error instanceof Error
+                          ? error.message
+                          : 'A lejátszás nem indult el. Érintsd meg újra a Lejátszás gombot.');
                       });
                     }
                   }}
@@ -1476,19 +1518,14 @@ export default function App() {
                 kvint={kvint}
                 oktav={oktav}
                 hasSignal={hasSignal}
+                active={isListening || isFileInputActive}
+                transientHoldoff={transientHoldoff}
+                baseFrequencyHz={selectedNote.frequency}
                 selectedRole={selectedRole}
                 onSelectRole={setSelectedRole}
                 toleranceOverrideCents={toleranceOverrideCents}
                 strobeSensitivity={strobeSensitivity}
                 onChangeStrobeSensitivity={setStrobeSensitivity}
-              />
-              <BBConfigurableStrobeBands
-                active={isListening}
-                hasSignal={hasSignal}
-                transientHoldoff={transientHoldoff}
-                toleranceOverrideCents={toleranceOverrideCents}
-                baseFrequencyHz={selectedNote.frequency}
-                strobeSensitivity={strobeSensitivity}
               />
             </div>
 
@@ -1503,7 +1540,7 @@ export default function App() {
             />
 
             <BBSpectrumDiagnostics
-              active={isListening}
+              active={isListening || isFileInputActive}
               hasSignal={hasSignal}
               transientHoldoff={transientHoldoff}
               alap={alap}
@@ -1580,7 +1617,7 @@ export default function App() {
         {/* ================= TAB 2: DETAILED SPECTRUM VIEW ================= */}
         {activeTab === 'spektrum' && (
           <div className="flex-1 flex flex-col gap-2 py-1 min-h-0">
-            <BBSpectrumWaterfall active={isListening} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
+            <BBSpectrumWaterfall active={isListening || isFileInputActive} alap={alap} oktav={oktav} kvint={kvint} yinFrequencyHz={yinFrequencyHz} yinClarity={yinClarity} yinAgreementCents={yinAgreementCents} />
             <div className="grid grid-cols-3 gap-2 text-[11px] font-mono">
               <button onClick={() => setSelectedRole('fundamental')} className={`rounded-lg border p-2 text-left ${selectedRole === 'fundamental' ? 'border-amber-400/60 bg-amber-400/10' : 'border-white/10 bg-slate-900/50'}`}>
                 <div className="font-sans font-semibold text-amber-400">1× Alaphang</div>
