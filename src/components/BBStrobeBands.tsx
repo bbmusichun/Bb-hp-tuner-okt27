@@ -202,7 +202,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         const stripeLight = isConfirmedGreen ? '#31d889' : isNearButUnconfirmed ? '#e4ad43' : redLightColor;
         ctx.fillStyle = stripeBase;
 
-        // Linotune-style cues: signal level changes contrast; frame-to-frame cents
+        // reference-app-style cues: signal level changes contrast; frame-to-frame cents
         // spread changes edge sharpness. These cues do not affect the measurement.
         ctx.globalAlpha = 0.18 + 0.82 * signalContrast;
         const edge = 0.12 + (1 - sharpness) * 0.22;
