@@ -8,8 +8,8 @@ import type { InstrumentProfile } from '../audio/instrumentProfiles';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
 import { parseScalaScl, scalaToCustomScaleText, type ParsedScalaScale } from '../audio/scala';
 
-function scalaImportSuccessMessage(parsed: ParsedScalaScale, message: string): string {
-  const reference = parsed.reference;
+function scalaImportSuccessMessage(parsed: ParsedScalaScale | null, message: string): string {
+  const reference = parsed?.reference;
   if (!reference) return message;
 
   const label = reference.label
