@@ -98,7 +98,7 @@ export const BBStrobeBands: React.FC<Props> = ({
       const spectrum = current.active && current.hasSignal && !current.transientHoldoff ? bbAudioEngine.getFloatFrequencyData() : null;
       const sampleRate = bbAudioEngine.getSampleRate();
       const builtIns: Row[] = [
-        { id: 'fifth', name: 'Kvint · 3×', note: current.kvint.noteName || 'A3', targetHz: current.kvint.targetHz ?? current.baseFrequencyHz * 3, measuredHz: current.kvint.measuredHz, cents: current.kvint.deviationCents, db: current.kvint.amplitudeDb, timestamp: current.kvint.timestampMs, stripeWidth: 34, valid: current.hasSignal && current.kvint.status === 'valid', role: 'fifth' },
+        { id: 'fifth', name: 'Kvint · 3×', note: current.kvint.noteName || 'A4', targetHz: current.kvint.targetHz ?? current.baseFrequencyHz * 3, measuredHz: current.kvint.measuredHz, cents: current.kvint.deviationCents, db: current.kvint.amplitudeDb, timestamp: current.kvint.timestampMs, stripeWidth: 34, valid: current.hasSignal && current.kvint.status === 'valid', role: 'fifth' },
         { id: 'octave', name: 'Oktáv · 2×', note: current.oktav.noteName || 'D4', targetHz: current.oktav.targetHz ?? current.baseFrequencyHz * 2, measuredHz: current.oktav.measuredHz, cents: current.oktav.deviationCents, db: current.oktav.amplitudeDb, timestamp: current.oktav.timestampMs, stripeWidth: 54, valid: current.hasSignal && current.oktav.status === 'valid', role: 'octave' },
         { id: 'fundamental', name: 'Alap · 1×', note: current.alap.noteName || 'D3', targetHz: current.alap.targetHz ?? current.baseFrequencyHz, measuredHz: current.alap.measuredHz, cents: current.alap.deviationCents, db: current.alap.amplitudeDb, timestamp: current.alap.timestampMs, stripeWidth: 20, valid: current.hasSignal && current.alap.status === 'valid', role: 'fundamental' },
       ];
@@ -202,7 +202,7 @@ export const BBStrobeBands: React.FC<Props> = ({
   };
 
   const builtInLabels = [
-    { id: 'fifth', name: 'Kvint · 3×', note: kvint.noteName || 'A3', color: '#c084fc', role: 'fifth' as const },
+    { id: 'fifth', name: 'Kvint · 3×', note: kvint.noteName || 'A4', color: '#c084fc', role: 'fifth' as const },
     { id: 'octave', name: 'Oktáv · 2×', note: oktav.noteName || 'D4', color: '#38bdf8', role: 'octave' as const },
     { id: 'fundamental', name: 'Alap · 1×', note: alap.noteName || 'D3', color: '#f59e0b', role: 'fundamental' as const },
   ];
