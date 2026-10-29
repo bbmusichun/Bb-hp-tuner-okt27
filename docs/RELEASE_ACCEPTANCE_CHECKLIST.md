@@ -16,7 +16,9 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] A kiválasztott hang alaphangja, oktávja (2×) és harmadik parciálisa (3×) külön-külön követhető.
 - [ ] A frekvencia (Hz), a céltól való eltérés (cent), a spektrum és a stabilitási grafikon konzisztens.
 - [ ] Túl nagy bemeneti szintnél figyelmeztetés jelenik meg; a túlvezérelt mérés nem tekintendő elfogadhatónak.
-- [ ] A referenciahang a kiválasztott csatorna célfrekvenciáján szól, majd leáll; mikrofonmérés közben nem indítható el.
+- [ ] Folyamatos módban a referenciahang a kiválasztott csatorna célfrekvenciáján szól, és csak a mikrofon leállított állapotában indítható.
+- [ ] Ütésmódnál az egyszeri, 120 ms-os hang a tranziensvédelmi ablak elején szól; össze kell vetni a mért eredményt a hang nélkül kapott értékkel.
+- [ ] Kikapcsolt módban sem a referenciahang-gomb, sem a hangmezőtérkép nem generál referenciahangot.
 
 ## 3. Hangszerprofilok és célértékek
 
