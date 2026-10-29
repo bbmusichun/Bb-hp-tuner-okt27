@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeScalaNoteLabel, parseScalaScl, scalaToCustomScaleText } from './scala';
+import { describeScalaReference, normalizeScalaNoteLabel, parseScalaScl, scalaReferenceToA4, scalaToCustomScaleText } from './scala';
 import { parseCustomScale } from './instrumentProfiles';
 
 describe('Scala SCL import', () => {
@@ -39,7 +39,9 @@ describe('Scala SCL import', () => {
     ].join('\n'));
     assert.ok(parsed);
     assert.deepEqual(parsed.degreeLabels, ['D', 'E', 'F♯', 'G', 'B']);
-    assert.deepEqual(parsed.reference, { degreeIndex: -1, octave: 3, frequencyHz: 131.2, explicit: true });
+    assert.deepEqual(parsed.reference, { degreeIndex: -1, octave: 3, frequencyHz: 131.2, noteName: 'C', explicit: true });
+    assert.equal(describeScalaReference(parsed), 'C3 = 131.200 Hz');
+    assert.ok(Math.abs((scalaReferenceToA4(parsed) ?? 0) - 131.2 * Math.pow(2, 21 / 12)) < 0.01);
     const rows = scalaToCustomScaleText(parsed, 'C3', 131.2);
     assert.ok(rows);
     assert.ok(rows.startsWith('C3, 131.200\nD, '));
