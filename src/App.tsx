@@ -21,6 +21,7 @@ import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
 import { isWithinTuningTolerance } from './audio/tuningTolerance';
 import { buildChromaticTargetNote, midiFromFrequency } from './audio/chromaticPitch';
 import { transposeFrequencyBySemitones } from './audio/transposition';
+import { normalizeTuningReadoutMode, type TuningReadoutMode } from './audio/readoutModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
   DEFAULT_PARTIAL_TARGET_OFFSET,
@@ -61,6 +62,7 @@ function loadTuningPreferences(): {
   activeInstrumentProfileId: string;
   toleranceOverrideCents: number | null;
   transposeSemitones: number;
+  readoutMode: TuningReadoutMode;
   scale: HandpanScale;
 } {
   const defaultProfile: InstrumentProfile = {
@@ -79,6 +81,7 @@ function loadTuningPreferences(): {
     activeInstrumentProfileId: defaultProfile.id,
     toleranceOverrideCents: null,
     transposeSemitones: 0,
+    readoutMode: 'hz' as TuningReadoutMode,
     scale: PRESET_SCALES[0],
   };
   try {
@@ -95,6 +98,7 @@ function loadTuningPreferences(): {
       activeInstrumentProfileId?: unknown;
       toleranceOverrideCents?: unknown;
       transposeSemitones?: unknown;
+      readoutMode?: unknown;
     };
     const legacyA4 = typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
       ? prefs.a4Ref : defaultProfile.a4Ref;
@@ -126,6 +130,7 @@ function loadTuningPreferences(): {
         ? prefs.toleranceOverrideCents : null,
       transposeSemitones: typeof prefs.transposeSemitones === 'number' && Number.isInteger(prefs.transposeSemitones) && prefs.transposeSemitones >= -12 && prefs.transposeSemitones <= 12
         ? prefs.transposeSemitones : 0,
+      readoutMode: normalizeTuningReadoutMode(prefs.readoutMode),
       scale: activeProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId) ?? PRESET_SCALES[0],
     };
   } catch {
@@ -173,6 +178,7 @@ export default function App() {
   );
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
   const [transposeSemitones, setTransposeSemitones] = useState<number>(() => loadTuningPreferences().transposeSemitones);
+  const [readoutMode, setReadoutMode] = useState<TuningReadoutMode>(() => loadTuningPreferences().readoutMode);
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(() => loadTuningPreferences().a4Ref);
@@ -562,6 +568,7 @@ export default function App() {
         autoDetect,
         toleranceOverrideCents,
         transposeSemitones,
+        readoutMode,
         partialTargetOffsets,
         instrumentProfiles: profilesToSave,
         activeInstrumentProfileId,
@@ -569,7 +576,7 @@ export default function App() {
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale, autoDetect, toleranceOverrideCents, transposeSemitones, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+  }, [a4Ref, currentScale, autoDetect, toleranceOverrideCents, transposeSemitones, readoutMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
 
   useEffect(() => {
     try {
@@ -983,6 +990,21 @@ export default function App() {
               kvint={kvint}
             />
 
+            <div className="my-1 flex items-center justify-between gap-3 px-1">
+              <label htmlFor="hangoal-readout-mode" className="text-[11px] text-slate-400">Mérési kártyák kijelzése</label>
+              <select
+                id="hangoal-readout-mode"
+                value={readoutMode}
+                onChange={(event) => setReadoutMode(normalizeTuningReadoutMode(event.target.value))}
+                className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] text-white outline-none focus:border-amber-400"
+              >
+                <option value="hz">Frekvencia (Hz)</option>
+                <option value="cents">Eltérés (cent)</option>
+                <option value="note">Hangnév</option>
+                <option value="ratio">Arány az alaphanghoz</option>
+              </select>
+            </div>
+
             {/* ================= SECTION D: THREE MEASUREMENT CARDS ================= */}
             <BBCards
               alap={alap}
@@ -992,6 +1014,8 @@ export default function App() {
               selectedRole={selectedRole}
               onSelectRole={setSelectedRole}
               toleranceOverrideCents={toleranceOverrideCents}
+              readoutMode={readoutMode}
+              a4Ref={a4Ref}
             />
 
             {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
