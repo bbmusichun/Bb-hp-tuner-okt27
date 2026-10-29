@@ -405,14 +405,14 @@ export default function App() {
       const sourceFrequency = typeof n.frequencyHz === 'number' && Number.isFinite(n.frequencyHz) && n.frequencyHz > 0
         ? n.frequencyHz
         : midiToFreq(n.midi, a4Ref);
-      const f0 = transposeFrequencyBySemitones(sourceFrequency, transposeSemitones);
-      const displayNoteName = freqToNoteAndCents(f0, a4Ref).note;
+      const transposedFrequency = transposeFrequencyBySemitones(sourceFrequency, transposeSemitones);
       // Handpan acoustic resonances:
-      // Fundamental: f0 (e.g. D3 = 146.83 Hz)
-      // Traditional handpan partials: fundamental (1x), octave (2x), compound fifth (3x).
-      // The third partial is not the ordinary 1.5x musical fifth.
+      // Fundamental: 1x. Octave: 2x. Compound fifth: 3x (not the ordinary 1.5x fifth).
+      // Each note has independently persisted base/partial offsets for real instrument calibration.
       const key = partialTargetOffsetKey(currentScale.id, n.name);
       const offsets = partialTargetOffsets[key] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
+      const f0 = transposedFrequency * Math.pow(2, (offsets.fundamentalCents ?? 0) / 1200);
+      const displayNoteName = freqToNoteAndCents(f0, a4Ref).note;
       return {
         id: `note_${idx}_${n.name}`,
         noteName: displayNoteName,
@@ -521,7 +521,7 @@ export default function App() {
     setPartialTargetOffsets((previous) => {
       const current = previous[selectedPartialOffsetKey] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
       const next: PartialTargetOffset = { ...current, [field]: value };
-      if (next.octaveCents === 0 && next.thirdPartialCents === 0) {
+      if ((next.fundamentalCents ?? 0) === 0 && next.octaveCents === 0 && next.thirdPartialCents === 0) {
         const copy = { ...previous };
         delete copy[selectedPartialOffsetKey];
         return copy;
@@ -531,10 +531,12 @@ export default function App() {
   };
 
 
-  const handleCalibrateBuiltInRole = (role: 'fifth' | 'octave', targetHz: number, measuredHz: number) => {
+  const handleCalibrateBuiltInRole = (role: 'fundamental' | 'fifth' | 'octave', targetHz: number, measuredHz: number) => {
     if (freezeTargets) return;
-    const field: PartialTargetOffsetField = role === 'fifth' ? 'thirdPartialCents' : 'octaveCents';
-    const currentOffset = selectedPartialOffsets[field];
+    const field: PartialTargetOffsetField = role === 'fundamental'
+      ? 'fundamentalCents'
+      : role === 'fifth' ? 'thirdPartialCents' : 'octaveCents';
+    const currentOffset = selectedPartialOffsets[field] ?? 0;
     const corrected = calibratePartialTargetOffset(currentOffset, targetHz, measuredHz);
     if (corrected !== null) updateSelectedPartialOffset(field, corrected);
   };
