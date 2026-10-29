@@ -27,6 +27,7 @@ interface Props {
   onRenameInstrumentProfile: (profileId: string, name: string) => void;
   onDeleteInstrumentProfile: (profileId: string) => void;
   onApplyCustomScale: (name: string, source: string) => boolean;
+  onImportInstrumentProfiles: (backup: unknown) => boolean;
 }
 
 export const BBSettingsModal: React.FC<Props> = ({
@@ -50,6 +51,7 @@ export const BBSettingsModal: React.FC<Props> = ({
   onRenameInstrumentProfile,
   onDeleteInstrumentProfile,
   onApplyCustomScale,
+  onImportInstrumentProfiles,
 }) => {
   const activeProfile = instrumentProfiles.find((profile) => profile.id === activeInstrumentProfileId);
   const [newProfileName, setNewProfileName] = React.useState('');
@@ -59,6 +61,7 @@ export const BBSettingsModal: React.FC<Props> = ({
     activeProfile?.customScale?.notes.map((note) => `${note.name}, ${note.frequencyHz?.toFixed(3) ?? ''}`).join('\n') ?? '',
   );
   const [customScaleMessage, setCustomScaleMessage] = React.useState('');
+  const [backupMessage, setBackupMessage] = React.useState('');
   const [octaveDraft, setOctaveDraft] = React.useState(String(partialTargetOffsets.octaveCents));
   const [thirdPartialDraft, setThirdPartialDraft] = React.useState(String(partialTargetOffsets.thirdPartialCents));
 
@@ -183,6 +186,55 @@ export const BBSettingsModal: React.FC<Props> = ({
                 Aktív hangszerprofil törlése
               </button>
             )}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const backup = {
+                    schemaVersion: 1,
+                    exportedAt: new Date().toISOString(),
+                    profiles: instrumentProfiles,
+                  };
+                  const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' }));
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `BB_Tuner_Instrument_Profiles_${Date.now()}.json`;
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+                  setBackupMessage('A profilmentés letöltése elindult.');
+                }}
+                className="rounded-lg border border-white/10 bg-slate-800 px-2 py-2 text-[10px] font-semibold text-slate-200 hover:bg-slate-700"
+              >
+                Profilok exportja
+              </button>
+              <label className="cursor-pointer rounded-lg border border-white/10 bg-slate-800 px-2 py-2 text-center text-[10px] font-semibold text-slate-200 hover:bg-slate-700">
+                Profilok importja
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  className="sr-only"
+                  aria-label="Profilbiztonsági mentés importálása"
+                  onChange={async (event) => {
+                    const input = event.currentTarget;
+                    const file = input.files?.[0];
+                    input.value = '';
+                    if (!file) return;
+                    try {
+                      const backup: unknown = JSON.parse(await file.text());
+                      const imported = onImportInstrumentProfiles(backup);
+                      setBackupMessage(imported
+                        ? 'A profilokat beolvastam és érvényesítettem.'
+                        : 'A mentés formátuma vagy valamelyik profil hibás. A meglévő profilok megmaradtak.');
+                    } catch {
+                      setBackupMessage('A fájl nem olvasható JSON-formátumú. A meglévő profilok megmaradtak.');
+                    }
+                  }}
+                />
+              </label>
+            </div>
+            {backupMessage && <p role="status" className="text-[10px] leading-relaxed text-slate-400">{backupMessage}</p>}
           </section>
 
           {/* A4 Reference */}
