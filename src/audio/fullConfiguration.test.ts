@@ -37,6 +37,7 @@ const validBackup = () => ({
     autoDetectionMode: 'single-shot',
     toleranceOverrideCents: 2,
     transposeSemitones: -3,
+    strobeSensitivity: 1.25,
     readoutMode: 'ratio',
     referenceToneMode: 'off',
     activeInstrumentProfileId: 'instrument-default',
@@ -54,6 +55,7 @@ test('parses a complete validated bundle and preserves its settings', () => {
   assert.ok(result);
   assert.equal(result.settings.autoDetectionMode, 'single-shot');
   assert.equal(result.settings.transposeSemitones, -3);
+  assert.equal(result.settings.strobeSensitivity, 1.25);
   assert.equal(result.settings.readoutMode, 'ratio');
   assert.equal(result.settings.referenceToneMode, 'off');
   assert.equal(result.settings.activeInstrumentProfileId, 'instrument-default');
@@ -96,4 +98,18 @@ test('rejects malformed log entries and duplicate log ids', () => {
   const duplicateIds = validBackup();
   duplicateIds.measurements.push({ ...validEntry });
   assert.equal(parseHangoalFullConfiguration(duplicateIds, ['d-kurd-9'], fallbackProfile), null);
+});
+
+test('keeps older complete backups compatible when strobe sensitivity is absent', () => {
+  const backup = validBackup();
+  delete backup.settings.strobeSensitivity;
+  const result = parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile);
+  assert.ok(result);
+  assert.equal(result.settings.strobeSensitivity, 1);
+});
+
+test('rejects a strobe sensitivity outside the supported range', () => {
+  const backup = validBackup();
+  backup.settings.strobeSensitivity = 9;
+  assert.equal(parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile), null);
 });
