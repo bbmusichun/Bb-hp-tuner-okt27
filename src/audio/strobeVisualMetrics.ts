@@ -24,6 +24,9 @@ export function strobeSharpnessFromCents(samples: readonly number[]): number {
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
   const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
   const standardDeviation = Math.sqrt(variance);
+  // Treat sub-tenth-cent numerical jitter as stable rather than letting floating-point
+  // rounding visibly soften an otherwise identical set of pitch readings.
+  if (standardDeviation <= 0.1) return 1;
   // A spread of 12 cents or more is rendered with the softest edges.
   return clamp01(1 - standardDeviation / 12);
 }
