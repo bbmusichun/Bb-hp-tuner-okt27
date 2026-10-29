@@ -84,11 +84,6 @@ export const BBStrobeBands: React.FC<Props> = ({
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const [pitchPipeModes, setPitchPipeModes] = useState<Record<string, PitchPipeMode>>(loadPitchPipeModes);
-  const [activePitchPipeId, setActivePitchPipeId] = useState<string | null>(null);
-  const activePitchPipeRef = useRef<string | null>(null);
-  const pitchPipeModesRef = useRef(pitchPipeModes);
-  activePitchPipeRef.current = activePitchPipeId;
-  pitchPipeModesRef.current = pitchPipeModes;
   const previousTransientRef = useRef(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, toleranceMode, strobeSensitivity, baseFrequencyHz, customBands, isPaused });
@@ -111,16 +106,18 @@ export const BBStrobeBands: React.FC<Props> = ({
     const band = customBands.find((item) => item.id === id);
     return band ? getStrobeBandTargetHz(band, baseFrequencyHz) : null;
   };
+  const pitchPipeVoiceId = (id: string) => 'strobe:' + id;
+
   const cyclePitchPipe = (id: string, fallbackHz: number) => {
     const nextMode = nextPitchPipeMode(modeForPipe(id));
-    // One physical output oscillator at a time; cycling any band replaces its prior pitch pipe.
-    bbAudioEngine.stopTone();
+    const voiceId = pitchPipeVoiceId(id);
+    // Each band owns an output-only voice; other continuous pitch pipes are unaffected.
+    bbAudioEngine.stopPitchPipeTone(voiceId);
     window.dispatchEvent(new CustomEvent('hangoal-band-pitch-pipe-toggle', { detail: { mode: nextMode, id } }));
     setPitchPipeModes((previous) => ({ ...previous, [id]: nextMode }));
-    setActivePitchPipeId(nextMode === 'off' ? null : id);
     const targetHz = targetForPipe(id) ?? fallbackHz;
     if (nextMode === 'continuous' && Number.isFinite(targetHz) && targetHz > 0) {
-      bbAudioEngine.playTone(targetHz);
+      bbAudioEngine.playPitchPipeTone(voiceId, targetHz);
     }
   };
 
@@ -131,18 +128,16 @@ export const BBStrobeBands: React.FC<Props> = ({
     }
     if (previousTransientRef.current) return;
     previousTransientRef.current = true;
-    const id = activePitchPipeId;
-    if (!active || !id || pitchPipeModes[id] !== 'strike') return;
-    const targetHz = targetForPipe(id);
-    if (targetHz === null || !Number.isFinite(targetHz) || targetHz <= 0) return;
-    bbAudioEngine.playTone(targetHz);
-    const timer = window.setTimeout(() => {
-      if (activePitchPipeRef.current === id && pitchPipeModesRef.current[id] === 'strike') {
-        bbAudioEngine.stopTone();
-      }
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [transientHoldoff, active, activePitchPipeId, pitchPipeModes, alap.targetHz, kvint.targetHz, oktav.targetHz, customBands, baseFrequencyHz]);
+    if (!active) return;
+
+    // Every band set to strike mode gets a short tone on the same rising edge.
+    Object.entries(pitchPipeModes).forEach(([id, mode]) => {
+      if (mode !== 'strike') return;
+      const targetHz = targetForPipe(id);
+      if (targetHz === null || !Number.isFinite(targetHz) || targetHz <= 0) return;
+      bbAudioEngine.playPitchPipeTone(pitchPipeVoiceId(id), targetHz, 180);
+    });
+  }, [transientHoldoff, active, pitchPipeModes, alap.targetHz, kvint.targetHz, oktav.targetHz, customBands, baseFrequencyHz]);
 
   useEffect(() => {
     const reload = () => setCustomBands(loadCustomBands());
