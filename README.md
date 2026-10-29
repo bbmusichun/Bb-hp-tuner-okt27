@@ -8,12 +8,13 @@ Mobilra optimalizált, böngészőben futó handpan-hangoló valós idejű spekt
 - Alaphang (1×), oktáv (2×) és harmadik parciális (3×) egyidejű követése.
 - Spektrum- és stabilitásnézet, tranziensvédelem és külön YIN-alapú diagnosztika.
 - Több fizikai hangszer helyi profilja, egymástól független A4-referenciával, hangolási skálával és hangonkénti parciális-célértékekkel.
+- Hangszerprofilok JSON-os biztonsági mentése és visszatöltése. Az importált profilok validálása után az azonosítók alapján frissülnek a meglévő profilok, a többi profil megmarad.
 - Egyedi hangmező megadása pontos Hz-célértékekkel. Soronként egy hang, például:
-  \`\`\`text
+  ```text
   D3, 146.900
   A3, 220.500
   Bb3, 233.300
-  \`\`\`
+  ```
   2–24 sor támogatott; egyedi hangnevek és 20–2000 Hz közötti frekvenciák szükségesek.
 - Exportálható CSV- és JSON-mérési napló, amely tárolja a mért és célfrekvenciákat, a hangszerazonosítót, a mintavételezési frekvenciát és a digitális bemeneti szintet.
 - Ismételhetőségi összegzés mediánnal, MAD-dal és tartománnyal az aktív hangszer, skála és hang kiválasztására szűrve.
@@ -23,13 +24,13 @@ Mobilra optimalizált, böngészőben futó handpan-hangoló valós idejű spekt
 
 Node.js 22 ajánlott.
 
-\`\`\`bash
+```bash
 npm install
 npm run lint
 npm test
 npm run build
 npm run preview
-\`\`\`
+```
 
 A CI ugyanazt a TypeScript-ellenőrzést, tesztcsomagot és production buildet futtatja.
 
