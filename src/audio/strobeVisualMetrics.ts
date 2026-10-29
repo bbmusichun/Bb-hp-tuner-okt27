@@ -1,5 +1,5 @@
 /**
- * Visual-only metrics for matching Linotune's documented strobe cues:
+ * Visual-only metrics for matching the reference application's documented strobe cues:
  * bar contrast represents detected signal strength and edge sharpness represents
  * short-term pitch stability. These are display mappings, not confidence or
  * metrological uncertainty estimates.
