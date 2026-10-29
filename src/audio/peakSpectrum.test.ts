@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { findSignificantSpectralPeaks } from './peakSpectrum';
+import { findPeakNearFrequency, findSignificantSpectralPeaks } from './peakSpectrum';
 
 const SAMPLE_RATE = 48000;
 const FFT_SIZE = 16384;
@@ -51,6 +51,17 @@ describe('Linotune-style exact-bin peak spectrum', () => {
     });
     assert.equal(peaks.length, 2);
     assert.deepEqual(peaks.map((peak) => peak.bin), [60, 80]);
+  });
+
+
+  it('selects the nearest peak only within the requested cursor tolerance', () => {
+    const spectrum = spectrumWithPeaks([[50, -20], [100, -30], [150, -40]]);
+    const peaks = findSignificantSpectralPeaks(spectrum, SAMPLE_RATE, 146.8);
+    const binWidth = SAMPLE_RATE / FFT_SIZE;
+    assert.equal(findPeakNearFrequency(peaks, 100 * binWidth + 1, 2)?.bin, 100);
+    assert.equal(findPeakNearFrequency(peaks, 100 * binWidth + 4, 2), null);
+    assert.equal(findPeakNearFrequency(peaks, Number.NaN, 2), null);
+    assert.equal(findPeakNearFrequency(peaks, 100 * binWidth, -1), null);
   });
 
   it('rejects invalid analysis parameters', () => {
