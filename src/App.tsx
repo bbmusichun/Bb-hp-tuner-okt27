@@ -1290,7 +1290,7 @@ export default function App() {
                 hasSignal={hasSignal}
                 transientHoldoff={transientHoldoff}
                 toleranceOverrideCents={toleranceOverrideCents}
-                referenceHz={a4Ref}
+                baseFrequencyHz={selectedNote.frequency}
               />
             </div>
 
