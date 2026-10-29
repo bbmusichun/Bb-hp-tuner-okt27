@@ -90,6 +90,25 @@ export function getStrobeBandTargetHz(band: StrobeBandConfig, baseFrequencyHz = 
 }
 
 /** Apply user-entered expression formats while keeping ratio/cents expressions coupled to the current fundamental. */
+/**
+ * Calibrate a band target to a measured resonance without modifying the measurement.
+ * Positive deviation moves the target up; negative deviation moves it down.
+ */
+export function calibrateStrobeBandToMeasuredFrequency(
+  band: StrobeBandConfig,
+  measuredFrequencyHz: number,
+  baseFrequencyHz: number,
+): StrobeBandConfig | null {
+  const currentTargetHz = getStrobeBandTargetHz(band, baseFrequencyHz);
+  if (!Number.isFinite(measuredFrequencyHz) || measuredFrequencyHz < 20 || measuredFrequencyHz > 20000 ||
+      !Number.isFinite(currentTargetHz) || currentTargetHz <= 0) return null;
+  const deviationCents = 1200 * Math.log2(measuredFrequencyHz / currentTargetHz);
+  if (!Number.isFinite(deviationCents)) return null;
+  const nextOffset = band.centsOffset + deviationCents;
+  if (nextOffset < -1200 || nextOffset > 1200) return null;
+  return { ...band, centsOffset: nextOffset };
+}
+
 export function parseStrobeTargetExpressionParts(expression: string): ParsedStrobeTargetExpression | null {
   const value = expression.trim().replace(',', '.');
   if (!value || value.length > 40) return null;
