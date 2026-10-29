@@ -28,7 +28,7 @@ export const BBMeresekView: React.FC<Props> = ({
 }) => {
   const handleExportCSV = () => {
     if (logs.length === 0) return;
-    const headers = ['Timestamp', 'Date', 'Instrument_Profile_ID', 'Instrument_Profile_Name', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune'];
+    const headers = ['Timestamp', 'Date', 'Instrument_Profile_ID', 'Instrument_Profile_Name', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Tolerance_Mode', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune'];
     const rows = logs.map((l) => [
       l.timestamp,
       new Date(l.timestamp).toISOString(),
@@ -38,6 +38,7 @@ export const BBMeresekView: React.FC<Props> = ({
       l.noteName,
       l.audioSampleRateHz?.toFixed(0) ?? '',
       l.inputLevelDbfs?.toFixed(1) ?? '',
+      l.toleranceOverrideCents === undefined ? '' : l.toleranceOverrideCents === null ? 'Auto' : `±${l.toleranceOverrideCents.toFixed(1)} cent`,
       l.fundamentalHz.toFixed(3),
       l.fundamentalTargetHz?.toFixed(3) ?? '',
       l.fundamentalCents.toFixed(2),
@@ -174,12 +175,13 @@ export const BBMeresekView: React.FC<Props> = ({
                 )}
               </div>
 
-              {(log.audioSampleRateHz !== undefined || log.inputLevelDbfs !== undefined || log.scaleId || log.instrumentProfileName || log.instrumentProfileId) && (
+              {(log.audioSampleRateHz !== undefined || log.inputLevelDbfs !== undefined || log.toleranceOverrideCents !== undefined || log.scaleId || log.instrumentProfileName || log.instrumentProfileId) && (
                 <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-slate-500 font-mono">
                   {(log.instrumentProfileName || log.instrumentProfileId) && <span>Hangszer: {log.instrumentProfileName ?? log.instrumentProfileId}</span>}
                   {log.scaleId && <span>Hangolás: {log.scaleId}</span>}
                   {log.audioSampleRateHz !== undefined && <span>Fs: {log.audioSampleRateHz.toFixed(0)} Hz</span>}
                   {log.inputLevelDbfs !== undefined && <span>Bemenet: {log.inputLevelDbfs.toFixed(1)} dBFS</span>}
+                  {log.toleranceOverrideCents !== undefined && <span>Tűrés: {log.toleranceOverrideCents === null ? 'Auto' : `±${log.toleranceOverrideCents.toFixed(1)} cent`}</span>}
                 </div>
               )}
               <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px] text-center">
