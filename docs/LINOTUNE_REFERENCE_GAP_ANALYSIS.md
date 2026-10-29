@@ -22,7 +22,7 @@ Státuszmagyarázat:
 | Többsávos stroboszkóp | Kezdeti 1x, 2x és 3x sáv; egyedi sávok szabad hozzáadása és törlése. | 3 alaprezonancia + legfeljebb 8 egyedi sáv. | **P0 – részleges.** Már elég rugalmas, de a 8 egyedi sáv korlátja és a célok dinamikus viselkedése dokumentálandó. |
 | Sávcél megadása | Alapfrekvenciához viszonyított félhang/cent eltolás vagy tiszta hangközarány. | Hz-cél és cent-kalibráció; most kerül be a sávcél Hz/arány/cent formájú megadása. | **P0.** Az arány és cent cél a kiválasztott alaphanghoz képest maradjon relatív hangváltáskor; ne csak egyszer számolódjon abszolút Hz-re. |
 | Sáv kalibrálása | A megjelenített eltérésre kattintva az eltérés kinullázható a cent-offset módosításával. | Hangszerenkénti, hangonkénti 2x/3x részleges célkorrekció van; egyedi sávnál külön cél/offset van. | **P1.** Egyértelmű „kalibrálás nullára” művelet, amely a mérést nem hamisítja meg, csak a cél offsetet módosítja. |
-| Stroboszkóp kontrasztja | A sáv kontrasztja jelzi a jel erősségét; a bar élessége a hang stabilitását. | A jelérvényesség, céltűrés és stabilitás külön kijelzése van; a stroboszkóp vizuális erejének amplitúdó/stabilitás alapú skálázása nem teljesen egyenértékűen dokumentált. | **P0.** Sávonkénti amplitúdó/prominencia és stabilitás alapján vizuális kontraszt/élesség, zajra villogás nélkül. |
+| Stroboszkóp kontrasztja | A sáv kontrasztja jelzi a jel erősségét; a bar élessége a hang stabilitását. | **Első implementáció a PR-ágon:** a mért peak dBFS skálázza a kontrasztot, a nyers centmérések 15 mintás szórása a csíkszélek élességét. Ez csak vizuális becslés, nem módosítja a mérést. | **P0 – részben megvalósítva.** A dB/élesség leképezések egységteszteltek; a küszöbök és a zajra adott viselkedés valós handpan-felvételen még kalibrálandó. |
 | Hangolási visszajelzés | Sáveltérés Hz-ben vagy centben; tűrésen belül zöld. | Hz-, cent-, hangnév- és arány-kijelzés; automatikus vagy rögzített tűrés, diagnosztika. | **Megvan/részleges.** Egyetlen konzisztens tűrés- és érvényességi szabályt kell használni minden nézetben. |
 | Tűrésmód | Linotune: bármilyen eltérés elfogadása vagy a zöld állapot tiltása is választható. | Auto és rögzített cent-tűrések dokumentáltak. | **P1.** „Mindig elfogadott” és „soha ne legyen zöld” mód, a mérési adat megváltoztatása nélkül. |
 | Roll speed / érzékenység | Állítható stroboszkóp-reakció a hangmagasság-eltérésre. | A stroboszkóp sodródási erősítése kódban rögzített; külön felhasználói szabályzó nem látható. | **P1.** Állítható érzékenység, alapérték és szélsőérték-tesztekkel. |
@@ -69,7 +69,7 @@ A szoftveres jelek a matematikai hibákat tesztelik; a fizikai handpan, mikrofon
 
 ## Prioritási sorrend
 
-1. **P0 - Mérés és célértékek:** relatív arány/cent cél a kiválasztott alaphanghoz kötve; strobe-kontraszt és stabilitás; Scala névcímkék és `!!reference`; automatikus referenciajel-benchmark.
+1. **P0 - Mérés és célértékek:** relatív arány/cent cél a kiválasztott alaphanghoz kötve (az implementáció elkészült a PR-ágon); strobe-kontraszt és stabilitás (első implementáció, valós hanggal kalibrálandó); Scala névcímkék és `!!reference`; automatikus referenciajel-benchmark.
 2. **P0 - Referenciaeszköz paritás:** sávonkénti referenciahang, spektrum-interakció és tűrésmódok.
 3. **P1 - Munkafolyamat:** bemeneti/kimeneti eszköz kiválasztása, célra kalibrálás egy kattintással, állítható roll speed.
 4. **P1 - Valós eszköz átvétel:** iPhone/Safari és legalább egy másik célböngésző, valódi handpannal és külső referenciával.
