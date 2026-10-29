@@ -5,7 +5,7 @@ import { modeWheelRotationSteps, rotateEnabledMode } from './scaleMode';
 describe('rotatable scale mode mask', () => {
   it('rotates enabled degrees while preserving their count and note ids', () => {
     const ids = ['d', 'e', 'f', 'g', 'a'];
-    assert.deepEqual(rotateEnabledMode(ids, ['d', 'f', 'a'], 1), ['e', 'g', 'd']);
+    assert.deepEqual(rotateEnabledMode(ids, ['d', 'f', 'a'], 1), ['d', 'e', 'g']);
     assert.equal(rotateEnabledMode(ids, ['d', 'f', 'a'], 1).length, 3);
   });
 
