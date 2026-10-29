@@ -121,16 +121,27 @@ calibration result.
 
 The live tuner supports independent offsets for the octave (2×) and third partial (3×) for each
 note in the selected scale. These offsets are expressed in cents relative to the ideal harmonic
-frequency and are stored in the browser's existing tuning preferences, keyed by scale and note.
-Changing the global A4 reference recalculates the equal-tempered fundamental; the saved partial
-offsets remain relative to that fundamental. Resetting a note's offsets restores the ideal 2×/3×
-targets for that note.
+frequency and are stored in the active physical instrument profile, keyed by scale and note.
+Changing the global A4 reference recalculates an equal-tempered preset fundamental; the saved
+partial offsets remain relative to the selected fundamental. A custom scale may instead supply an
+exact fundamental target frequency for each note. Resetting a note's offsets restores the ideal
+2×/3× targets for that note.
 
 These controls let a maker compare a tone field with an instrument-specific target instead of
 assuming every real tone field is exactly harmonic. They do not automatically discover the
 correct target frequencies, and they do not certify a handpan as in tune. Record the intended
 targets from the instrument's specification or a traceable tuning reference before using the
 offsets for acceptance measurements.
+
+## Exact custom fundamental targets
+
+The settings dialog can define a custom tone field with 2–24 rows in `note name, frequency Hz`
+format, for example `D3, 146.900`. Every row's finite target frequency (20–2000 Hz) is retained
+as entered and used as the live fundamental target; it is not rounded to the nearest equal-tempered
+MIDI pitch. Note names must be unique within the custom scale. The custom scale is saved in the
+active physical instrument profile and is included in the versioned JSON profile backup. Validate
+the target values against the instrument maker's specification or an external reference before using
+them for acceptance decisions.
 
 
 ## Auditable live measurement records
@@ -156,6 +167,18 @@ measurement uncertainty, and repeatability cannot detect a consistently wrong ha
 incorrectly selected spectral peak. Keep the microphone placement, distance, input path and
 instrument condition consistent when comparing sessions.
 
+
+## Physical instrument profiles and backups
+
+Each physical instrument profile owns its scale, A4 reference and per-note partial offsets. The
+measurement record stores the profile ID and display name so readings from instruments with
+similar scales can remain distinguishable. The repeatability summary filters to the active physical
+instrument.
+
+Use Settings → Profilok exportja to create a versioned JSON backup of profiles and exact custom
+targets. Import merges by profile ID after validating the backup; invalid files are rejected before
+application state changes. Profiles and measurement logs remain local to the browser and are not
+cloud-synchronised.
 
 ## Capture metadata in exported records
 

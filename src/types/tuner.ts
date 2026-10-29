@@ -47,6 +47,8 @@ export interface HandpanScale {
   notes: {
     name: string;
     midi: number;
+    /** Exact custom target for non-equal-tempered instrument notes. Presets omit it. */
+    frequencyHz?: number;
   }[];
 }
 
