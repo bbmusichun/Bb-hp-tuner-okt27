@@ -1502,6 +1502,8 @@ export default function App() {
                 active={isListening}
                 transientHoldoff={transientHoldoff}
                 baseFrequencyHz={selectedNote.frequency}
+                playbackSpectrum={playbackStrobe.playing && !isListening ? playbackStrobe.frame?.spectrum ?? null : null}
+                playbackSampleRateHz={playbackStrobe.playing && !isListening ? playbackStrobe.frame?.sampleRate ?? null : null}
                 selectedRole={selectedRole}
                 onSelectRole={setSelectedRole}
                 toleranceOverrideCents={toleranceOverrideCents}
