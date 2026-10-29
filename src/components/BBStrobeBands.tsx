@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
 import { formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
-import { tuningToleranceCents } from '../audio/tuningTolerance';
+import { isWithinTuningTolerance, tuningToleranceCents, type TuningToleranceMode } from '../audio/tuningTolerance';
 import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
 import type { ResonanceMeasurement } from '../types/tuner';
@@ -21,7 +21,8 @@ interface Props {
   transientHoldoff?: boolean;
   baseFrequencyHz?: number;
   toleranceOverrideCents?: number | null;
-  selectedRole?: string;
+  toleranceMode?: TuningToleranceMode;
+  selectedRole? string;
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
   strobeSensitivity?: number;
   onChangeStrobeSensitivity?: (value: number) => void;
@@ -52,7 +53,7 @@ function formatCents(cents: number | null): string {
 export const BBStrobeBands: React.FC<Props> = ({
   alap, kvint, oktav, hasSignal, active = false, transientHoldoff = false,
   baseFrequencyHz = 146.832384,
-  toleranceOverrideCents = null, selectedRole, onSelectRole,
+  toleranceOverrideCents = null, toleranceMode = 'auto', selectedRole, onSelectRole,
   strobeSensitivity = 1, onChangeStrobeSensitivity, onZoomTargetHz,
 }) => {
   const [customBands, setCustomBands] = useState<StrobeBandConfig[]>(loadCustomBands);
@@ -60,8 +61,8 @@ export const BBStrobeBands: React.FC<Props> = ({
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands });
-  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands };
+  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, toleranceMode, strobeSensitivity, baseFrequencyHz, customBands });
+  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, toleranceMode, strobeSensitivity, baseFrequencyHz, customBands };
   const phasesRef = useRef<Record<string, number>>({});
   const smoothRef = useRef<Record<string, number>>({});
   const lastValidRef = useRef<Record<string, number>>({});
@@ -141,7 +142,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         const contrast = strobeContrastFromDb(row.valid ? row.db : null);
         const sharpness = strobeSharpnessFromCents(sampleRef.current[key] ?? []);
         const tolerance = tuningToleranceCents(row.targetHz, current.toleranceOverrideCents);
-        const inTolerance = row.valid && row.cents !== null && Math.abs(row.cents) <= tolerance;
+        const inTolerance = row.valid && isWithinTuningTolerance(row.cents, row.targetHz, current.toleranceOverrideCents, current.toleranceMode);
         if (inTolerance) greenSinceRef.current[key] ??= now;
         else greenSinceRef.current[key] = null;
         const green = inTolerance && greenSinceRef.current[key] !== null && now - (greenSinceRef.current[key] ?? now) >= 1000;
@@ -304,7 +305,7 @@ export const BBStrobeBands: React.FC<Props> = ({
             const measured = reading?.measuredHz ?? null;
             const cents = reading?.deviationCents ?? null;
             const valid = band.enabled && hasCustomSignal && cents !== null;
-            const inTolerance = valid && Math.abs(cents ?? Infinity) <= tuningToleranceCents(targetHz, toleranceOverrideCents);
+            const inTolerance = valid && isWithinTuningTolerance(cents, targetHz, toleranceOverrideCents, toleranceMode);
             return (
               <div key={band.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5">
                 <div className="mb-2 flex items-center gap-2">
