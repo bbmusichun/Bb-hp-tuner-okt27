@@ -28,6 +28,7 @@ import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
 import { recordAnalysisFrame } from './audio/analysisRate';
 import { getStrobeBandTargetHz, normalizeStrobeBands, type StrobeBandConfig } from './audio/strobeBands';
 import { normalizeStrobeSensitivity } from './audio/strobeSensitivity';
+import { normalizePitchPipeModes } from './audio/pitchPipeModes';
 import { createWindowSyncRequest, createWindowSyncState, normalizeWindowSyncMessage, type WindowSyncMode } from './audio/windowSync';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
@@ -792,6 +793,21 @@ export default function App() {
           throw new Error('Egy vagy több egyedi sávbeállítás érvénytelen.');
         }
       }
+      const rawPitchPipeModes = localStorage.getItem('hangoal-strobe-pitch-pipe-modes-v1');
+      let pitchPipeModes: ReturnType<typeof normalizePitchPipeModes> = {};
+      if (rawPitchPipeModes) {
+        const storedPitchPipeModes: unknown = JSON.parse(rawPitchPipeModes);
+        if (!storedPitchPipeModes || typeof storedPitchPipeModes !== 'object' || Array.isArray(storedPitchPipeModes)) {
+          throw new Error('A sávonkénti referenciahang beállítás sérült.');
+        }
+        pitchPipeModes = normalizePitchPipeModes(storedPitchPipeModes);
+        if (Object.keys(pitchPipeModes).length !== Object.keys(storedPitchPipeModes).length) {
+          throw new Error('Egy vagy több sávonkénti referenciahang-beállítás érvénytelen.');
+        }
+      }
+      const configuredPipeIds = new Set(['fundamental', 'fifth', 'octave', ...customStrobeBands.map((band) => band.id)]);
+      pitchPipeModes = Object.fromEntries(Object.entries(pitchPipeModes).filter(([id]) => configuredPipeIds.has(id)));
+
       const backup = {
         schemaVersion: 2,
         exportedAt: new Date().toISOString(),
@@ -799,6 +815,8 @@ export default function App() {
           autoDetect: autoDetectionMode !== 'off',
           autoDetectionMode,
           toleranceOverrideCents,
+          toleranceMode,
+          freezeTargets,
           transposeSemitones,
           strobeSensitivity,
           readoutMode,
@@ -808,6 +826,7 @@ export default function App() {
         },
         disabledToneNotesByScale,
         customStrobeBands,
+        pitchPipeModes,
         measurements: logs,
       };
       const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' }));
@@ -846,11 +865,31 @@ export default function App() {
         PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId);
       if (!selectedScale) return false;
 
-      // Write cross-component state before updating React state; if storage fails, reject without a partial restore.
+      // Validate and persist every cross-panel preference before applying React state.
+      const storageEntries: Array<[string, string]> = [
+        ['hangoal-custom-strobe-bands-v1', JSON.stringify(parsed.customStrobeBands)],
+        ['hangoal-strobe-pitch-pipe-modes-v1', JSON.stringify(parsed.pitchPipeModes)],
+        ['hangoal-freeze-targets-v1', String(parsed.settings.freezeTargets)],
+        ['hangoal-tolerance-mode-v1', parsed.settings.toleranceMode],
+      ];
+      let previousStorage: Array<[string, string | null]>;
       try {
-        localStorage.setItem('hangoal-custom-strobe-bands-v1', JSON.stringify(parsed.customStrobeBands));
+        previousStorage = storageEntries.map(([key]) => [key, localStorage.getItem(key)]);
       } catch (error) {
-        console.warn('Nem sikerült menteni az importált egyedi stroboszkópsávokat:', error);
+        console.warn('Nem sikerült ellenőrizni a helyi konfigurációs tárhelyet:', error);
+        return false;
+      }
+      try {
+        storageEntries.forEach(([key, storedValue]) => localStorage.setItem(key, storedValue));
+      } catch (error) {
+        // Roll back every key when persistence is unavailable; do not leave a partly imported configuration.
+        previousStorage.forEach(([key, previous]) => {
+          try {
+            if (previous === null) localStorage.removeItem(key);
+            else localStorage.setItem(key, previous);
+          } catch { /* Keep best-effort rollback silent; no React state has changed yet. */ }
+        });
+        console.warn('Nem sikerült menteni a teljes importált Hangoal-konfigurációt:', error);
         return false;
       }
 
@@ -863,6 +902,8 @@ export default function App() {
       setAutoDetectionMode(parsed.settings.autoDetectionMode);
       setSingleShotCaptured(false);
       setToleranceOverrideCents(parsed.settings.toleranceOverrideCents);
+      setToleranceMode(parsed.settings.toleranceMode);
+      setFreezeTargets(parsed.settings.freezeTargets);
       setTransposeSemitones(parsed.settings.transposeSemitones);
       setStrobeSensitivity(parsed.settings.strobeSensitivity);
       setReadoutMode(parsed.settings.readoutMode);
@@ -872,6 +913,8 @@ export default function App() {
       setSelectedRole('fundamental');
       autoDetectionRef.current = null;
       window.dispatchEvent(new Event('hangoal-custom-strobe-bands-updated'));
+      window.dispatchEvent(new Event('hangoal-custom-strobe-bands-changed'));
+      window.dispatchEvent(new Event('hangoal-strobe-pitch-pipe-modes-updated'));
       return true;
     }
 
