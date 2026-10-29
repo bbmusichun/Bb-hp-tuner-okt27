@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
-import { calibrateStrobeBandToMeasuredFrequency, formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
+import { calibrateStrobeBandToMeasuredFrequency, formatStrobeTargetExpression, getStrobeBandTargetHz, MAX_CUSTOM_STROBE_BANDS, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
 import { isWithinTuningTolerance, tuningToleranceCents, type TuningToleranceMode } from '../audio/tuningTolerance';
 import { isStrobeMeasurementLive, strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
@@ -9,7 +9,7 @@ import type { ResonanceMeasurement } from '../types/tuner';
 import { getStrikePitchPipeTargets, nextPitchPipeMode, normalizePitchPipeModes, pitchPipeModeLabel, pitchPipeVoiceId, type PitchPipeMode } from '../audio/pitchPipeModes';
 
 const STORAGE_KEY = 'hangoal-custom-strobe-bands-v1';
-const MAX_CUSTOM_BANDS = 8;
+const MAX_CUSTOM_BANDS = MAX_CUSTOM_STROBE_BANDS;
 const PITCH_PIPE_STORAGE_KEY = 'hangoal-strobe-pitch-pipe-modes-v1';
 function loadPitchPipeModes(): Record<string, PitchPipeMode> {
   try {
