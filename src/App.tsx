@@ -1866,6 +1866,7 @@ export default function App() {
                 hasSignal={hasSignal}
                 active={isSignalInputActive}
                 transientHoldoff={transientHoldoff}
+                freezeTargetSettings={freezeTargets}
                 baseFrequencyHz={selectedNote.frequency}
                 selectedRole={selectedRole}
                 onSelectRole={setSelectedRole}
