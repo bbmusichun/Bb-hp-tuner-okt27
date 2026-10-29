@@ -19,6 +19,7 @@ export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private microphoneStream: MediaStream | null = null;
+  private autoGainControlStatus: boolean | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
 
   private micState: MicState = 'inactive';
@@ -81,6 +82,10 @@ export class BBAudioEngine {
           autoGainControl: true,
         },
       });
+      const trackSettings = this.microphoneStream.getAudioTracks()[0]?.getSettings();
+      this.autoGainControlStatus = typeof trackSettings?.autoGainControl === 'boolean'
+        ? trackSettings.autoGainControl
+        : null;
 
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.fftSize;
@@ -102,6 +107,7 @@ export class BBAudioEngine {
       console.error('Microphone error:', err);
       this.microphoneStream?.getTracks().forEach((track) => track.stop());
       this.microphoneStream = null;
+      this.autoGainControlStatus = null;
       this.sourceNode?.disconnect();
       this.sourceNode = null;
       this.analyser = null;
@@ -126,6 +132,7 @@ export class BBAudioEngine {
       this.sourceNode = null;
     }
     this.micState = 'inactive';
+    this.autoGainControlStatus = null;
     this.inputLevelDb = -100;
     this.previousRms = 0;
     this.lastTransientAt = 0;
@@ -147,6 +154,11 @@ export class BBAudioEngine {
 
   public getSampleRate(): number {
     return this.sampleRate;
+  }
+
+  /** Returns the reported state of browser-managed mic AGC, or null if unavailable. */
+  public getAutoGainControlStatus(): boolean | null {
+    return this.autoGainControlStatus;
   }
 
   public getInputLevelDb(): number {
