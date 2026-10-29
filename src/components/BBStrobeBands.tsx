@@ -111,7 +111,7 @@ export const BBStrobeBands: React.FC<Props> = ({
     const nextMode = nextPitchPipeMode(modeForPipe(id));
     // One physical output oscillator at a time; cycling any band replaces its prior pitch pipe.
     bbAudioEngine.stopTone();
-    window.dispatchEvent(new Event('hangoal-band-pitch-pipe-toggle'));
+    window.dispatchEvent(new CustomEvent('hangoal-band-pitch-pipe-toggle', { detail: { mode: nextMode, id } }));
     setPitchPipeModes((previous) => ({ ...previous, [id]: nextMode }));
     setActivePitchPipeId(nextMode === 'off' ? null : id);
     const targetHz = targetForPipe(id) ?? fallbackHz;
