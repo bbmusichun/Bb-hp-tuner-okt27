@@ -94,3 +94,23 @@ export function findSignificantSpectralPeaks(
   }
   return selected.sort((a, b) => a.frequencyHz - b.frequencyHz);
 }
+/** Find the closest identified peak to a cursor frequency, if it is close enough to select. */
+export function findPeakNearFrequency(
+  peaks: readonly SignificantSpectralPeak[],
+  targetFrequencyHz: number,
+  maximumDistanceHz: number,
+): SignificantSpectralPeak | null {
+  if (!Number.isFinite(targetFrequencyHz) || targetFrequencyHz <= 0 ||
+      !Number.isFinite(maximumDistanceHz) || maximumDistanceHz < 0) return null;
+  let closest: SignificantSpectralPeak | null = null;
+  let distance = Infinity;
+  for (const peak of peaks) {
+    if (!Number.isFinite(peak.frequencyHz) || peak.frequencyHz <= 0) continue;
+    const candidateDistance = Math.abs(peak.frequencyHz - targetFrequencyHz);
+    if (candidateDistance < distance) {
+      distance = candidateDistance;
+      closest = peak;
+    }
+  }
+  return closest && distance <= maximumDistanceHz ? closest : null;
+}
