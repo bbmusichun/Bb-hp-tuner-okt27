@@ -46,11 +46,16 @@ export function summarizeRepeatability(
   scaleId: string,
   noteName: string,
   maxSamples = 10,
+  instrumentProfileId?: string,
 ): RepeatabilitySummary | null {
   if (!scaleId.trim() || !noteName.trim() || !Number.isInteger(maxSamples) || maxSamples < 3) return null;
 
   const samples = logs
-    .filter((entry) => entry.scaleId === scaleId && entry.noteName === noteName)
+    .filter((entry) =>
+      entry.scaleId === scaleId &&
+      entry.noteName === noteName &&
+      (instrumentProfileId === undefined || entry.instrumentProfileId === instrumentProfileId),
+    )
     .slice()
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, maxSamples);
