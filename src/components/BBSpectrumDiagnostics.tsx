@@ -41,8 +41,6 @@ export const BBSpectrumDiagnostics: React.FC<Props> = ({
   const [diagnostics, setDiagnostics] = useState<DiagnosticRow[]>([]);
   const latestRef = useRef({ active, hasSignal, transientHoldoff, alap, oktav, kvint });
   latestRef.current = { active, hasSignal, transientHoldoff, alap, oktav, kvint };
-  const lastSampleRef = useRef(0);
-  const lastActiveRef = useRef(false);
   const diagnosticsRef = useRef<DiagnosticRow[]>([]);
 
   // Keep the analyser sampling and diagnostic calculation together so every result uses the current FFT frame.
