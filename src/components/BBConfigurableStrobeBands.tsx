@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
-import { getStrobeBandTargetHz, normalizeStrobeBands, type StrobeBandConfig } from '../audio/strobeBands';
+import { getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, type StrobeBandConfig } from '../audio/strobeBands';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
 
 const STORAGE_KEY = 'hangoal-custom-strobe-bands-v1';
@@ -51,6 +51,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
 }) => {
   const [bands, setBands] = useState<StrobeBandConfig[]>(loadCustomBands);
   const [readings, setReadings] = useState<Record<string, BandReading>>({});
+  const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const latestRef = useRef({ bands, active, hasSignal, transientHoldoff, toleranceOverrideCents });
   latestRef.current = { bands, active, hasSignal, transientHoldoff, toleranceOverrideCents };
@@ -205,7 +206,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
         <div>
           <h3 className="text-sm font-bold text-white">Egyedi stroboszkópsávok</h3>
           <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">
-            Saját célfrekvencia és cent-korrekció. A csúcsot a mikrofon élő FFT-spektrumából keresi.
+            Célfrekvencia Hz-ben, arányként (3/2 vagy x1.5), illetve centeltérésként (702c) is megadható az A4 = 440 Hz referenciához képest. A csúcsot az élő FFT-spektrum keresi.
           </p>
         </div>
         <button
@@ -283,16 +284,22 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
                     <label className="min-w-0 text-[10px] text-slate-400">
                       Cél (Hz)
                       <input
-                        aria-label="Célfrekvencia Hz"
-                        type="number"
-                        min={20}
-                        max={20000}
-                        step="0.01"
-                        value={band.targetHz}
+                        aria-label="Célfrekvencia vagy arány"
+                        type="text"
+                        inputMode="decimal"
+                        value={targetDrafts[band.id] ?? String(band.targetHz)}
                         onChange={(event) => {
-                          const value = Number(event.target.value);
-                          if (Number.isFinite(value) && value >= 20 && value <= 20000) updateBand(band.id, { targetHz: value });
+                          const draft = event.target.value;
+                          setTargetDrafts((previous) => ({ ...previous, [band.id]: draft }));
+                          const value = parseStrobeTargetExpression(draft);
+                          if (value !== null) updateBand(band.id, { targetHz: value });
                         }}
+                        onBlur={() => setTargetDrafts((previous) => {
+                          const next = { ...previous };
+                          delete next[band.id];
+                          return next;
+                        })}
+                        placeholder="440 / 3/2 / 702c"
                         className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs text-white outline-none focus:border-amber-400"
                       />
                     </label>
