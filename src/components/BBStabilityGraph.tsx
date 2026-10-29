@@ -8,6 +8,7 @@ interface Props {
   currentCents: number;
   targetHz: number | null;
   standardDeviationCents: number;
+  toleranceOverrideCents?: number | null;
 }
 
 export const BBStabilityGraph: React.FC<Props> = ({
@@ -16,10 +17,11 @@ export const BBStabilityGraph: React.FC<Props> = ({
   currentCents,
   targetHz,
   standardDeviationCents,
+  toleranceOverrideCents = null,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestPropsRef = useRef({ hasSignal, currentCents, targetHz });
-  latestPropsRef.current = { hasSignal, currentCents, targetHz };
+  const latestPropsRef = useRef({ hasSignal, currentCents, targetHz, toleranceOverrideCents });
+  latestPropsRef.current = { hasSignal, currentCents, targetHz, toleranceOverrideCents };
 
   useEffect(() => {
     let animId = 0;
@@ -130,7 +132,7 @@ export const BBStabilityGraph: React.FC<Props> = ({
           const lastX = padL + (1 - lastAge / tenSec) * plotW;
           ctx.beginPath();
           ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
-          ctx.fillStyle = isWithinTuningTolerance(last.cents, latest.targetHz) ? '#10b981' : '#00e5ff';
+          ctx.fillStyle = isWithinTuningTolerance(last.cents, latest.targetHz, latest.toleranceOverrideCents) ? '#10b981' : '#00e5ff';
           ctx.fill();
         }
       }
