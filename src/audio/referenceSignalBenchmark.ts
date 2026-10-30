@@ -343,7 +343,7 @@ export const DEFAULT_REFERENCE_SIGNAL_SCENARIOS: readonly ReferenceSignalScenari
     noiseSeed: 0x13579bdf,
     clipLevel: null,
     attackTimeSeconds: 0.012,
-    decayTimeSeconds: 0.32,
+    decayTimeSeconds: 0.075,
     durationSeconds: 1.6,
   },
   {
