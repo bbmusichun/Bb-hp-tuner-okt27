@@ -82,7 +82,7 @@ describe('Scala SCL import', () => {
 describe('Scala !!reference anchor resolution', () => {
   it('derives the tonic from a named reference degree using the current A4 calibration', () => {
     const parsed = parseScalaScl(
-      'Circle of fifths\\n3\\n700 :G\\n900 :A !!reference 4\\n1200 :C\\n',
+      'Circle of fifths\n3\n700 :G\n900 :A !!reference 4\n1200 :C\n',
       { preserveSourceOrder: true },
     );
     assert.ok(parsed);
@@ -99,7 +99,7 @@ describe('Scala !!reference anchor resolution', () => {
 
   it('uses explicit reference Hz as authoritative and computes the marked degree ratio', () => {
     const parsed = parseScalaScl(
-      'Golden Gate (just)\\n8\\n135/128 :c#\\n9/8 :D\\n5/4 :E\\n45/32 :F^#\\n3/2 :G\\n27/16 :a !!reference 4 442.5\\n15/8 :B\\n2/1 :C\\n',
+      'Golden Gate (just)\n8\n135/128 :c#\n9/8 :D\n5/4 :E\n45/32 :F^#\n3/2 :G\n27/16 :a !!reference 4 442.5\n15/8 :B\n2/1 :C\n',
     );
     assert.ok(parsed);
     const anchor = resolveScalaReferenceAnchor(parsed, 440);
@@ -112,7 +112,7 @@ describe('Scala !!reference anchor resolution', () => {
 
   it('supports solfege labels only when the SCL file includes explicit Hz', () => {
     const explicit = parseScalaScl(
-      'Sacred Solfeggio\\n3\\n396/174 :Ut\\n417/174 :Re\\n528/174 :Mi !!reference 4 528.0\\n',
+      'Sacred Solfeggio\n3\n396/174 :Ut\n417/174 :Re\n528/174 :Mi !!reference 4 528.0\n',
     );
     assert.ok(explicit);
     const anchor = resolveScalaReferenceAnchor(explicit);
@@ -120,13 +120,13 @@ describe('Scala !!reference anchor resolution', () => {
     assert.equal(anchor.referenceName, 'MI4');
     assert.equal(anchor.referenceHz, 528);
 
-    const implicit = parseScalaScl('Solfeggio\\n2\\n3/2 :Mi !!reference 4\\n2/1 :C\\n');
+    const implicit = parseScalaScl('Solfeggio\n2\n3/2 :Mi !!reference 4\n2/1 :C\n');
     assert.ok(implicit);
     assert.equal(resolveScalaReferenceAnchor(implicit), null);
   });
 
   it('uses the supplied A4 calibration for exact-frequency note labels and cent annotations', () => {
-    const parsed = parseScalaScl('A4 anchored scale\\n3\\n500 :E\\n900 :A !!reference 4\\n1200 :C\\n', { preserveSourceOrder: true });
+    const parsed = parseScalaScl('A4 anchored scale\n3\n500 :E\n900 :A !!reference 4\n1200 :C\n', { preserveSourceOrder: true });
     assert.ok(parsed);
     const anchor = resolveScalaReferenceAnchor(parsed, 442);
     assert.ok(anchor);
@@ -138,14 +138,14 @@ describe('Scala !!reference anchor resolution', () => {
   });
 
   it('handles a reference marker on the period row and rejects impossible anchor data', () => {
-    const period = parseScalaScl('Octave reference\\n2\\n700 :G\\n2/1 :C !!reference 4 261.625565\\n');
+    const period = parseScalaScl('Octave reference\n2\n700 :G\n2/1 :C !!reference 4 261.625565\n');
     assert.ok(period);
     const anchor = resolveScalaReferenceAnchor(period);
     assert.ok(anchor);
     assert.equal(anchor.intervalCents, 1200);
     assert.ok(Math.abs(anchor.rootFrequencyHz - 130.8127825) < 1e-6);
 
-    const noMarker = parseScalaScl('No marker\\n2\\n700 :G\\n2/1 :C\\n');
+    const noMarker = parseScalaScl('No marker\n2\n700 :G\n2/1 :C\n');
     assert.ok(noMarker);
     assert.equal(resolveScalaReferenceAnchor(noMarker), null);
     assert.equal(resolveScalaReferenceAnchor(period, 500), null);
