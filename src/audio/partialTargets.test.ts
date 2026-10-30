@@ -44,7 +44,7 @@ describe('custom handpan partial targets', () => {
       'd-kurd-9:Bad': { octaveCents: Number.NaN, thirdPartialCents: 200 },
       '': { octaveCents: 3, thirdPartialCents: 0 },
     }), {
-      'd-kurd-9:D3': { octaveCents: 12, thirdPartialCents: -4 },
+      'd-kurd-9:D3': { fundamentalCents: 0, octaveCents: 12, thirdPartialCents: -4 },
       'd-kurd-9:Bad': { fundamentalCents: 0, octaveCents: 0, thirdPartialCents: 50 },
     });
   });
