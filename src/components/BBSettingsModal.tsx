@@ -148,7 +148,7 @@ export const BBSettingsModal: React.FC<Props> = ({
       const source = await response.text();
       const parsed = parseScalaScl(source, { preserveSourceOrder: true });
       const converted = parsed
-        ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
+        ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz, a4Ref)
         : null;
       if (!parsed || !converted) {
         setCustomScaleMessage('Ez a Scala-fájl nem alakítható át biztonságosan a kiválasztott hanghoz.');
@@ -467,7 +467,7 @@ export const BBSettingsModal: React.FC<Props> = ({
                       const rootLabel = enabled
                         ? rootPitch.note + (rootCents === 0 ? '' : (rootCents > 0 ? '+' : '') + rootCents + 'c')
                         : selectedNoteName;
-                      const converted = scalaToCustomScaleText(pendingScalaImport.parsed, rootLabel, rootHz);
+                      const converted = scalaToCustomScaleText(pendingScalaImport.parsed, rootLabel, rootHz, a4Ref);
                       if (!converted) {
                         setCustomScaleMessage('A referenciahorgonyból számított skála kívül esik a használható frekvenciatartományon.');
                         return;
@@ -533,7 +533,7 @@ export const BBSettingsModal: React.FC<Props> = ({
                   try {
                     const parsed = parseScalaScl(await file.text(), { preserveSourceOrder: true });
                     const converted = parsed
-                      ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
+                      ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz, a4Ref)
                       : null;
                     if (!parsed || !converted) {
                       setCustomScaleMessage('A Scala-fájl hibás, vagy a skála több mint 24 használható hangot tartalmaz.');
