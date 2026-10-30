@@ -981,6 +981,64 @@ export default function App() {
     setIsReferenceTonePlaying(true);
   };
 
+  /**
+   * One transport handler is shared by the Hangolás panel and the persistent
+   * controls shown on the other tabs. The audio node itself stays mounted above
+   * the tab switch, so changing views cannot break the analyser connection.
+   */
+  const handleToggleOwnDPlayback = () => {
+    const player = ownDPlayerRef.current;
+    if (!player) return;
+
+    if (isOwnDPlaying) {
+      player.pause();
+      player.currentTime = 0;
+      bbAudioEngine.stopAudioElementInput();
+      setIsFileInputActive(false);
+      setOwnDAudioCurrentTime(0);
+      setIsOwnDPlaying(false);
+      setHasSignal(false);
+      return;
+    }
+
+    if (isListening || isReferenceTonePlaying) return;
+    setOwnDAudioError('');
+
+    const startPlayback = async () => {
+      const playPromise = player.play();
+      const inputPromise = bbAudioEngine.startAudioElementInput(player);
+      const [, inputReady] = await Promise.all([playPromise, inputPromise]);
+      if (!inputReady) throw new Error('A hangfájl nem kapcsolható az elemzőhöz.');
+      analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
+      setAnalysisFps(null);
+      setIsFileInputActive(true);
+      setIsOwnDPlaying(true);
+    };
+
+    void startPlayback().catch((cause) => {
+      player.pause();
+      bbAudioEngine.stopAudioElementInput();
+      setIsFileInputActive(false);
+      setIsOwnDPlaying(false);
+      setHasSignal(false);
+      setOwnDAudioError(cause instanceof Error
+        ? cause.message
+        : 'A lejátszás nem indult el. Érintsd meg újra a Lejátszás gombot.');
+    });
+  };
+
+  const handleToggleOwnDLoop = () => {
+    setOwnDLoop((previous) => {
+      const next = !previous;
+      try {
+        localStorage.setItem('hangoal-own-d-loop-v1', String(next));
+      } catch {
+        // Keep playback usable when browser storage is unavailable.
+      }
+      return next;
+    });
+  };
+
   const activeCents = activeResonance.deviationCents;
   const isNearTune = activeResonance.status === 'valid' && isWithinTuningTolerance(activeCents, activeResonance.targetHz, toleranceOverrideCents);
 
@@ -1229,6 +1287,54 @@ export default function App() {
           </div>
         )}
 
+        {activeTab !== 'hangolas' && (
+          <section
+            aria-label="Közös hangforrás-vezérlés"
+            className="mb-3 rounded-xl border border-cyan-400/20 bg-cyan-950/20 px-3 py-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-white">Közös hangforrás</div>
+                <p className="mt-0.5 text-[10px] text-slate-400">
+                  {isOwnDPlaying ? 'A handpan-minta szól · az elemző aktív' : isReferenceTonePlaying ? 'A szinuszreferencia szól · az elemző aktív' : 'Indíts mintát: a minta minden fülön a közös elemzőt táplálja.'}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleToggleOwnDPlayback}
+                  disabled={isListening || isReferenceTonePlaying}
+                  className="rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-200 disabled:opacity-40"
+                >
+                  {isOwnDPlaying ? 'Minta leállítása' : 'Minta lejátszása'}
+                </button>
+                <label className="flex items-center gap-1.5 text-[10px] text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={ownDLoop}
+                    onChange={handleToggleOwnDLoop}
+                    className="h-4 w-4 accent-amber-400"
+                  />
+                  Loop
+                </label>
+                {isReferenceTonePlaying && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      bbAudioEngine.stopTone();
+                      setIsReferenceTonePlaying(false);
+                    }}
+                    className="rounded-full border border-rose-400/30 px-3 py-2 text-[11px] font-semibold text-rose-200"
+                  >
+                    Szinusz leállítása
+                  </button>
+                )}
+              </div>
+            </div>
+            {ownDAudioError && <p role="alert" className="mt-2 text-[10px] text-rose-300">{ownDAudioError}</p>}
+          </section>
+        )}
+
               <audio
                 className="hidden"
                 aria-hidden="true"
@@ -1289,39 +1395,7 @@ export default function App() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    const player = ownDPlayerRef.current;
-                    if (!player) return;
-                    if (isOwnDPlaying) {
-                      player.pause();
-                      player.currentTime = 0;
-                      bbAudioEngine.stopAudioElementInput();
-                      setIsFileInputActive(false);
-                      setOwnDAudioCurrentTime(0);
-                      setIsOwnDPlaying(false);
-                    } else if (!isListening && !isReferenceTonePlaying) {
-                      setOwnDAudioError('');
-                      const startPlayback = async () => {
-                        const playPromise = player.play();
-                        const inputPromise = bbAudioEngine.startAudioElementInput(player);
-                        const [, inputReady] = await Promise.all([playPromise, inputPromise]);
-                        if (!inputReady) throw new Error('A hangfájl nem kapcsolható az elemzőhöz.');
-                        analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
-                        setAnalysisFps(null);
-                        setIsFileInputActive(true);
-                        setIsOwnDPlaying(true);
-                      };
-                      void startPlayback().catch((error) => {
-                        player.pause();
-                        bbAudioEngine.stopAudioElementInput();
-                        setIsFileInputActive(false);
-                        setIsOwnDPlaying(false);
-                        setOwnDAudioError(error instanceof Error
-                          ? error.message
-                          : 'A lejátszás nem indult el. Érintsd meg újra a Lejátszás gombot.');
-                      });
-                    }
-                  }}
+                  onClick={handleToggleOwnDPlayback}
                   className="shrink-0 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20"
                   aria-label={isOwnDPlaying ? "Saját D leállítása" : "Saját D lejátszása"}
                   disabled={isListening || isReferenceTonePlaying}
@@ -1384,15 +1458,7 @@ export default function App() {
                 <input
                   type="checkbox"
                   checked={ownDLoop}
-                  onChange={(event) => {
-                    const nextLoop = event.target.checked;
-                    setOwnDLoop(nextLoop);
-                    try {
-                      localStorage.setItem('hangoal-own-d-loop-v1', String(nextLoop));
-                    } catch {
-                      // Keep playback usable when browser storage is unavailable.
-                    }
-                  }}
+                  onChange={handleToggleOwnDLoop}
                   className="h-4 w-4 accent-amber-400"
                 />
                 Loopolva (folyamatos ismétlés)
