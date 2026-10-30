@@ -304,9 +304,10 @@ export function generateReferenceSignal(
     return null;
   }
 
-  const fundamentalHz = (scenario.synthesizedRootHz ?? scenario.targetHz) * Math.pow(2, scenario.detuneCents / 1200);
-  const octaveHz = scenario.targetHz * 2 * Math.pow(2, (scenario.detuneCents + scenario.octaveOffsetCents) / 1200);
-  const thirdPartialHz = scenario.targetHz * 3 * Math.pow(2, (scenario.detuneCents + scenario.thirdPartialOffsetCents) / 1200);
+  const sourceRootHz = scenario.synthesizedRootHz ?? scenario.targetHz;
+  const fundamentalHz = sourceRootHz * Math.pow(2, scenario.detuneCents / 1200);
+  const octaveHz = sourceRootHz * 2 * Math.pow(2, (scenario.detuneCents + scenario.octaveOffsetCents) / 1200);
+  const thirdPartialHz = sourceRootHz * 3 * Math.pow(2, (scenario.detuneCents + scenario.thirdPartialOffsetCents) / 1200);
   if (![fundamentalHz, octaveHz, thirdPartialHz].every((frequency) => Number.isFinite(frequency) && frequency > 0 && frequency < sampleRate / 2)) {
     return null;
   }
