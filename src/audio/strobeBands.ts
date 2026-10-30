@@ -1,3 +1,4 @@
+import type { ReferenceToneMode } from './referenceToneModes';
 export type StrobeBandSource = 'fundamental' | 'fifth' | 'octave' | 'custom';
 export type StrobeBandTargetMode = 'absolute' | 'ratio' | 'cents';
 
@@ -9,6 +10,8 @@ export interface StrobeBandConfig {
   targetHz: number;
   centsOffset: number;
   enabled: boolean;
+  /** Per-custom-lane pitch-pipe mode. Missing values from legacy backups safely default to off. */
+  referenceToneMode?: ReferenceToneMode;
   /** Ratio/cents modes remain relative to the currently selected fundamental. Omitted means legacy absolute Hz. */
   targetMode?: StrobeBandTargetMode;
   /** Multiplier for ratio mode, or cents offset for cents mode. */
@@ -46,6 +49,8 @@ export function normalizeStrobeBands(value: unknown): StrobeBandConfig[] {
     if (typeof record.targetHz !== 'number' || !Number.isFinite(record.targetHz) || record.targetHz < 20 || record.targetHz > 20000) continue;
     if (typeof record.centsOffset !== 'number' || !Number.isFinite(record.centsOffset) || record.centsOffset < -1200 || record.centsOffset > 1200) continue;
     if (typeof record.enabled !== 'boolean') continue;
+    const referenceToneMode = record.referenceToneMode === undefined ? 'off' : record.referenceToneMode;
+    if (referenceToneMode !== 'continuous' && referenceToneMode !== 'strike' && referenceToneMode !== 'off') continue;
 
     const targetMode = record.targetMode === undefined ? 'absolute' : record.targetMode;
     if (typeof targetMode !== 'string' || !VALID_TARGET_MODES.has(targetMode as StrobeBandTargetMode)) continue;
@@ -65,6 +70,7 @@ export function normalizeStrobeBands(value: unknown): StrobeBandConfig[] {
       targetHz: record.targetHz,
       centsOffset: record.centsOffset,
       enabled: record.enabled,
+      referenceToneMode,
       targetMode: targetMode as StrobeBandTargetMode,
       ...(targetValue === undefined ? {} : { targetValue }),
     });
