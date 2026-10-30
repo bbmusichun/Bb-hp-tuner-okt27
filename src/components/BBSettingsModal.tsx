@@ -20,7 +20,7 @@ function scalaImportSuccessMessage(parsed: ParsedScalaScale | null, message: str
   const frequency = reference.frequencyHz === undefined
     ? ''
     : ` (${reference.frequencyHz.toFixed(3)} Hz)`;
-  const a4Reference = getScalaReferenceA4(parsed);
+  const a4Reference = parsed ? getScalaReferenceA4(parsed) : null;
   const calibration = a4Reference === null
     ? 'A beágyazott metaadatból nem számítható biztonságos A4-kalibráció.'
     : `Ez A4 = ${a4Reference.toFixed(3)} Hz kalibrációt jelent; külön gombbal alkalmazható.`;
@@ -502,7 +502,7 @@ export const BBSettingsModal: React.FC<Props> = ({
                     }
                     setCustomScaleNameDraft(file.name.replace(/\.scl$/i, ''));
                     setCustomScaleTextDraft(converted);
-                    setScalaReferenceA4(getScalaReferenceA4(parsed));
+                    setScalaReferenceA4(parsed ? getScalaReferenceA4(parsed) : null);
                     setCustomScaleMessage(scalaImportSuccessMessage(parsed, 'A Scala-skála beolvasva. Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.'));
                   } catch {
                     setScalaReferenceA4(null);
