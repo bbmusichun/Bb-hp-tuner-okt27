@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { bbAudioEngine } from './audio/audioEngine';
 import { PRESET_SCALES, midiToFreq, freqToNoteAndCents } from './audio/scales';
-import { isWithinTuningTolerance } from './audio/tuningTolerance';
+import { isValidTuningToleranceSetting, isWithinTuningTolerance, normalizeTuningToleranceSetting, type TuningToleranceSetting } from './audio/tuningTolerance';
 import { buildChromaticTargetNote, midiFromFrequency } from './audio/chromaticPitch';
 import { transposeFrequencyBySemitones } from './audio/transposition';
 import { normalizeTuningReadoutMode, type TuningReadoutMode } from './audio/readoutModes';
@@ -68,7 +68,7 @@ function loadTuningPreferences(): {
   partialTargetOffsets: PartialTargetOffsetMap;
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
-  toleranceOverrideCents: number | null;
+  toleranceOverrideCents: TuningToleranceSetting;
   transposeSemitones: number;
   strobeSensitivity: number;
   readoutMode: TuningReadoutMode;
@@ -142,9 +142,7 @@ function loadTuningPreferences(): {
       partialTargetOffsets: activeProfile.partialTargetOffsets,
       instrumentProfiles: profiles,
       activeInstrumentProfileId,
-      toleranceOverrideCents: typeof prefs.toleranceOverrideCents === 'number' &&
-        Number.isFinite(prefs.toleranceOverrideCents) && prefs.toleranceOverrideCents >= 0.5 && prefs.toleranceOverrideCents <= 20
-        ? prefs.toleranceOverrideCents : null,
+      toleranceOverrideCents: normalizeTuningToleranceSetting(prefs.toleranceOverrideCents),
       transposeSemitones: typeof prefs.transposeSemitones === 'number' && Number.isInteger(prefs.transposeSemitones) && prefs.transposeSemitones >= -12 && prefs.transposeSemitones <= 12
         ? prefs.transposeSemitones : 0,
       strobeSensitivity: normalizeStrobeSensitivity(prefs.strobeSensitivity),
@@ -199,8 +197,7 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
     (entry.octaveTargetHz === undefined || (typeof entry.octaveTargetHz === 'number' && Number.isFinite(entry.octaveTargetHz) && entry.octaveTargetHz > 0)) &&
     (entry.audioSampleRateHz === undefined || (typeof entry.audioSampleRateHz === 'number' && Number.isFinite(entry.audioSampleRateHz) && entry.audioSampleRateHz > 0)) &&
     (entry.inputLevelDbfs === undefined || (typeof entry.inputLevelDbfs === 'number' && Number.isFinite(entry.inputLevelDbfs) && entry.inputLevelDbfs >= -160 && entry.inputLevelDbfs <= 0)) &&
-    (entry.toleranceOverrideCents === undefined || entry.toleranceOverrideCents === null ||
-      (typeof entry.toleranceOverrideCents === 'number' && Number.isFinite(entry.toleranceOverrideCents) && entry.toleranceOverrideCents >= 0.5 && entry.toleranceOverrideCents <= 20)) &&
+    (entry.toleranceOverrideCents === undefined || isValidTuningToleranceSetting(entry.toleranceOverrideCents)) &&
     (entry.instrumentProfileId === undefined || typeof entry.instrumentProfileId === 'string') &&
     (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string');
 }
@@ -212,7 +209,7 @@ export default function App() {
   const [autoDetectionMode, setAutoDetectionMode] = useState<AutoDetectionMode>(() => loadTuningPreferences().autoDetectionMode);
   const [singleShotCaptured, setSingleShotCaptured] = useState(false);
   const autoDetect = autoDetectionMode !== 'off';
-  const [toleranceOverrideCents, setToleranceOverrideCents] = useState<number | null>(
+  const [toleranceOverrideCents, setToleranceOverrideCents] = useState<TuningToleranceSetting>(
     () => loadTuningPreferences().toleranceOverrideCents,
   );
   const autoDetectionRef = useRef<{ id: string; count: number } | null>(null);
@@ -992,11 +989,17 @@ export default function App() {
     ? ''
     : activeResonance.status !== 'valid' || activeCents === null
     ? '(nem mérhető biztosan)'
+    : toleranceOverrideCents === 'always'
+    ? '(elfogadva · minden eltérés)'
+    : toleranceOverrideCents === 'never'
+    ? '(zöld jelzés tiltva)'
     : isNearTune
     ? '(pontos)'
-    : activeCents !== null && activeCents > 0
+    : activeCents > 0
     ? '(kissé magas)'
-    : '(kissé mély)';
+    : activeCents < 0
+    ? '(kissé mély)'
+    : '(0 cent eltérés)';
 
   const keyboardActionsRef = useRef({
     handleToggleMic,

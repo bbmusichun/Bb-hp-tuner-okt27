@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
 import { formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
-import { tuningToleranceCents } from '../audio/tuningTolerance';
+import { isWithinTuningTolerance, type TuningToleranceSetting } from '../audio/tuningTolerance';
 import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
 import type { ResonanceMeasurement } from '../types/tuner';
@@ -20,7 +20,7 @@ interface Props {
   active?: boolean;
   transientHoldoff?: boolean;
   baseFrequencyHz?: number;
-  toleranceOverrideCents?: number | null;
+  toleranceOverrideCents?: TuningToleranceSetting;
   selectedRole?: string;
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
   strobeSensitivity?: number;
@@ -139,12 +139,11 @@ export const BBStrobeBands: React.FC<Props> = ({
         phasesRef.current[key] = (phasesRef.current[key] ?? 0) + speed * dt;
         const contrast = strobeContrastFromDb(row.valid ? row.db : null);
         const sharpness = strobeSharpnessFromCents(sampleRef.current[key] ?? []);
-        const tolerance = tuningToleranceCents(row.targetHz, current.toleranceOverrideCents);
-        const inTolerance = row.valid && row.cents !== null && Math.abs(row.cents) <= tolerance;
+        const inTolerance = row.valid && isWithinTuningTolerance(row.cents, row.targetHz, current.toleranceOverrideCents);
         if (inTolerance) greenSinceRef.current[key] ??= now;
         else greenSinceRef.current[key] = null;
         const green = inTolerance && greenSinceRef.current[key] !== null && now - (greenSinceRef.current[key] ?? now) >= 1000;
-        const near = row.valid && row.cents !== null && Math.abs(row.cents) <= tolerance && !green;
+        const near = inTolerance && !green;
         const stripeWidth = row.stripeWidth;
         const period = stripeWidth * 2;
         const offset = ((phasesRef.current[key] % period) + period) % period;
@@ -278,7 +277,7 @@ export const BBStrobeBands: React.FC<Props> = ({
             const measured = reading?.measuredHz ?? null;
             const cents = reading?.deviationCents ?? null;
             const valid = band.enabled && hasCustomSignal && cents !== null;
-            const inTolerance = valid && Math.abs(cents ?? Infinity) <= tuningToleranceCents(targetHz, toleranceOverrideCents);
+            const inTolerance = valid && isWithinTuningTolerance(cents, targetHz, toleranceOverrideCents);
             return (
               <div key={band.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5">
                 <div className="mb-2 flex items-center gap-2">

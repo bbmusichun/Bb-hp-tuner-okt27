@@ -3,6 +3,8 @@
  * Data model and types according to the functional specification
  */
 
+import type { TuningToleranceSetting } from '../audio/tuningTolerance';
+
 export type ResonanceRole = 'fundamental' | 'fifth' | 'octave';
 
 export type MeasurementStatus = 'valid' | 'uncertain' | 'held' | 'no-signal';
@@ -67,7 +69,7 @@ export interface TuningLogEntry {
   audioSampleRateHz?: number;
   inputLevelDbfs?: number;
   /** Tolerance policy used when calculating overallInTune; null means adaptive Auto. */
-  toleranceOverrideCents?: number | null;
+  toleranceOverrideCents?: TuningToleranceSetting;
   /** Measured frequencies. */
   fundamentalHz: number;
   fundamentalCents: number;

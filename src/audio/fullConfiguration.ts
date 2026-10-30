@@ -5,6 +5,7 @@ import { normalizeStrobeBands, type StrobeBandConfig } from './strobeBands';
 import type { AutoDetectionMode } from './detectionModes';
 import type { TuningReadoutMode } from './readoutModes';
 import type { ReferenceToneMode } from './referenceToneModes';
+import { isValidTuningToleranceSetting, type TuningToleranceSetting } from './tuningTolerance';
 import { isValidStrobeSensitivity, normalizeStrobeSensitivity } from './strobeSensitivity';
 
 export interface HangoalFullConfiguration {
@@ -13,7 +14,7 @@ export interface HangoalFullConfiguration {
   settings: {
     autoDetect: boolean;
     autoDetectionMode: AutoDetectionMode;
-    toleranceOverrideCents: number | null;
+    toleranceOverrideCents: TuningToleranceSetting;
     transposeSemitones: number;
     strobeSensitivity: number;
     readoutMode: TuningReadoutMode;
@@ -48,8 +49,7 @@ function isValidLogEntry(value: unknown): value is TuningLogEntry {
     (entry.octaveTargetHz === undefined || (typeof entry.octaveTargetHz === 'number' && Number.isFinite(entry.octaveTargetHz) && entry.octaveTargetHz > 0)) &&
     (entry.audioSampleRateHz === undefined || (typeof entry.audioSampleRateHz === 'number' && Number.isFinite(entry.audioSampleRateHz) && entry.audioSampleRateHz > 0)) &&
     (entry.inputLevelDbfs === undefined || (typeof entry.inputLevelDbfs === 'number' && Number.isFinite(entry.inputLevelDbfs) && entry.inputLevelDbfs >= -160 && entry.inputLevelDbfs <= 0)) &&
-    (entry.toleranceOverrideCents === undefined || entry.toleranceOverrideCents === null ||
-      (typeof entry.toleranceOverrideCents === 'number' && Number.isFinite(entry.toleranceOverrideCents) && entry.toleranceOverrideCents >= 0.5 && entry.toleranceOverrideCents <= 20)) &&
+    (entry.toleranceOverrideCents === undefined || isValidTuningToleranceSetting(entry.toleranceOverrideCents)) &&
     (entry.instrumentProfileId === undefined || typeof entry.instrumentProfileId === 'string') &&
     (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string');
 }
@@ -76,9 +76,7 @@ export function parseHangoalFullConfiguration(
   if (settings.autoDetect !== (settings.autoDetectionMode !== 'off')) return null;
   if (settings.readoutMode !== 'hz' && settings.readoutMode !== 'cents' && settings.readoutMode !== 'note' && settings.readoutMode !== 'ratio') return null;
   if (settings.referenceToneMode !== 'continuous' && settings.referenceToneMode !== 'strike' && settings.referenceToneMode !== 'off') return null;
-  if (!(settings.toleranceOverrideCents === null ||
-    (typeof settings.toleranceOverrideCents === 'number' && Number.isFinite(settings.toleranceOverrideCents) &&
-      settings.toleranceOverrideCents >= 0.5 && settings.toleranceOverrideCents <= 20))) return null;
+  if (!isValidTuningToleranceSetting(settings.toleranceOverrideCents)) return null;
   if (typeof settings.transposeSemitones !== 'number' || !Number.isInteger(settings.transposeSemitones) ||
     settings.transposeSemitones < -12 || settings.transposeSemitones > 12) return null;
   if (settings.strobeSensitivity !== undefined && !isValidStrobeSensitivity(settings.strobeSensitivity)) return null;

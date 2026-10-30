@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
 import { formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
-import { tuningToleranceCents } from '../audio/tuningTolerance';
+import { isWithinTuningTolerance, type TuningToleranceSetting } from '../audio/tuningTolerance';
 
 const STORAGE_KEY = 'hangoal-custom-strobe-bands-v1';
 const MAX_CUSTOM_BANDS = 8;
@@ -13,7 +13,7 @@ interface Props {
   active: boolean;
   hasSignal: boolean;
   transientHoldoff: boolean;
-  toleranceOverrideCents?: number | null;
+  toleranceOverrideCents?: TuningToleranceSetting;
   baseFrequencyHz?: number;
   strobeSensitivity?: number;
 }
@@ -136,8 +136,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
         ctx.fillRect(0, y + 2, width, rowHeight - 4);
 
         if (band.enabled) {
-          const tolerance = tuningToleranceCents(targetHz, current.toleranceOverrideCents);
-          const inTolerance = valid && Math.abs(deviationCents ?? Infinity) <= tolerance;
+          const inTolerance = valid && isWithinTuningTolerance(deviationCents, targetHz, current.toleranceOverrideCents);
           const color = inTolerance ? '#147a48' : valid ? '#a8323c' : '#3b2630';
           const light = inTolerance ? '#31d889' : valid ? '#c44852' : '#60414a';
           const stripeWidth = 18 + (index % 3) * 9;
@@ -245,7 +244,7 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
               const measured = reading?.measuredHz ?? null;
               const cents = reading?.deviationCents ?? null;
               const valid = band.enabled && active && hasSignal && !transientHoldoff && cents !== null;
-              const inTolerance = valid && Math.abs(cents ?? Infinity) <= tuningToleranceCents(targetHz, toleranceOverrideCents);
+              const inTolerance = valid && isWithinTuningTolerance(cents, targetHz, toleranceOverrideCents);
               return (
                 <div key={band.id} className="rounded-xl border border-white/10 bg-slate-950/50 p-2.5">
                   <div className="mb-2 flex items-center gap-2">

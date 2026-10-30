@@ -33,7 +33,11 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 
 ## 4. Tűrés és mérési napló
 
-- [ ] Az Auto, ±1, ±2, ±5 és ±10 cent beállítások a fő kijelzésben, a mérési kártyákon, a stroboszkópon és a spektrumon ugyanazt a pontos küszöböt használják.
+- [ ] Az Auto, ±1, ±2, ±5 és ±10 cent, „Mindig elfogadott” és „Soha ne legyen zöld” beállítás a fő kijelzésben, a mérési kártyákon, mindkét stroboszkópon, a spektrumon és a stabilitási grafikonon ugyanazt az elfogadási szabályt használja.
+- [ ] „Mindig elfogadott” módban minden érvényes mérés elfogadott jelzést kap, de a tényleges Hz- és centérték változatlan marad.
+- [ ] „Soha ne legyen zöld” módban egyetlen érvényes mérés sem kap zöld státuszt; a mért Hz- és centérték változatlan marad.
+- [ ] Hiányzó, NaN vagy érvénytelen mérés egyik szélső módban sem kaphat elfogadott/zöld állapotot.
+- [ ] A mérési napló, CSV/JSON export és teljes konfigurációs mentés megőrzi a kiválasztott toleranciamódot.
 - [ ] A tűrés módosítása nem változtatja meg a mért Hz-értéket vagy a centeltérést.
 - [ ] Érvényes mérés mentésekor megjelenik a dátum, hang, céltól való eltérés, hangszerprofil, mintavételi frekvencia és dBFS bemeneti szint.
 - [ ] CSV- és JSON-export megnyitható, és a fejléc/oszlopok a mentett adatokkal egyeznek.

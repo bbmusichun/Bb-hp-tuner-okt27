@@ -1,9 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
 import { bbAudioEngine } from '../audio/audioEngine';
-import { isWithinTuningTolerance } from '../audio/tuningTolerance';
+import { isWithinTuningTolerance, type TuningToleranceSetting } from '../audio/tuningTolerance';
 
-interface Props { alap: ResonanceMeasurement; kvint: ResonanceMeasurement; oktav: ResonanceMeasurement; hasSignal: boolean; toleranceOverrideCents?: number | null; onSelectPeak?: (role: 'fundamental' | 'fifth' | 'octave') => void; }
+interface Props { alap: ResonanceMeasurement; kvint: ResonanceMeasurement; oktav: ResonanceMeasurement; hasSignal: boolean; toleranceOverrideCents?: TuningToleranceSetting; onSelectPeak?: (role: 'fundamental' | 'fifth' | 'octave') => void; }
 const COLORS = { fundamental: '#fbbf24', octave: '#22d3ee', fifth: '#c084fc' };
 const NOTES = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 export function getSpectrumFrequencyRange(baseHz: number): { lowHz: number; highHz: number } {

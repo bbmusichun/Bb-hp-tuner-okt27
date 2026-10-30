@@ -113,3 +113,23 @@ test('rejects a strobe sensitivity outside the supported range', () => {
   backup.settings.strobeSensitivity = 9;
   assert.equal(parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile), null);
 });
+
+test('round-trips the always-accept and never-green tolerance modes', () => {
+  const alwaysBackup = validBackup();
+  (alwaysBackup.settings as unknown as Record<string, unknown>).toleranceOverrideCents = 'always';
+  const alwaysResult = parseHangoalFullConfiguration(alwaysBackup, ['d-kurd-9'], fallbackProfile);
+  assert.ok(alwaysResult);
+  assert.equal(alwaysResult.settings.toleranceOverrideCents, 'always');
+
+  const neverBackup = validBackup();
+  (neverBackup.settings as unknown as Record<string, unknown>).toleranceOverrideCents = 'never';
+  const neverResult = parseHangoalFullConfiguration(neverBackup, ['d-kurd-9'], fallbackProfile);
+  assert.ok(neverResult);
+  assert.equal(neverResult.settings.toleranceOverrideCents, 'never');
+});
+
+test('rejects unknown special tolerance modes in imported backups', () => {
+  const backup = validBackup();
+  (backup.settings as unknown as Record<string, unknown>).toleranceOverrideCents = 'usually';
+  assert.equal(parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile), null);
+});
