@@ -1029,6 +1029,7 @@ export default function App() {
   useEffect(() => {
     // Stop any manual/previous tone when its target or listening state changes.
     bbAudioEngine.stopTone();
+    window.dispatchEvent(new Event('hangoal-stop-custom-reference-tone'));
     setIsReferenceTonePlaying(false);
     if (strikeToneTimerRef.current !== null) {
       window.clearTimeout(strikeToneTimerRef.current);
@@ -1079,6 +1080,7 @@ export default function App() {
 
   const handleSetReferenceToneMode = (mode: ReferenceToneMode) => {
     bbAudioEngine.stopTone();
+    window.dispatchEvent(new Event('hangoal-stop-custom-reference-tone'));
     setIsReferenceTonePlaying(false);
     if (strikeToneTimerRef.current !== null) {
       window.clearTimeout(strikeToneTimerRef.current);
@@ -1092,6 +1094,7 @@ export default function App() {
     if (referenceToneMode !== 'continuous' || isListening || isFileInputActive) return;
     if (isReferenceTonePlaying) {
       bbAudioEngine.stopTone();
+      window.dispatchEvent(new Event('hangoal-stop-custom-reference-tone'));
       setIsReferenceTonePlaying(false);
       return;
     }
@@ -1669,6 +1672,7 @@ export default function App() {
                 isMicrophoneListening={isListening}
                 selectedOutputDeviceId={selectedOutputDeviceId}
                 onCustomReferenceTonePlaying={setIsReferenceTonePlaying}
+                onAudioDeviceNotice={setAudioDeviceNotice}
               />
             </div>
 
