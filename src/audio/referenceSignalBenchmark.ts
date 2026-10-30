@@ -7,6 +7,8 @@ export interface ReferenceSignalScenario {
   id: string;
   name: string;
   targetHz: number;
+  /** Optional true source root. Set below targetHz to exercise octave/partial misidentification. */
+  synthesizedRootHz?: number;
   detuneCents: number;
   octaveOffsetCents: number;
   thirdPartialOffsetCents: number;
@@ -37,7 +39,11 @@ export interface ReferenceSignalBenchmarkResult {
   scenarioId: string;
   name: string;
   targetHz: number;
+  /** Actual fundamental in the generated signal, independent of the analyser's selected target. */
   expectedFundamentalHz: number;
+  /** Difference between the analyser's nominal target and the true synthesized root. */
+  candidateRootDifferenceCents: number;
+  candidateRootRatio: number;
   analysisAvailable: boolean;
   rmsDb: number | null;
   identifiabilityStatus: ReferenceSignalBenchmarkIdentifiability;
@@ -52,6 +58,8 @@ export interface ReferenceSignalBenchmarkSummary {
   ambiguousCount: number;
   unidentifiedCount: number;
   missingFundamentalCount: number;
+  candidateRootMismatchCount: number;
+  suspectedOctaveErrorCount: number;
   measuredPartialCount: number;
   missingPartialCount: number;
   meanAbsoluteResidualErrorCents: number | null;
@@ -149,6 +157,21 @@ export const DEFAULT_REFERENCE_SIGNAL_SCENARIOS: readonly ReferenceSignalScenari
     thirdPartialAmplitude: 0.12,
     noiseAmplitude: 0,
     noiseSeed: 0xabcdef12,
+    clipLevel: null,
+  },
+  {
+    id: 'octave-error-candidate',
+    name: 'D3 jel · a mérő célja tévesen D4 (oktávhiba)',
+    targetHz: 293.664768,
+    synthesizedRootHz: 146.832384,
+    detuneCents: 0,
+    octaveOffsetCents: 0,
+    thirdPartialOffsetCents: 0,
+    fundamentalAmplitude: 0.5,
+    octaveAmplitude: 0.25,
+    thirdPartialAmplitude: 0.15,
+    noiseAmplitude: 0,
+    noiseSeed: 0x12345678,
     clipLevel: null,
   },
   {
@@ -256,6 +279,7 @@ function validScenario(scenario: ReferenceSignalScenario): boolean {
     scenario.id.trim() &&
     scenario.name.trim() &&
     Number.isFinite(scenario.targetHz) && scenario.targetHz >= 20 && scenario.targetHz <= 2000 &&
+    (scenario.synthesizedRootHz === undefined || (Number.isFinite(scenario.synthesizedRootHz) && scenario.synthesizedRootHz >= 20 && scenario.synthesizedRootHz <= 2000)) &&
     Number.isFinite(scenario.detuneCents) && Math.abs(scenario.detuneCents) <= 1200 &&
     Number.isFinite(scenario.octaveOffsetCents) && Math.abs(scenario.octaveOffsetCents) <= 1200 &&
     Number.isFinite(scenario.thirdPartialOffsetCents) && Math.abs(scenario.thirdPartialOffsetCents) <= 1200 &&
@@ -275,11 +299,12 @@ export function generateReferenceSignal(
   if (!validScenario(scenario) ||
       !Number.isFinite(sampleRate) || sampleRate <= 0 ||
       !Number.isInteger(sampleCount) || sampleCount < 1024 ||
-      scenario.targetHz * 3 * Math.pow(2, (scenario.detuneCents + Math.max(Math.abs(scenario.octaveOffsetCents), Math.abs(scenario.thirdPartialOffsetCents))) / 1200) >= sampleRate / 2) {
+      Math.max(scenario.targetHz, scenario.synthesizedRootHz ?? scenario.targetHz) * 3 *
+        Math.pow(2, (scenario.detuneCents + Math.max(Math.abs(scenario.octaveOffsetCents), Math.abs(scenario.thirdPartialOffsetCents))) / 1200) >= sampleRate / 2) {
     return null;
   }
 
-  const fundamentalHz = scenario.targetHz * Math.pow(2, scenario.detuneCents / 1200);
+  const fundamentalHz = (scenario.synthesizedRootHz ?? scenario.targetHz) * Math.pow(2, scenario.detuneCents / 1200);
   const octaveHz = scenario.targetHz * 2 * Math.pow(2, (scenario.detuneCents + scenario.octaveOffsetCents) / 1200);
   const thirdPartialHz = scenario.targetHz * 3 * Math.pow(2, (scenario.detuneCents + scenario.thirdPartialOffsetCents) / 1200);
   if (![fundamentalHz, octaveHz, thirdPartialHz].every((frequency) => Number.isFinite(frequency) && frequency > 0 && frequency < sampleRate / 2)) {
@@ -320,12 +345,15 @@ function toResult(
   scenario: ReferenceSignalScenario,
   frame: WavFrameAnalysis | null,
 ): ReferenceSignalBenchmarkResult {
-  const expectedFundamentalHz = scenario.targetHz * Math.pow(2, scenario.detuneCents / 1200);
+  const expectedFundamentalHz = (scenario.synthesizedRootHz ?? scenario.targetHz) * Math.pow(2, scenario.detuneCents / 1200);
+  const candidateTargetHz = scenario.targetHz * Math.pow(2, scenario.detuneCents / 1200);
   const expectedFrequencies: [number, number, number] = [
-    expectedFundamentalHz,
-    expectedFundamentalHz * 2 * Math.pow(2, scenario.octaveOffsetCents / 1200),
-    expectedFundamentalHz * 3 * Math.pow(2, scenario.thirdPartialOffsetCents / 1200),
+    candidateTargetHz,
+    candidateTargetHz * 2 * Math.pow(2, scenario.octaveOffsetCents / 1200),
+    candidateTargetHz * 3 * Math.pow(2, scenario.thirdPartialOffsetCents / 1200),
   ];
+  const candidateRootRatio = candidateTargetHz / expectedFundamentalHz;
+  const candidateRootDifferenceCents = 1200 * Math.log2(candidateRootRatio);
 
   const partials = ([1, 2, 3] as ReferenceSignalMultiplier[]).map((multiplier, index) => {
     const resonance = frame?.resonances[index];
@@ -349,6 +377,8 @@ function toResult(
     name: scenario.name,
     targetHz: scenario.targetHz,
     expectedFundamentalHz,
+    candidateRootDifferenceCents,
+    candidateRootRatio,
     analysisAvailable: frame !== null,
     rmsDb: frame?.rmsDb ?? null,
     identifiabilityStatus: frame?.identifiability?.status ?? 'not-analysed',
@@ -398,6 +428,8 @@ export function summarizeReferenceSignalBenchmark(
     ambiguousCount: statuses.filter((status) => status === 'ambiguous').length,
     unidentifiedCount: statuses.filter((status) => status === 'unidentified').length,
     missingFundamentalCount: results.filter((result) => result.partials[0]?.measuredHz === null).length,
+    candidateRootMismatchCount: results.filter((result) => Math.abs(result.candidateRootDifferenceCents) >= 50).length,
+    suspectedOctaveErrorCount: results.filter((result) => Math.abs(Math.abs(result.candidateRootDifferenceCents) - 1200) <= 25).length,
     measuredPartialCount: results.reduce((count, result) => count + result.partials.filter((partial) => partial.measuredHz !== null).length, 0),
     missingPartialCount: results.reduce((count, result) => count + result.partials.filter((partial) => partial.measuredHz === null).length, 0),
     meanAbsoluteResidualErrorCents: residualErrors.length
