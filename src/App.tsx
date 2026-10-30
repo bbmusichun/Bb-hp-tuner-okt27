@@ -1046,7 +1046,7 @@ export default function App() {
     setReferenceToneMode(mode);
   };
 
-  const handleToggleReferenceTone = () => {
+  const handleToggleReferenceTone = async () => {
     if (referenceToneMode !== 'continuous' || isListening || isFileInputActive) return;
     if (isReferenceTonePlaying) {
       bbAudioEngine.stopTone();
@@ -1054,6 +1054,12 @@ export default function App() {
       return;
     }
     if (!Number.isFinite(referenceToneHz) || referenceToneHz <= 0) return;
+    if (selectedOutputDeviceId && bbAudioEngine.supportsOutputDeviceSelection()) {
+      const outputApplied = await bbAudioEngine.setOutputDevice(selectedOutputDeviceId);
+      if (!outputApplied) {
+        setAudioDeviceNotice('A mentett hangkimenet nem érhető el; a rendszer alapértelmezett kimenetét használom.');
+      }
+    }
     bbAudioEngine.playTone(referenceToneHz);
     setIsReferenceTonePlaying(true);
   };
