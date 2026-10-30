@@ -198,7 +198,7 @@ export const BBMeresekView: React.FC<Props> = ({
                   <div className="text-[9px] text-[#f59e0b] font-sans font-semibold">Alap</div>
                   <div>{log.fundamentalHz.toFixed(2)} Hz</div>
                   <div className="text-[9px] text-slate-500">Cél: {log.fundamentalTargetHz !== undefined ? log.fundamentalTargetHz.toFixed(2) : '—'} Hz</div>
-                  <div className={isWithinTuningTolerance(log.fundamentalCents, log.fundamentalTargetHz ?? null, log.toleranceOverrideCents ?? null) ? 'text-[#10b981] font-bold' : 'text-[#f59e0b]'}>
+                  <div className={(log.fundamentalTargetHz === undefined ? log.overallInTune : isWithinTuningTolerance(log.fundamentalCents, log.fundamentalTargetHz, log.toleranceOverrideCents ?? null)) ? 'text-[#10b981] font-bold' : 'text-[#f59e0b]'}>
                     {log.fundamentalCents > 0 ? '+' : ''}{log.fundamentalCents.toFixed(1)}¢
                   </div>
                 </div>
@@ -207,7 +207,7 @@ export const BBMeresekView: React.FC<Props> = ({
                   <div className="text-[9px] text-[#c084fc] font-sans font-semibold">3. parciális</div>
                   <div>{log.fifthHz.toFixed(2)} Hz</div>
                   <div className="text-[9px] text-slate-500">Cél: {log.fifthTargetHz !== undefined ? log.fifthTargetHz.toFixed(2) : '—'} Hz</div>
-                  <div className={isWithinTuningTolerance(log.fifthCents, log.fifthTargetHz ?? null, log.toleranceOverrideCents ?? null) ? 'text-[#10b981] font-bold' : 'text-[#c084fc]'}>
+                  <div className={(log.fifthTargetHz === undefined ? log.overallInTune : isWithinTuningTolerance(log.fifthCents, log.fifthTargetHz, log.toleranceOverrideCents ?? null)) ? 'text-[#10b981] font-bold' : 'text-[#c084fc]'}>
                     {log.fifthCents > 0 ? '+' : ''}{log.fifthCents.toFixed(1)}¢
                   </div>
                 </div>
@@ -216,7 +216,7 @@ export const BBMeresekView: React.FC<Props> = ({
                   <div className="text-[9px] text-[#38bdf8] font-sans font-semibold">Oktáv</div>
                   <div>{log.octaveHz.toFixed(2)} Hz</div>
                   <div className="text-[9px] text-slate-500">Cél: {log.octaveTargetHz !== undefined ? log.octaveTargetHz.toFixed(2) : '—'} Hz</div>
-                  <div className={isWithinTuningTolerance(log.octaveCents, log.octaveTargetHz ?? null, log.toleranceOverrideCents ?? null) ? 'text-[#10b981] font-bold' : 'text-[#38bdf8]'}>
+                  <div className={(log.octaveTargetHz === undefined ? log.overallInTune : isWithinTuningTolerance(log.octaveCents, log.octaveTargetHz, log.toleranceOverrideCents ?? null)) ? 'text-[#10b981] font-bold' : 'text-[#38bdf8]'}>
                     {log.octaveCents > 0 ? '+' : ''}{log.octaveCents.toFixed(1)}¢
                   </div>
                 </div>
