@@ -879,6 +879,27 @@ export default function App() {
     return () => cancelAnimationFrame(animId);
   }, [isSignalInputActive, isReferenceTonePlaying, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
 
+  const handleSelectAudioInput = (deviceId: string) => {
+    setSelectedInputDeviceId(deviceId);
+    setAudioDeviceNotice('A bemenet a következő mérésindításkor vált át. A futó mérést nem szakítja meg.');
+  };
+
+  const handleSelectAudioOutput = async (deviceId: string) => {
+    if (!bbAudioEngine.supportsOutputDeviceSelection()) {
+      setAudioDeviceNotice('Ebben a böngészőben a hangkimenetet a rendszer kezeli.');
+      return;
+    }
+    const applied = await bbAudioEngine.setOutputDevice(deviceId);
+    if (applied) {
+      setSelectedOutputDeviceId(deviceId);
+      setAudioDeviceNotice(deviceId
+        ? 'A kiválasztott hangkimenet aktív.'
+        : 'A rendszer alapértelmezett hangkimenete aktív.');
+    } else {
+      setAudioDeviceNotice('A kimenetváltást a böngésző nem engedélyezte. A jelenlegi kimenet változatlan maradt.');
+    }
+  };
+
   // Toggle microphone
   const handleToggleMic = async () => {
     if (isListening) {
@@ -914,8 +935,18 @@ export default function App() {
         setOwnDAudioCurrentTime(0);
         setIsOwnDPlaying(false);
       }
-      const ok = await bbAudioEngine.startMicrophone();
+      const ok = await bbAudioEngine.startMicrophone(selectedInputDeviceId);
       if (ok) {
+        void refreshAudioDevices();
+        if (bbAudioEngine.didFallbackToDefaultInput()) {
+          setAudioDeviceNotice('A kiválasztott mikrofon nem érhető el; az alapértelmezett bemenetet használom.');
+        } else {
+          setAudioDeviceNotice(selectedInputDeviceId ? 'A kiválasztott mikrofon aktív.' : 'Az alapértelmezett mikrofon aktív.');
+        }
+        if (selectedOutputDeviceId && bbAudioEngine.supportsOutputDeviceSelection()) {
+          const outputApplied = await bbAudioEngine.setOutputDevice(selectedOutputDeviceId);
+          if (!outputApplied) setAudioDeviceNotice('A kiválasztott hangkimenet nem érhető el; a rendszer alapértelmezett kimenete marad aktív.');
+        }
         analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
         setAnalysisFps(null);
         setAutoGainControlStatus(bbAudioEngine.getAutoGainControlStatus());
