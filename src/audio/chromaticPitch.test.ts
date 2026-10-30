@@ -16,8 +16,8 @@ test('applies saved per-note fundamental, octave and third-partial calibration o
     'd-kurd-9:C4': { fundamentalCents: 9, octaveCents: -10, thirdPartialCents: 15 },
   });
   assert.ok(target);
-  const equalTemperedFrequency = target.frequency / Math.pow(2, 9 / 1200);
-  assert.ok(Math.abs(target.frequency - equalTemperedFrequency * Math.pow(2, 9 / 1200)) < 1e-8);
+  const equalTemperedC4 = 440 * Math.pow(2, (60 - 69) / 12);
+  assert.ok(Math.abs(target.frequency - equalTemperedC4 * Math.pow(2, 9 / 1200)) < 1e-8);
   assert.ok(Math.abs(target.octaveFreq - target.frequency * 2 * Math.pow(2, -10 / 1200)) < 1e-8);
   assert.ok(Math.abs(target.fifthFreq - target.frequency * 3 * Math.pow(2, 15 / 1200)) < 1e-8);
 });
