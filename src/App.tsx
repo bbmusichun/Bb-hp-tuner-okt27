@@ -1045,25 +1045,37 @@ export default function App() {
   }, [selectedNote.id, selectedRole, activeInstrumentProfileId, referenceToneHz, isListening, referenceToneMode]);
 
   useEffect(() => {
-    const shouldPlay = shouldTriggerStrikeReferenceTone(
+    const previousTransient = previousTransientHoldoffRef.current;
+    const shouldPlayCore = shouldTriggerStrikeReferenceTone(
       referenceToneMode,
       isListening,
       transientHoldoff,
-      previousTransientHoldoffRef.current,
+      previousTransient,
     );
+    const shouldPlayCustom = isListening && transientHoldoff && !previousTransient;
     previousTransientHoldoffRef.current = transientHoldoff;
-    if (!shouldPlay || !Number.isFinite(referenceToneHz) || referenceToneHz <= 0) return;
+
+    const frequencies = [
+      ...(shouldPlayCore && Number.isFinite(referenceToneHz) && referenceToneHz > 0 ? [referenceToneHz] : []),
+      ...(shouldPlayCustom
+        ? customStrobeBands
+            .filter((band) => band.enabled && band.referenceToneMode === 'strike')
+            .map((band) => getStrobeBandTargetHz(band, selectedNote.frequency))
+        : []),
+    ];
+    if (!frequencies.length) return;
 
     if (strikeToneTimerRef.current !== null) window.clearTimeout(strikeToneTimerRef.current);
-    bbAudioEngine.playTone(referenceToneHz);
+    // The main resonance and every enabled custom lane with strike mode share one
+    // short, gain-limited cue stack; no oscillator overwrites another lane.
+    bbAudioEngine.playToneStack(frequencies);
     setIsReferenceTonePlaying(true);
-    // The analyzer's transient guard holds tuning output during the attack; keep the cue brief.
     strikeToneTimerRef.current = window.setTimeout(() => {
       bbAudioEngine.stopTone();
       setIsReferenceTonePlaying(false);
       strikeToneTimerRef.current = null;
     }, 120);
-  }, [referenceToneMode, isListening, transientHoldoff, referenceToneHz]);
+  }, [referenceToneMode, isListening, transientHoldoff, referenceToneHz, customStrobeBands, selectedNote.frequency]);
 
   const handleSetReferenceToneMode = (mode: ReferenceToneMode) => {
     bbAudioEngine.stopTone();
@@ -1654,6 +1666,9 @@ export default function App() {
                 toleranceOverrideCents={toleranceOverrideCents}
                 strobeSensitivity={strobeSensitivity}
                 onChangeStrobeSensitivity={setStrobeSensitivity}
+                isMicrophoneListening={isListening}
+                selectedOutputDeviceId={selectedOutputDeviceId}
+                onCustomReferenceTonePlaying={setIsReferenceTonePlaying}
               />
             </div>
 
