@@ -76,3 +76,7 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 ## Kiadhatósági döntés
 
 A kiadás akkor fogadható el, ha a fenti használati tesztek sikeresek a tényleges eszközön, és a külső referencia-próba dokumentálva van. Ha a fizikai referencia-próba még nem történt meg, a termék funkcionálisan ellenőrzött kiadásra jelölt verzió, de abszolút akusztikai pontossága még nincs hitelesítve.
+- [ ] Scala `!!reference` metadata with note label, octave and explicit Hz computes the matching A4 reference frequency.
+- [ ] Applying Scala reference frequency requires an explicit user action; importing a scale does not silently change A4.
+- [ ] Missing, malformed, unlabelled or out-of-range Scala reference metadata cannot change A4.
+- [ ] The calculated A4 reference remains within Hangoal's 420–450 Hz supported range and persists through instrument-profile settings.
