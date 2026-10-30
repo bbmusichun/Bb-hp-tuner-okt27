@@ -81,5 +81,10 @@ export function calibratePartialTargetOffset(
   const correction = 1200 * Math.log2(measuredHz / targetHz);
   const nextOffset = currentOffset + correction;
   if (!Number.isFinite(nextOffset) || nextOffset < -MAX_PARTIAL_TARGET_OFFSET_CENTS || nextOffset > MAX_PARTIAL_TARGET_OFFSET_CENTS) return null;
-  return { ...DEFAULT_PARTIAL_TARGET_OFFSET, ...offsets, [field]: nextOffset };
+  return {
+    ...DEFAULT_PARTIAL_TARGET_OFFSET,
+    ...offsets,
+    fundamentalCents: offsets.fundamentalCents ?? 0,
+    [field]: nextOffset,
+  };
 }
