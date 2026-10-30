@@ -134,3 +134,28 @@ export function formatStrobeTargetExpression(band: StrobeBandConfig): string {
   if (band.targetMode === 'cents' && Number.isFinite(band.targetValue)) return Number(band.targetValue).toString() + 'c';
   return String(band.targetHz);
 }
+
+
+/**
+ * Calibrate a strobe band's target to a valid measured peak by adjusting only
+ * its stored cent offset. The measurement is never rewritten; old log entries
+ * remain auditable against the target that was used at capture time.
+ */
+export function calibrateStrobeBandToMeasuredFrequency(
+  band: StrobeBandConfig,
+  measuredHz: number | null,
+  baseFrequencyHz = 440,
+): StrobeBandConfig | null {
+  if (!Number.isFinite(measuredHz) || measuredHz === null || measuredHz < 20 || measuredHz > 20000) return null;
+  const currentTargetHz = getStrobeBandTargetHz(band, baseFrequencyHz);
+  if (!Number.isFinite(currentTargetHz) || currentTargetHz <= 0) return null;
+
+  const measuredOffsetCents = 1200 * Math.log2(measuredHz / currentTargetHz);
+  const nextCentsOffset = band.centsOffset + measuredOffsetCents;
+  if (!Number.isFinite(nextCentsOffset) || nextCentsOffset < -1200 || nextCentsOffset > 1200) return null;
+
+  const calibrated = { ...band, centsOffset: nextCentsOffset };
+  const calibratedTargetHz = getStrobeBandTargetHz(calibrated, baseFrequencyHz);
+  const residualCents = 1200 * Math.log2(measuredHz / calibratedTargetHz);
+  return Number.isFinite(residualCents) && Math.abs(residualCents) < 1e-7 ? calibrated : null;
+}
