@@ -41,6 +41,7 @@ interface Props {
   onResetPartialTargetOffsets: () => void;
   sampleRateKhz: number | null;
   isListening: boolean;
+  autoGainControlStatus: boolean | null;
   audioInputDevices: AudioDeviceOption[];
   audioOutputDevices: AudioDeviceOption[];
   selectedInputDeviceId: string;
@@ -77,6 +78,7 @@ export const BBSettingsModal: React.FC<Props> = ({
   onResetPartialTargetOffsets,
   sampleRateKhz,
   isListening,
+  autoGainControlStatus,
   audioInputDevices,
   audioOutputDevices,
   selectedInputDeviceId,
@@ -653,8 +655,9 @@ export const BBSettingsModal: React.FC<Props> = ({
               <span>Akusztikai Mérési Környezet</span>
             </div>
             <div>{isListening ? 'Aktuális mintavételezés' : 'Legutóbbi mintavételezés'}: <span className="font-mono text-white">{sampleRateKhz !== null ? `${sampleRateKhz} kHz (Web Audio API)` : '— (a mérés indításakor jelenik meg)'}</span></div>
-            <div>FFT felbontás: <span className="font-mono text-white">32768 pont + parabolikus csúcsinterpoláció</span></div>
-            <div>Zajcsökkentés / AGC: <span className="font-mono text-[#10b981]">Kikapcsolva (Nyers jel)</span></div>
+            <div>FFT felbontás: <span className="font-mono text-white">16384 pont + parabolikus csúcsinterpoláció</span></div>
+            <div>Zajcsökkentés / visszhangszűrés: <span className="font-mono text-white">Kikapcsolva</span></div>
+            <div>Automatikus erősítés (AGC): <span className="font-mono text-white">{autoGainControlStatus === null ? 'A böngésző nem közölt állapotot' : autoGainControlStatus ? 'Bekapcsolva' : 'Kikapcsolva'}</span></div>
           </div>
         </div>
 
