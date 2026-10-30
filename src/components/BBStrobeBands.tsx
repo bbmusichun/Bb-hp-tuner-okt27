@@ -3,6 +3,7 @@ import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
 import { formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
 import { isWithinTuningTolerance, type TuningToleranceSetting } from '../audio/tuningTolerance';
+import type { ReferenceToneMode } from '../audio/referenceToneModes';
 import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
 import type { ResonanceMeasurement } from '../types/tuner';
@@ -25,6 +26,10 @@ interface Props {
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
   strobeSensitivity?: number;
   onChangeStrobeSensitivity?: (value: number) => void;
+  isMicrophoneListening?: boolean;
+  selectedOutputDeviceId?: string;
+  onCustomReferenceTonePlaying?: (playing: boolean) => void;
+  onAudioDeviceNotice?: (message: string) => void;
 }
 interface Reading { measuredHz: number | null; deviationCents: number | null; amplitudeDb: number | null; }
 interface Row {
@@ -53,15 +58,24 @@ export const BBStrobeBands: React.FC<Props> = ({
   baseFrequencyHz = 146.832384,
   toleranceOverrideCents = null, selectedRole, onSelectRole,
   strobeSensitivity = 1, onChangeStrobeSensitivity,
+  isMicrophoneListening = false,
+  selectedOutputDeviceId = '',
+  onCustomReferenceTonePlaying,
+  onAudioDeviceNotice,
 }) => {
   const [customBands, setCustomBands] = useState<StrobeBandConfig[]>(loadCustomBands);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isVisualPaused, setIsVisualPaused] = useState(false);
+  const [playingCustomToneBandId, setPlayingCustomToneBandId] = useState<string | null>(null);
+  const playingCustomToneBandIdRef = useRef<string | null>(null);
+  const onCustomReferenceTonePlayingRef = useRef(onCustomReferenceTonePlaying);
+  onCustomReferenceTonePlayingRef.current = onCustomReferenceTonePlaying;
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
+  const lastPersistedBandsRef = useRef<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands });
-  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands };
+  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands, isMicrophoneListening });
+  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands, isMicrophoneListening };
   const phasesRef = useRef<Record<string, number>>({});
   const smoothRef = useRef<Record<string, number>>({});
   const lastValidRef = useRef<Record<string, number>>({});
@@ -82,10 +96,45 @@ export const BBStrobeBands: React.FC<Props> = ({
       window.removeEventListener('storage', onStorage);
     };
   }, []);
+  const stopCustomReferenceTone = () => {
+    if (playingCustomToneBandIdRef.current === null) return;
+    playingCustomToneBandIdRef.current = null;
+    setPlayingCustomToneBandId(null);
+    bbAudioEngine.stopTone();
+    onCustomReferenceTonePlaying?.(false);
+  };
+
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(customBands)); }
-    catch (error) { console.warn('Nem sikerült menteni az egyedi stroboszkópsávokat:', error); }
+    try {
+      const serialized = JSON.stringify(customBands);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      if (lastPersistedBandsRef.current !== serialized) {
+        lastPersistedBandsRef.current = serialized;
+        window.dispatchEvent(new Event('hangoal-custom-strobe-bands-updated'));
+      }
+    } catch (error) { console.warn('Nem sikerült menteni az egyedi stroboszkópsávokat:', error); }
   }, [customBands]);
+
+  useEffect(() => {
+    const playingBand = customBands.find((band) => band.id === playingCustomToneBandId);
+    if (playingCustomToneBandId !== null && (isMicrophoneListening || !playingBand || !playingBand.enabled || playingBand.referenceToneMode !== 'continuous')) {
+      stopCustomReferenceTone();
+    }
+  }, [customBands, isMicrophoneListening, baseFrequencyHz, playingCustomToneBandId]);
+
+  useEffect(() => {
+    const stopFromParent = () => stopCustomReferenceTone();
+    window.addEventListener('hangoal-stop-custom-reference-tone', stopFromParent);
+    return () => window.removeEventListener('hangoal-stop-custom-reference-tone', stopFromParent);
+  }, []);
+
+  useEffect(() => () => {
+    if (playingCustomToneBandIdRef.current !== null) {
+      playingCustomToneBandIdRef.current = null;
+      bbAudioEngine.stopTone();
+      onCustomReferenceTonePlayingRef.current?.(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (isVisualPaused) return;
@@ -194,18 +243,43 @@ export const BBStrobeBands: React.FC<Props> = ({
   }, [baseFrequencyHz, alap.targetHz, kvint.targetHz, oktav.targetHz]);
 
   const updateBand = (id: string, patch: Partial<StrobeBandConfig>) => {
+    if (playingCustomToneBandIdRef.current === id) stopCustomReferenceTone();
     setCustomBands((previous) => normalizeStrobeBands(previous.map((band) => band.id === id ? { ...band, ...patch } : band))
       .filter((band) => band.source === 'custom').slice(0, MAX_CUSTOM_BANDS));
+  };
+
+  const toggleCustomReferenceTone = async (band: StrobeBandConfig) => {
+    if (band.referenceToneMode !== 'continuous' || isMicrophoneListening) return;
+    if (playingCustomToneBandIdRef.current === band.id) {
+      stopCustomReferenceTone();
+      return;
+    }
+    if (playingCustomToneBandIdRef.current !== null) stopCustomReferenceTone();
+    const targetHz = getStrobeBandTargetHz(band, baseFrequencyHz);
+    if (!Number.isFinite(targetHz) || targetHz <= 0) return;
+    if (selectedOutputDeviceId && bbAudioEngine.supportsOutputDeviceSelection()) {
+      const outputApplied = await bbAudioEngine.setOutputDevice(selectedOutputDeviceId);
+      if (!outputApplied) onAudioDeviceNotice?.('A mentett hangkimenet nem érhető el; a rendszer alapértelmezett kimenetét használom.');
+    }
+    const latestBand = latestRef.current.customBands.find((candidate) => candidate.id === band.id);
+    if (latestRef.current.isMicrophoneListening || !latestBand || !latestBand.enabled || latestBand.referenceToneMode !== 'continuous') return;
+    const latestTargetHz = getStrobeBandTargetHz(latestBand, latestRef.current.baseFrequencyHz);
+    if (!Number.isFinite(latestTargetHz) || latestTargetHz <= 0) return;
+    playingCustomToneBandIdRef.current = band.id;
+    setPlayingCustomToneBandId(band.id);
+    bbAudioEngine.playTone(latestTargetHz);
+    onCustomReferenceTonePlaying?.(true);
   };
   const addBand = () => {
     if (customBands.length >= MAX_CUSTOM_BANDS) return;
     setCustomBands((previous) => [...previous, {
       id: createBandId(), name: 'Egyedi sáv ' + (previous.length + 1), source: 'custom',
-      targetHz: Math.max(20, Math.min(20000, baseFrequencyHz * 1.5)), centsOffset: 0, enabled: true,
+      targetHz: Math.max(20, Math.min(20000, baseFrequencyHz * 1.5)), centsOffset: 0, enabled: true, referenceToneMode: 'off',
     }]);
     setIsEditorOpen(true);
   };
   const deleteBand = (id: string) => {
+    if (playingCustomToneBandIdRef.current === id) stopCustomReferenceTone();
     setCustomBands((previous) => previous.filter((band) => band.id !== id));
     setReadings((previous) => { const next = { ...previous }; delete next[id]; return next; });
   };
@@ -328,7 +402,7 @@ export const BBStrobeBands: React.FC<Props> = ({
                   <button type="button" onClick={() => deleteBand(band.id)} aria-label={band.name + ' törlése'}
                     className="rounded-md px-2 py-1 text-xs text-rose-300 hover:bg-rose-500/10">Törlés</button>
                 </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <label className="min-w-0 text-[10px] text-slate-400">Cél (Hz / arány / cent)
                     <input aria-label="Célfrekvencia vagy arány" type="text" inputMode="decimal"
                       value={targetDrafts[band.id] ?? formatStrobeTargetExpression(band)}
@@ -343,12 +417,43 @@ export const BBStrobeBands: React.FC<Props> = ({
                       placeholder="440 / 3/2 / 702c"
                       className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs text-white outline-none focus:border-amber-400" />
                   </label>
+                  <label className="min-w-0 text-[10px] text-slate-400">Referenciahang
+                    <select
+                      aria-label={band.name + ' referenciahang módja'}
+                      value={band.referenceToneMode ?? 'off'}
+                      onChange={(event) => updateBand(band.id, { referenceToneMode: event.target.value as ReferenceToneMode })}
+                      className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white outline-none focus:border-amber-400"
+                    >
+                      <option value="off">Kikapcsolva</option>
+                      <option value="continuous">Folyamatos</option>
+                      <option value="strike">Ütésre · 120 ms</option>
+                    </select>
+                  </label>
                   <label className="min-w-0 text-[10px] text-slate-400">Korrekció (cent)
                     <input aria-label="Centkorrekció" type="number" min={-1200} max={1200} step="0.1" value={band.centsOffset}
                       onChange={(event) => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= -1200 && value <= 1200) updateBand(band.id, { centsOffset: value }); }}
                       className="mt-1 w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs text-white outline-none focus:border-amber-400" />
                   </label>
                 </div>
+                {band.referenceToneMode === 'continuous' && (
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      disabled={isMicrophoneListening || !band.enabled}
+                      onClick={() => void toggleCustomReferenceTone(band)}
+                      aria-pressed={playingCustomToneBandId === band.id}
+                      className="rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1.5 text-[10px] font-semibold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {playingCustomToneBandId === band.id ? 'Hang leállítása' : 'Referenciahang lejátszása'}
+                    </button>
+                    <span className="text-[9px] text-slate-500">
+                      {isMicrophoneListening ? 'Mikrofonmérés közben nem indítható.' : 'A kiválasztott célfrekvencián szól.'}
+                    </span>
+                  </div>
+                )}
+                {band.referenceToneMode === 'strike' && (
+                  <p className="mt-2 text-[10px] text-cyan-200">Engedélyezett ütéskor ez a sáv 120 ms-os referenciahangot ad. Több kijelölt sáv együtt, egy korlátozott hangszinten szól.</p>
+                )}
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg bg-black/25 px-2.5 py-2 font-mono text-[11px]">
                   <span className="text-slate-400">Cél: {targetHz.toFixed(3)} Hz</span>
                   <span className="text-white">{valid && measured !== null ? measured.toFixed(3) + ' Hz' : '— Hz'}</span>

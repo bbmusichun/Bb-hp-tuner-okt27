@@ -47,7 +47,7 @@ const validBackup = () => ({
   },
   disabledToneNotesByScale: { 'd-kurd-9': ['note-1'] },
   customStrobeBands: [
-    { id: 'custom-440', name: '440 Hz', source: 'custom', targetHz: 440, centsOffset: 0, enabled: true },
+    { id: 'custom-440', name: '440 Hz', source: 'custom', targetHz: 440, centsOffset: 0, enabled: true, referenceToneMode: 'strike' },
   ],
   measurements: [{ ...validEntry }],
 });
@@ -65,6 +65,7 @@ test('parses a complete validated bundle and preserves its settings', () => {
   assert.equal(result.settings.activeInstrumentProfileId, 'instrument-default');
   assert.deepEqual(result.disabledToneNotesByScale, { 'd-kurd-9': ['note-1'] });
   assert.equal(result.customStrobeBands[0].targetHz, 440);
+  assert.equal(result.customStrobeBands[0].referenceToneMode, 'strike');
   assert.equal(result.measurements.length, 1);
 });
 
@@ -92,6 +93,20 @@ test('rejects invalid tuning values, mode names and non-custom bands', () => {
   const wrongBand = validBackup();
   wrongBand.customStrobeBands[0].source = 'fundamental';
   assert.equal(parseHangoalFullConfiguration(wrongBand, ['d-kurd-9'], fallbackProfile), null);
+});
+
+test('migrates older custom strobe bands without a reference mode to silent mode', () => {
+  const backup = validBackup();
+  delete (backup.customStrobeBands[0] as unknown as Record<string, unknown>).referenceToneMode;
+  const result = parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile);
+  assert.ok(result);
+  assert.equal(result.customStrobeBands[0].referenceToneMode, 'off');
+});
+
+test('rejects invalid per-custom-band reference tone modes in full backups', () => {
+  const backup = validBackup();
+  (backup.customStrobeBands[0] as unknown as Record<string, unknown>).referenceToneMode = 'sometimes';
+  assert.equal(parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile), null);
 });
 
 test('rejects malformed log entries and duplicate log ids', () => {

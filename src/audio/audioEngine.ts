@@ -16,6 +16,7 @@ import { findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPea
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
+import { getReferenceToneStackGain, normalizeReferenceToneFrequencies } from './referenceToneStack';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -56,7 +57,7 @@ export class BBAudioEngine {
   };
 
   // Tone generator for audio reference
-  private toneOsc: OscillatorNode | null = null;
+  private toneOscillators: OscillatorNode[] = [];
   private toneGain: GainNode | null = null;
   private toneSilenceGain: GainNode | null = null;
 
@@ -644,12 +645,16 @@ export class BBAudioEngine {
     };
   }
 
-  // Reference tone generator. When no microphone/file source is active, feed the
-  // generated sine into the shared analyser as well as the speaker so every view uses
-  // the same live measurement state. Strike cues during microphone measurement remain
-  // output-only and never contaminate the microphone input.
+  // Reference tone generator. A stack lets each custom resonance lane sound its
+  // own pitch-pipe cue on one strike while sharing a single safe output gain.
   public playTone(freqHz: number): void {
-    if (!Number.isFinite(freqHz) || freqHz <= 0) return;
+    this.playToneStack([freqHz]);
+  }
+
+  public playToneStack(frequenciesHz: number[]): void {
+    const validFrequencies = normalizeReferenceToneFrequencies(frequenciesHz);
+    if (!validFrequencies.length) return;
+
     this.stopTone();
     if (!this.audioCtx) {
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -688,30 +693,36 @@ export class BBAudioEngine {
     }
 
     this.toneGain = this.audioCtx.createGain();
+    const stackGain = getReferenceToneStackGain(validFrequencies.length);
     this.toneGain.gain.setValueAtTime(0.001, now);
-    this.toneGain.gain.exponentialRampToValueAtTime(0.3, now + 0.05);
+    this.toneGain.gain.exponentialRampToValueAtTime(stackGain, now + 0.05);
     this.toneGain.connect(this.audioCtx.destination);
     if (this.inputMode === 'tone' && this.analyser) {
       this.toneGain.connect(this.analyser);
     }
 
-    this.toneOsc = this.audioCtx.createOscillator();
-    this.toneOsc.type = 'sine';
-    this.toneOsc.frequency.setValueAtTime(freqHz, now);
-    this.toneOsc.connect(this.toneGain);
-    this.toneOsc.start(now);
+    this.toneOscillators = validFrequencies.map((frequencyHz) => {
+      const oscillator = this.audioCtx!.createOscillator();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequencyHz, now);
+      oscillator.connect(this.toneGain!);
+      oscillator.start(now);
+      return oscillator;
+    });
   }
 
   public stopTone(): void {
-    const oscillator = this.toneOsc;
+    const oscillators = this.toneOscillators;
     const gain = this.toneGain;
     const context = this.audioCtx;
     // Clear current references immediately so a delayed cleanup cannot stop a newer tone.
-    this.toneOsc = null;
+    this.toneOscillators = [];
     this.toneGain = null;
     if (!gain || !context) {
-      try { oscillator?.stop(); } catch { /* oscillator may already be stopped */ }
-      oscillator?.disconnect();
+      oscillators.forEach((oscillator) => {
+        try { oscillator.stop(); } catch { /* oscillator may already be stopped */ }
+        oscillator.disconnect();
+      });
       gain?.disconnect();
       return;
     }
@@ -741,8 +752,10 @@ export class BBAudioEngine {
       // Context may have been closed while stopping.
     }
     window.setTimeout(() => {
-      try { oscillator?.stop(); } catch { /* oscillator may already be stopped */ }
-      oscillator?.disconnect();
+      oscillators.forEach((oscillator) => {
+        try { oscillator.stop(); } catch { /* oscillator may already be stopped */ }
+        oscillator.disconnect();
+      });
       gain.disconnect();
     }, 80);
   }

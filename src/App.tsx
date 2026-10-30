@@ -26,7 +26,7 @@ import { isDetectionArmed, nextAutoDetectionMode, normalizeAutoDetectionMode, ty
 import { isEditableKeyboardTarget, resolveHangoalKeyboardAction } from './audio/keyboardShortcuts';
 import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
 import { recordAnalysisFrame } from './audio/analysisRate';
-import { normalizeStrobeBands } from './audio/strobeBands';
+import { getStrobeBandTargetHz, normalizeStrobeBands, type StrobeBandConfig } from './audio/strobeBands';
 import { normalizeStrobeSensitivity } from './audio/strobeSensitivity';
 import { formatAudioDeviceLabel, type AudioDeviceOption } from './audio/deviceSelection';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
@@ -163,6 +163,17 @@ function loadTuningPreferences(): {
     return defaults;
   }
 }
+function loadCustomStrobeBands(): StrobeBandConfig[] {
+  try {
+    const raw = localStorage.getItem('hangoal-custom-strobe-bands-v1');
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return normalizeStrobeBands(parsed).filter((band) => band.source === 'custom').slice(0, 8);
+  } catch {
+    return [];
+  }
+}
+
 function loadOwnDVolumePreference(): number {
   try {
     const stored = localStorage.getItem('hangoal-own-d-volume-v1');
@@ -231,6 +242,20 @@ export default function App() {
   const [strobeSensitivity, setStrobeSensitivity] = useState<number>(() => loadTuningPreferences().strobeSensitivity);
   const [readoutMode, setReadoutMode] = useState<TuningReadoutMode>(() => loadTuningPreferences().readoutMode);
   const [referenceToneMode, setReferenceToneMode] = useState<ReferenceToneMode>(() => loadTuningPreferences().referenceToneMode);
+  const [customStrobeBands, setCustomStrobeBands] = useState<StrobeBandConfig[]>(loadCustomStrobeBands);
+
+  useEffect(() => {
+    const refreshCustomBands = () => setCustomStrobeBands(loadCustomStrobeBands());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'hangoal-custom-strobe-bands-v1') refreshCustomBands();
+    };
+    window.addEventListener('hangoal-custom-strobe-bands-updated', refreshCustomBands);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('hangoal-custom-strobe-bands-updated', refreshCustomBands);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   const refreshAudioDevices = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
@@ -1004,6 +1029,7 @@ export default function App() {
   useEffect(() => {
     // Stop any manual/previous tone when its target or listening state changes.
     bbAudioEngine.stopTone();
+    window.dispatchEvent(new Event('hangoal-stop-custom-reference-tone'));
     setIsReferenceTonePlaying(false);
     if (strikeToneTimerRef.current !== null) {
       window.clearTimeout(strikeToneTimerRef.current);
@@ -1020,28 +1046,41 @@ export default function App() {
   }, [selectedNote.id, selectedRole, activeInstrumentProfileId, referenceToneHz, isListening, referenceToneMode]);
 
   useEffect(() => {
-    const shouldPlay = shouldTriggerStrikeReferenceTone(
+    const previousTransient = previousTransientHoldoffRef.current;
+    const shouldPlayCore = shouldTriggerStrikeReferenceTone(
       referenceToneMode,
       isListening,
       transientHoldoff,
-      previousTransientHoldoffRef.current,
+      previousTransient,
     );
+    const shouldPlayCustom = isListening && transientHoldoff && !previousTransient;
     previousTransientHoldoffRef.current = transientHoldoff;
-    if (!shouldPlay || !Number.isFinite(referenceToneHz) || referenceToneHz <= 0) return;
+
+    const frequencies = [
+      ...(shouldPlayCore && Number.isFinite(referenceToneHz) && referenceToneHz > 0 ? [referenceToneHz] : []),
+      ...(shouldPlayCustom
+        ? customStrobeBands
+            .filter((band) => band.enabled && band.referenceToneMode === 'strike')
+            .map((band) => getStrobeBandTargetHz(band, selectedNote.frequency))
+        : []),
+    ];
+    if (!frequencies.length) return;
 
     if (strikeToneTimerRef.current !== null) window.clearTimeout(strikeToneTimerRef.current);
-    bbAudioEngine.playTone(referenceToneHz);
+    // The main resonance and every enabled custom lane with strike mode share one
+    // short, gain-limited cue stack; no oscillator overwrites another lane.
+    bbAudioEngine.playToneStack(frequencies);
     setIsReferenceTonePlaying(true);
-    // The analyzer's transient guard holds tuning output during the attack; keep the cue brief.
     strikeToneTimerRef.current = window.setTimeout(() => {
       bbAudioEngine.stopTone();
       setIsReferenceTonePlaying(false);
       strikeToneTimerRef.current = null;
     }, 120);
-  }, [referenceToneMode, isListening, transientHoldoff, referenceToneHz]);
+  }, [referenceToneMode, isListening, transientHoldoff, referenceToneHz, customStrobeBands, selectedNote.frequency]);
 
   const handleSetReferenceToneMode = (mode: ReferenceToneMode) => {
     bbAudioEngine.stopTone();
+    window.dispatchEvent(new Event('hangoal-stop-custom-reference-tone'));
     setIsReferenceTonePlaying(false);
     if (strikeToneTimerRef.current !== null) {
       window.clearTimeout(strikeToneTimerRef.current);
@@ -1055,6 +1094,7 @@ export default function App() {
     if (referenceToneMode !== 'continuous' || isListening || isFileInputActive) return;
     if (isReferenceTonePlaying) {
       bbAudioEngine.stopTone();
+      window.dispatchEvent(new Event('hangoal-stop-custom-reference-tone'));
       setIsReferenceTonePlaying(false);
       return;
     }
@@ -1629,6 +1669,10 @@ export default function App() {
                 toleranceOverrideCents={toleranceOverrideCents}
                 strobeSensitivity={strobeSensitivity}
                 onChangeStrobeSensitivity={setStrobeSensitivity}
+                isMicrophoneListening={isListening}
+                selectedOutputDeviceId={selectedOutputDeviceId}
+                onCustomReferenceTonePlaying={setIsReferenceTonePlaying}
+                onAudioDeviceNotice={setAudioDeviceNotice}
               />
             </div>
 

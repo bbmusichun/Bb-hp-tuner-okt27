@@ -26,6 +26,21 @@ describe('Hangoal configurable strobe band model', () => {
     assert.equal(result[1].targetValue, 1.5);
   });
 
+  it('normalizes per-band reference tone modes and migrates older bands to off', () => {
+    const bands = normalizeStrobeBands([
+      { id: 'old-custom', name: 'Older custom lane', source: 'custom', targetHz: 440, centsOffset: 0, enabled: true },
+      { id: 'continuous-custom', name: 'Continuous pitch pipe', source: 'custom', targetHz: 660, centsOffset: 0, enabled: true, referenceToneMode: 'continuous' },
+      { id: 'strike-custom', name: 'Strike cue', source: 'custom', targetHz: 880, centsOffset: 0, enabled: true, referenceToneMode: 'strike' },
+      { id: 'off-custom', name: 'Silent lane', source: 'custom', targetHz: 990, centsOffset: 0, enabled: true, referenceToneMode: 'off' },
+      { id: 'invalid-custom', name: 'Invalid mode', source: 'custom', targetHz: 1100, centsOffset: 0, enabled: true, referenceToneMode: 'maybe' },
+    ]);
+    assert.equal(bands.length, 4);
+    assert.equal(bands[0].referenceToneMode, 'off');
+    assert.equal(bands[1].referenceToneMode, 'continuous');
+    assert.equal(bands[2].referenceToneMode, 'strike');
+    assert.equal(bands[3].referenceToneMode, 'off');
+  });
+
   it('uses safe defaults when storage is missing or contains no valid entries', () => {
     assert.equal(normalizeStrobeBands(null).length, 3);
     assert.deepEqual(normalizeStrobeBands([]), []);

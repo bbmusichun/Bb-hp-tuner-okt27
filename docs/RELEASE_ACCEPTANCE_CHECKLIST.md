@@ -33,6 +33,11 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] Túl nagy bemeneti szintnél figyelmeztetés jelenik meg; a túlvezérelt mérés nem tekintendő elfogadhatónak.
 - [ ] Folyamatos módban a referenciahang a kiválasztott csatorna célfrekvenciáján szól, és csak a mikrofon leállított állapotában indítható.
 - [ ] Ütésmódnál az egyszeri, 120 ms-os hang a tranziensvédelmi ablak elején szól; össze kell vetni a mért eredményt a hang nélkül kapott értékkel.
+- [ ] Minden egyedi stroboszkópsáv saját Ki/Folyamatos/Ütés módja egymástól függetlenül menthető és újratöltés után megmarad.
+- [ ] Folyamatos egyedi referenciahang a sáv aktuális Hz/arány/cent céljából számított frekvencián szól; cél vagy profil váltásakor biztonságosan leáll.
+- [ ] Folyamatos egyedi referenciahang mikrofonmérés közben nem indítható; mikrofonindításkor az esetlegesen futó kézi hang leáll.
+- [ ] Több ütésmódra állított egyedi sáv ugyanazon ütésnél egyszerre, 120 ms-ig szól; a hangstack összszintje gain-korlátozott, és nem írja át a mért mikrofonadatot.
+- [ ] Régi, referenciahang-mód nélküli egyedi sávmentés és teljes konfigurációs backup a biztonságos Kikapcsolva módra migrál.
 - [ ] Kikapcsolt módban sem a referenciahang-gomb, sem a hangmezőtérkép nem generál referenciahangot.
 
 ## 3. Scala-import és referenciahorgony
