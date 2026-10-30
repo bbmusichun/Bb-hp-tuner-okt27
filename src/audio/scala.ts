@@ -197,3 +197,54 @@ export function scalaToCustomScaleText(
   if (notes.length < 2 || notes.length > 24) return null;
   return notes.map((note) => note.name + ', ' + note.frequency.toFixed(3)).join('\n');
 }
+
+
+export interface ResolvedScalaReferenceAnchor {
+  referenceName: string;
+  referenceHz: number;
+  intervalCents: number;
+  rootFrequencyHz: number;
+}
+
+/**
+ * Resolve the non-standard !!reference marker into an absolute tonic anchor.
+ *
+ * The marked row identifies a degree in the SCL period. With explicit Hz, that
+ * value is authoritative. Without Hz, only a conventional note label (A, F^#,
+ * Bb...) can be resolved, using the supplied A4 calibration. Solfege labels
+ * such as Mi require explicit Hz rather than a guessed pitch.
+ */
+export function resolveScalaReferenceAnchor(
+  parsed: ParsedScalaScale,
+  a4Ref = 440,
+): ResolvedScalaReferenceAnchor | null {
+  const reference = parsed.reference;
+  if (!reference || !Number.isFinite(a4Ref) || a4Ref < 420 || a4Ref > 450 ||
+      !Number.isInteger(reference.degreeIndex) || reference.degreeIndex < 1 ||
+      reference.degreeIndex > parsed.count) return null;
+
+  const intervalCents = reference.degreeIndex === parsed.count
+    ? parsed.periodCents
+    : parsed.intervalsCents[reference.degreeIndex - 1];
+  if (!Number.isFinite(intervalCents) || intervalCents <= 0) return null;
+
+  let referenceHz = reference.frequencyHz;
+  if (referenceHz === undefined) {
+    const pitch = parsePitchClassLabel(reference.label);
+    if (!pitch) return null;
+    const midi = 12 * (reference.octave + 1) + pitch.pitchClass;
+    referenceHz = a4Ref * Math.pow(2, (midi - 69) / 12);
+  }
+  if (!Number.isFinite(referenceHz) || referenceHz < 20 || referenceHz > 2000) return null;
+
+  const rootFrequencyHz = referenceHz / Math.pow(2, intervalCents / 1200);
+  if (!Number.isFinite(rootFrequencyHz) || rootFrequencyHz < 20 || rootFrequencyHz > 2000) return null;
+
+  const label = reference.label ? reference.label.toUpperCase().replace(/\^#/g, '#').replace(/\^b/g, 'B') : `fok ${reference.degreeIndex}`;
+  return {
+    referenceName: `${label}${reference.octave}`,
+    referenceHz,
+    intervalCents,
+    rootFrequencyHz,
+  };
+}
