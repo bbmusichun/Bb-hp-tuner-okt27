@@ -88,6 +88,10 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] A szándékosan egy oktávval feljebb állított cél esetén a valódi gyökér és a kiválasztott cél különbsége 1200 cent, és az azonosíthatósági diagnosztika nem jelölheti alaphangként a felső részfelhangot.
 - [ ] A determinisztikus zajteszt ismételt futásai azonos eredményt adnak; a csend és alacsony jelszint nem gyárt érvényes csúcsot.
 - [ ] A túlvezérelt eset külön tesztjelként szerepel; nem használjuk arra, hogy a tiszta jel pontosságáról következtessünk.
+- [ ] A 50 Hz és 60 Hz hálózati zavar esetén az alaphang, oktáv és 3. parciális csúcsának hibája a beállított teszttűrésen belül marad.
+- [ ] A közeli kettős módusú tesztjel a peak-diagnosztikában lehetséges kettős csúcsként jelenik meg; a jelzés nem írja át a fő frekvenciamérést.
+- [ ] A tranziens/lecsengés teszt több átfedő FFT-ablakot elemez; a jelentés megadja az első és utolsó érvényes alaphang-ablakot és az érvényes ablakok arányát.
+- [ ] Az 5 FFT-/mintavételi profil (44.1 kHz × 8192/16384/32768; 48 kHz × 16384/32768) ugyanazt a stresszteszt-készletet futtatja és profil szerint külön hibamutatót ad.
 - [ ] A szoftveres benchmark eredményét nem tekintjük fizikai/abszolút akusztikai pontosság igazolásának.
 
 ## 8. Akusztikai átvétel
