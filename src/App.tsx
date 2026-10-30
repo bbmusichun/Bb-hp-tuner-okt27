@@ -28,6 +28,7 @@ import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
 import { recordAnalysisFrame } from './audio/analysisRate';
 import { normalizeStrobeBands } from './audio/strobeBands';
 import { normalizeStrobeSensitivity } from './audio/strobeSensitivity';
+import { formatAudioDeviceLabel, type AudioDeviceOption } from './audio/deviceSelection';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
@@ -69,6 +70,8 @@ function loadTuningPreferences(): {
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
   toleranceOverrideCents: TuningToleranceSetting;
+  selectedInputDeviceId: string;
+  selectedOutputDeviceId: string;
   transposeSemitones: number;
   strobeSensitivity: number;
   readoutMode: TuningReadoutMode;
@@ -91,6 +94,8 @@ function loadTuningPreferences(): {
     instrumentProfiles: [defaultProfile],
     activeInstrumentProfileId: defaultProfile.id,
     toleranceOverrideCents: null,
+    selectedInputDeviceId: '',
+    selectedOutputDeviceId: '',
     transposeSemitones: 0,
     strobeSensitivity: 1,
     readoutMode: 'hz' as TuningReadoutMode,
@@ -111,6 +116,8 @@ function loadTuningPreferences(): {
       instrumentProfiles?: unknown;
       activeInstrumentProfileId?: unknown;
       toleranceOverrideCents?: unknown;
+      selectedInputDeviceId?: unknown;
+      selectedOutputDeviceId?: unknown;
       transposeSemitones?: unknown;
       strobeSensitivity?: unknown;
       readoutMode?: unknown;
@@ -143,6 +150,8 @@ function loadTuningPreferences(): {
       instrumentProfiles: profiles,
       activeInstrumentProfileId,
       toleranceOverrideCents: normalizeTuningToleranceSetting(prefs.toleranceOverrideCents),
+      selectedInputDeviceId: typeof prefs.selectedInputDeviceId === 'string' ? prefs.selectedInputDeviceId : '',
+      selectedOutputDeviceId: typeof prefs.selectedOutputDeviceId === 'string' ? prefs.selectedOutputDeviceId : '',
       transposeSemitones: typeof prefs.transposeSemitones === 'number' && Number.isInteger(prefs.transposeSemitones) && prefs.transposeSemitones >= -12 && prefs.transposeSemitones <= 12
         ? prefs.transposeSemitones : 0,
       strobeSensitivity: normalizeStrobeSensitivity(prefs.strobeSensitivity),
