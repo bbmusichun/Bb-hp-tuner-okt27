@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { analyzeWavRecording, downmixChannels, WavFrameAnalysis } from '../audio/wavAnalysis';
-import { runReferenceSignalBenchmark, summarizeReferenceSignalBenchmark, type ReferenceSignalBenchmarkResult } from '../audio/referenceSignalBenchmark';
+import { REFERENCE_SIGNAL_ANALYSIS_PROFILES, runReferenceSignalBenchmark, runReferenceSignalProfileBenchmark, summarizeReferenceSignalBenchmark, type ReferenceSignalBenchmarkResult, type ReferenceSignalProfileBenchmarkResult } from '../audio/referenceSignalBenchmark';
 import {
   MeasurementQualityReason,
   MeasurementQualityStatus,
@@ -91,7 +91,9 @@ export default function ReferenceWavBench() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [benchmarkBusy, setBenchmarkBusy] = useState(false);
+  const [profileBenchmarkBusy, setProfileBenchmarkBusy] = useState(false);
   const [benchmarkResults, setBenchmarkResults] = useState<ReferenceSignalBenchmarkResult[]>([]);
+  const [profileBenchmarkResults, setProfileBenchmarkResults] = useState<ReferenceSignalProfileBenchmarkResult[]>([]);
   const audioDataRef = useRef<{ channels: Float32Array[]; sampleRate: number } | null>(null);
 
   const analyzeLoadedAudio = (targetHz: number, mode: ChannelMode) => {
@@ -110,6 +112,26 @@ export default function ReferenceWavBench() {
   });
   const identifiability = summarizeFundamentalIdentifiability(frames);
   const benchmarkSummary = benchmarkResults.length > 0 ? summarizeReferenceSignalBenchmark(benchmarkResults) : null;
+  const runMultiProfileBenchmark = async () => {
+    if (profileBenchmarkBusy) return;
+    setProfileBenchmarkBusy(true);
+    setProfileBenchmarkResults([]);
+    try {
+      const nextResults: ReferenceSignalProfileBenchmarkResult[] = [];
+      for (const profile of REFERENCE_SIGNAL_ANALYSIS_PROFILES) {
+        const [result] = runReferenceSignalProfileBenchmark(undefined, [profile]);
+        if (result) {
+          nextResults.push(result);
+          setProfileBenchmarkResults([...nextResults]);
+        }
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'A többprofilos benchmark sikertelen.');
+    } finally {
+      setProfileBenchmarkBusy(false);
+    }
+  };
 
   const runSyntheticBenchmark = () => {
     if (benchmarkBusy) return;
@@ -243,6 +265,8 @@ export default function ReferenceWavBench() {
               <span>Hiányzó csúcsok összesen: {benchmarkSummary.missingPartialCount}</span>
               <span>Jelölt/valódi gyökér eltérés: {benchmarkSummary.candidateRootMismatchCount}</span>
               <span>Oktávhiba-eset: {benchmarkSummary.suspectedOctaveErrorCount}</span>
+              <span>Kettős csúcs eset: {benchmarkSummary.possibleDoublePeakScenarioCount}</span>
+              <span>Alaphang-ablaklefedettség: {fmt(benchmarkSummary.meanFundamentalFrameCoverage === null ? null : benchmarkSummary.meanFundamentalFrameCoverage * 100, 1)}%</span>
             </div>
             <div className="overflow-x-auto rounded-xl border border-slate-800">
               <table className="w-full min-w-[850px] text-left text-xs">
@@ -255,6 +279,7 @@ export default function ReferenceWavBench() {
                     <th className="p-2.5">2× hiba</th>
                     <th className="p-2.5">3× hiba</th>
                     <th className="p-2.5">Csúcsok</th>
+                    <th className="p-2.5">Kettős csúcs / ablakok</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -289,6 +314,10 @@ export default function ReferenceWavBench() {
                         <td className="p-2.5 font-mono text-slate-400">
                           {result.partials.filter((partial) => partial.measuredHz !== null).length}/3
                         </td>
+                        <td className="p-2.5 text-slate-400">
+                          <span className={result.possibleDoublePeak ? 'text-amber-300' : 'text-slate-500'}>{result.possibleDoublePeak ? 'kettős csúcs' : '—'}</span>
+                          <span className="mt-1 block font-mono text-[10px]">{result.validFundamentalFrameCount}/{result.analysedFrameCount} érvényes ablak</span>
+                        </td>
                       </tr>
                     );
                   })}
@@ -300,6 +329,57 @@ export default function ReferenceWavBench() {
               A céleltérés (cent) ettől külön érték; inharmonikus felhangnál nem kell nullának lennie. A „cél / valódi gyökér” oszlop külön jelzi, ha a kiválasztott mérési cél valójában a generált jel 2× vagy 3× részfelhangjára esik.
             </p>
           </>
+        )}
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-cyan-500/25 bg-cyan-950/10 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-cyan-100">FFT- és mintavételi profilvizsgálat</h2>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
+              Ugyanazokat a hét nehéz jelet futtatja 44.1/48 kHz mintavétellel és 8192/16384/32768 pontos FFT-vel.
+              A szintetikus teszt a frekvenciahibát és az ablaklefedettséget hasonlítja össze; nem helyettesíti a fizikai mikrofontesztet.
+            </p>
+          </div>
+          <button type="button" onClick={() => void runMultiProfileBenchmark()} disabled={profileBenchmarkBusy}
+            className="shrink-0 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-100 disabled:cursor-wait disabled:opacity-50">
+            {profileBenchmarkBusy ? 'Profilok futnak…' : profileBenchmarkResults.length ? 'Profilvizsgálat újrafuttatása' : 'Többprofilos vizsgálat'}
+          </button>
+        </div>
+        {profileBenchmarkResults.length > 0 && (
+          <div className="overflow-x-auto rounded-xl border border-slate-800">
+            <table className="w-full min-w-[720px] text-left text-xs">
+              <thead className="bg-slate-950/80 text-slate-400">
+                <tr>
+                  <th className="p-2.5">Profil</th>
+                  <th className="p-2.5">Esetek</th>
+                  <th className="p-2.5">Mért részfelhang</th>
+                  <th className="p-2.5">Átlagos hiba</th>
+                  <th className="p-2.5">Legnagyobb hiba</th>
+                  <th className="p-2.5">Ablaklefedettség</th>
+                  <th className="p-2.5">Kettős csúcs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profileBenchmarkResults.map((item) => (
+                  <tr key={item.profile.id} className="border-t border-slate-800">
+                    <td className="p-2.5 font-medium text-slate-200">{item.profile.name}</td>
+                    <td className="p-2.5 font-mono text-slate-300">{item.summary.analysedScenarioCount}/{item.summary.scenarioCount}</td>
+                    <td className="p-2.5 font-mono text-slate-300">{item.summary.measuredPartialCount}</td>
+                    <td className="p-2.5 font-mono text-slate-300">{fmt(item.summary.meanAbsoluteResidualErrorCents, 2)} c</td>
+                    <td className="p-2.5 font-mono text-slate-300">{fmt(item.summary.worstAbsoluteResidualErrorCents, 2)} c</td>
+                    <td className="p-2.5 font-mono text-slate-300">{fmt(item.summary.meanFundamentalFrameCoverage === null ? null : item.summary.meanFundamentalFrameCoverage * 100, 1)}%</td>
+                    <td className="p-2.5 font-mono text-slate-300">{item.summary.possibleDoublePeakScenarioCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {profileBenchmarkBusy && (
+          <p role="status" className="text-[10px] text-cyan-200">
+            A profilok külön-külön frissülnek; a befejezett profilok már a táblázatban láthatók.
+          </p>
         )}
       </section>
 

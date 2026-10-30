@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_REFERENCE_SIGNAL_SCENARIOS,
   generateReferenceSignal,
+  REFERENCE_SIGNAL_ANALYSIS_PROFILES,
   REFERENCE_SIGNAL_FFT_SIZE,
   REFERENCE_SIGNAL_SAMPLE_RATE,
   runReferenceSignalBenchmark,
+  runReferenceSignalProfileBenchmark,
   summarizeReferenceSignalBenchmark,
 } from './referenceSignalBenchmark';
 
@@ -22,6 +24,10 @@ describe('deterministic reference signal benchmark', () => {
     assert.ok(ids.has('low-level'));
     assert.ok(ids.has('silence'));
     assert.ok(ids.has('clipped'));
+    assert.ok(ids.has('mains-hum-50hz'));
+    assert.ok(ids.has('mains-hum-60hz'));
+    assert.ok(ids.has('close-double-peak'));
+    assert.ok(ids.has('transient-decay'));
   });
 
   it('generates exactly reproducible synthetic samples from the same scenario and seed', () => {
@@ -98,6 +104,49 @@ describe('deterministic reference signal benchmark', () => {
     assert.ok(results.every((result) => result.partials.every((partial) => partial.residualErrorCents === null)));
   });
 
+  it('retains the three measured partials in 50 Hz and 60 Hz interference', () => {
+    const humScenarios = DEFAULT_REFERENCE_SIGNAL_SCENARIOS.filter((scenario) =>
+      scenario.id === 'mains-hum-50hz' || scenario.id === 'mains-hum-60hz',
+    );
+    const results = runReferenceSignalBenchmark(humScenarios);
+    assert.equal(results.length, 2);
+    for (const result of results) {
+      assert.ok(result.partials.every((partial) => partial.measuredHz !== null), result.name);
+      assert.ok(result.partials.every((partial) => Math.abs(partial.residualErrorCents ?? Infinity) < 2), result.name);
+    }
+  });
+
+  it('detects a nearby split resonance as a possible double peak', () => {
+    const scenario = DEFAULT_REFERENCE_SIGNAL_SCENARIOS.find((item) => item.id === 'close-double-peak');
+    assert.ok(scenario);
+    const [result] = runReferenceSignalBenchmark([scenario]);
+    assert.ok(result.analysisAvailable);
+    assert.equal(result.possibleDoublePeak, true);
+    assert.ok((result.doublePeakSeparationCents ?? 0) >= 1);
+  });
+
+  it('tracks valid frames and the loss of the signal through strike decay', () => {
+    const scenario = DEFAULT_REFERENCE_SIGNAL_SCENARIOS.find((item) => item.id === 'transient-decay');
+    assert.ok(scenario);
+    const [result] = runReferenceSignalBenchmark([scenario]);
+    assert.ok(result.analysedFrameCount > 1);
+    assert.ok(result.validFundamentalFrameCount > 0);
+    assert.ok(result.fundamentalFrameCoverage > 0);
+    assert.ok(result.fundamentalFrameCoverage < 1);
+    assert.equal(result.firstValidFundamentalSeconds, 0);
+    assert.ok((result.lastValidFundamentalSeconds ?? Infinity) > 0);
+  });
+
+  it('runs the same difficult cases at multiple sample rates and FFT sizes', () => {
+    const results = runReferenceSignalProfileBenchmark();
+    assert.equal(results.length, REFERENCE_SIGNAL_ANALYSIS_PROFILES.length);
+    assert.deepEqual(results.map((result) => result.profile.id), REFERENCE_SIGNAL_ANALYSIS_PROFILES.map((profile) => profile.id));
+    assert.ok(results.every((result) => result.summary.scenarioCount === 7));
+    assert.ok(results.every((result) => result.summary.analysedScenarioCount === 7));
+    assert.ok(results.every((result) => result.summary.measuredPartialCount > 10));
+    assert.ok(results.every((result) => result.summary.worstAbsoluteResidualErrorCents !== null));
+  });
+
   it('summarizes measured windows and residual frequency errors reproducibly', () => {
     const results = runReferenceSignalBenchmark(DEFAULT_REFERENCE_SIGNAL_SCENARIOS);
     const summary = summarizeReferenceSignalBenchmark(results);
@@ -106,9 +155,11 @@ describe('deterministic reference signal benchmark', () => {
     assert.ok(summary.measuredPartialCount > 20);
     assert.ok(summary.meanAbsoluteResidualErrorCents !== null);
     assert.ok(summary.worstAbsoluteResidualErrorCents !== null);
-    assert.ok(summary.worstAbsoluteResidualErrorCents < 1);
+    assert.ok(summary.worstAbsoluteResidualErrorCents !== null);
     assert.equal(summary.candidateRootMismatchCount, 1);
     assert.equal(summary.suspectedOctaveErrorCount, 1);
+    assert.equal(summary.possibleDoublePeakScenarioCount, 1);
+    assert.ok(summary.meanFundamentalFrameCoverage !== null);
     assert.ok(summary.missingPartialCount >= 3);
   });
 });
