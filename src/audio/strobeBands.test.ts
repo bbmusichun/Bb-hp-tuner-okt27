@@ -128,6 +128,9 @@ describe('custom strobe calibration to a measured peak', () => {
     assert.equal(calibrateStrobeBandToMeasuredFrequency(band, Number.NaN), null);
     assert.equal(calibrateStrobeBandToMeasuredFrequency(band, 0), null);
     assert.equal(calibrateStrobeBandToMeasuredFrequency(band, 20001), null);
-    assert.equal(calibrateStrobeBandToMeasuredFrequency(band, 880), null);
+    const boundary = calibrateStrobeBandToMeasuredFrequency(band, 880);
+    assert.ok(boundary);
+    assert.equal(boundary.centsOffset, 1200);
+    assert.equal(calibrateStrobeBandToMeasuredFrequency(band, 1000), null);
   });
 });
