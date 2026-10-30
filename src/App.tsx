@@ -554,6 +554,8 @@ export default function App() {
           autoDetect: autoDetectionMode !== 'off',
           autoDetectionMode,
           toleranceOverrideCents,
+          selectedInputDeviceId,
+          selectedOutputDeviceId,
           transposeSemitones,
           strobeSensitivity,
           readoutMode,
@@ -617,6 +619,8 @@ export default function App() {
       setAutoDetectionMode(parsed.settings.autoDetectionMode);
       setSingleShotCaptured(false);
       setToleranceOverrideCents(parsed.settings.toleranceOverrideCents);
+      setSelectedInputDeviceId(parsed.settings.selectedInputDeviceId ?? '');
+      setSelectedOutputDeviceId(parsed.settings.selectedOutputDeviceId ?? '');
       setTransposeSemitones(parsed.settings.transposeSemitones);
       setStrobeSensitivity(parsed.settings.strobeSensitivity);
       setReadoutMode(parsed.settings.readoutMode);
@@ -939,6 +943,7 @@ export default function App() {
       if (ok) {
         void refreshAudioDevices();
         if (bbAudioEngine.didFallbackToDefaultInput()) {
+          setSelectedInputDeviceId('');
           setAudioDeviceNotice('A kiválasztott mikrofon nem érhető el; az alapértelmezett bemenetet használom.');
         } else {
           setAudioDeviceNotice(selectedInputDeviceId ? 'A kiválasztott mikrofon aktív.' : 'Az alapértelmezett mikrofon aktív.');
