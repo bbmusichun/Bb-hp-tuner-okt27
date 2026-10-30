@@ -16,6 +16,7 @@ import { findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPea
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
+import { getReferenceToneStackGain, normalizeReferenceToneFrequencies } from './referenceToneStack';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -651,9 +652,7 @@ export class BBAudioEngine {
   }
 
   public playToneStack(frequenciesHz: number[]): void {
-    const validFrequencies = [...new Set(frequenciesHz)]
-      .filter((frequency) => Number.isFinite(frequency) && frequency > 0 && frequency < 20000)
-      .slice(0, 11);
+    const validFrequencies = normalizeReferenceToneFrequencies(frequenciesHz);
     if (!validFrequencies.length) return;
 
     this.stopTone();
@@ -694,7 +693,7 @@ export class BBAudioEngine {
     }
 
     this.toneGain = this.audioCtx.createGain();
-    const stackGain = 0.3 / Math.sqrt(validFrequencies.length);
+    const stackGain = getReferenceToneStackGain(validFrequencies.length);
     this.toneGain.gain.setValueAtTime(0.001, now);
     this.toneGain.gain.exponentialRampToValueAtTime(stackGain, now + 0.05);
     this.toneGain.connect(this.audioCtx.destination);
