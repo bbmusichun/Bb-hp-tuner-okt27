@@ -215,6 +215,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isKeyboardHelpOpen, setIsKeyboardHelpOpen] = useState(false);
+  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState<string>(() => loadTuningPreferences().selectedInputDeviceId);
+  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState<string>(() => loadTuningPreferences().selectedOutputDeviceId);
+  const [audioInputDevices, setAudioInputDevices] = useState<AudioDeviceOption[]>([]);
+  const [audioOutputDevices, setAudioOutputDevices] = useState<AudioDeviceOption[]>([]);
+  const [audioDeviceNotice, setAudioDeviceNotice] = useState('');
   const [autoDetectionMode, setAutoDetectionMode] = useState<AutoDetectionMode>(() => loadTuningPreferences().autoDetectionMode);
   const [singleShotCaptured, setSingleShotCaptured] = useState(false);
   const autoDetect = autoDetectionMode !== 'off';
@@ -226,6 +231,39 @@ export default function App() {
   const [strobeSensitivity, setStrobeSensitivity] = useState<number>(() => loadTuningPreferences().strobeSensitivity);
   const [readoutMode, setReadoutMode] = useState<TuningReadoutMode>(() => loadTuningPreferences().readoutMode);
   const [referenceToneMode, setReferenceToneMode] = useState<ReferenceToneMode>(() => loadTuningPreferences().referenceToneMode);
+
+  const refreshAudioDevices = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+      setAudioDeviceNotice('Ez a böngésző nem támogatja az eszközlista lekérését.');
+      return;
+    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setAudioInputDevices(devices
+        .filter((device) => device.kind === 'audioinput' && device.deviceId)
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: formatAudioDeviceLabel(device.label, 'audioinput', index),
+        })));
+      setAudioOutputDevices(devices
+        .filter((device) => device.kind === 'audiooutput' && device.deviceId)
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: formatAudioDeviceLabel(device.label, 'audiooutput', index),
+        })));
+    } catch (error) {
+      console.warn('Nem sikerült lekérni a hang-eszközöket:', error);
+      setAudioDeviceNotice('Az eszközlista nem érhető el. Ellenőrizd a böngésző engedélyeit.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+    void refreshAudioDevices();
+    const mediaDevices = navigator.mediaDevices;
+    mediaDevices?.addEventListener?.('devicechange', refreshAudioDevices);
+    return () => mediaDevices?.removeEventListener?.('devicechange', refreshAudioDevices);
+  }, [isSettingsOpen, refreshAudioDevices]);
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(() => loadTuningPreferences().a4Ref);
@@ -744,6 +782,8 @@ export default function App() {
         autoDetect,
         autoDetectionMode,
         toleranceOverrideCents,
+        selectedInputDeviceId,
+        selectedOutputDeviceId,
         transposeSemitones,
         strobeSensitivity,
         readoutMode,
@@ -755,7 +795,7 @@ export default function App() {
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale, autoDetect, autoDetectionMode, toleranceOverrideCents, transposeSemitones, strobeSensitivity, readoutMode, referenceToneMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+  }, [a4Ref, currentScale, autoDetect, autoDetectionMode, toleranceOverrideCents, selectedInputDeviceId, selectedOutputDeviceId, transposeSemitones, strobeSensitivity, readoutMode, referenceToneMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
 
   useEffect(() => {
     try {
