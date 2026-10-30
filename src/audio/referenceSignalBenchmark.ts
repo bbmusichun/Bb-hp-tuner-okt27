@@ -89,6 +89,37 @@ export interface ReferenceSignalBenchmarkSummary {
 export const REFERENCE_SIGNAL_SAMPLE_RATE = 44100;
 export const REFERENCE_SIGNAL_FFT_SIZE = 16384;
 
+export interface ReferenceSignalAnalysisProfile {
+  id: string;
+  name: string;
+  sampleRate: number;
+  fftSize: number;
+}
+
+export const REFERENCE_SIGNAL_ANALYSIS_PROFILES: readonly ReferenceSignalAnalysisProfile[] = [
+  { id: '44100-8192', name: '44.1 kHz · FFT 8192', sampleRate: 44100, fftSize: 8192 },
+  { id: '44100-16384', name: '44.1 kHz · FFT 16384', sampleRate: 44100, fftSize: 16384 },
+  { id: '44100-32768', name: '44.1 kHz · FFT 32768', sampleRate: 44100, fftSize: 32768 },
+  { id: '48000-16384', name: '48 kHz · FFT 16384', sampleRate: 48000, fftSize: 16384 },
+  { id: '48000-32768', name: '48 kHz · FFT 32768', sampleRate: 48000, fftSize: 32768 },
+];
+
+export interface ReferenceSignalProfileBenchmarkResult {
+  profile: ReferenceSignalAnalysisProfile;
+  summary: ReferenceSignalBenchmarkSummary;
+}
+
+export const REFERENCE_SIGNAL_PROFILE_SCENARIO_IDS = [
+  'd3-clean',
+  'd3-plus-5-cent',
+  'mains-hum-50hz',
+  'mains-hum-60hz',
+  'close-double-peak',
+  'transient-decay',
+  'weak-fundamental',
+] as const;
+
+
 /**
  * Deterministic synthetic cases cover clean pitch, signed detuning, inharmonic
  * partials, weak roots, background noise, low level and silence. These are
