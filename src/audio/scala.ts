@@ -142,8 +142,9 @@ export function parseScalaScl(
  * Convert Scala intervals to exact-frequency custom-scale rows.
  * The chosen note/frequency remains the tonic anchor. Familiar note labels in
  * the SCL file are transposed to that tonic for clearer enharmonic spelling;
- * explicit !!reference metadata is retained separately and never silently
- * overrides the user's selected target or global A4 calibration.
+ * explicit !!reference metadata is retained separately. The caller may
+ * opt in to using that metadata as a reference anchor; the global A4 setting
+ * is passed explicitly and is never mutated by this conversion.
  */
 export function scalaToCustomScaleText(
   parsed: ParsedScalaScale,
@@ -186,7 +187,7 @@ export function scalaToCustomScaleText(
         ? note
         : note + (roundedCents > 0 ? '+' : '') + roundedCents + 'c';
     } else {
-      const pitch = freqToNoteAndCents(frequency);
+      const pitch = freqToNoteAndCents(frequency, a4Ref);
       const roundedCents = Math.round(pitch.cents);
       noteName = roundedCents === 0
         ? pitch.note
