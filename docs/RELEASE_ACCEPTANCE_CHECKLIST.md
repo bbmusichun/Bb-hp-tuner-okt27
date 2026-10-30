@@ -75,7 +75,17 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] Hibás JSON vagy hibás profil importja nem törli a meglévő beállításokat.
 - [ ] Újratöltés után a profil, az egyedi hangmező és a tűrésbeállítás megmarad.
 
-## 7. Akusztikai átvétel
+## 7. Szintetikus referenciajel-benchmark
+
+- [ ] A WAV-laborban a 14 determinisztikus szintetikus teszteset lefut, és az összefoglaló a teljes esetszámot mutatja.
+- [ ] A tiszta és centeltolt D3/A3/D4 tesztjelek 1×/2×/3× maradékhibája a megadott teszttűrésen belül marad.
+- [ ] A külön megadott 2×/3× inharmonicitás a céltól való centeltérésben jelenik meg, nem keveredik össze az analyser maradékhibájával.
+- [ ] A szándékosan egy oktávval feljebb állított cél esetén a valódi gyökér és a kiválasztott cél különbsége 1200 cent, és az azonosíthatósági diagnosztika nem jelölheti alaphangként a felső részfelhangot.
+- [ ] A determinisztikus zajteszt ismételt futásai azonos eredményt adnak; a csend és alacsony jelszint nem gyárt érvényes csúcsot.
+- [ ] A túlvezérelt eset külön tesztjelként szerepel; nem használjuk arra, hogy a tiszta jel pontosságáról következtessünk.
+- [ ] A szoftveres benchmark eredményét nem tekintjük fizikai/abszolút akusztikai pontosság igazolásának.
+
+## 8. Akusztikai átvétel
 
 - [ ] Ugyanazt a hangot többször megütve ellenőrizzük az eredmények stabilitását, azonos mikrofonelhelyezéssel.
 - [ ] Az eredményt egy dokumentált, külső frekvencia-referenciával vetjük össze a tényleges célkészüléken.
