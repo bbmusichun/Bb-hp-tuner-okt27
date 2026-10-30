@@ -13,12 +13,13 @@ export function buildChromaticTargetNote(
   partialTargetOffsets: PartialTargetOffsetMap,
 ): ToneFieldNote | null {
   if (!Number.isInteger(midi) || midi < CHROMATIC_MIN_MIDI || midi > CHROMATIC_MAX_MIDI) return null;
-  const frequency = midiToFreq(midi, a4Ref);
-  if (!Number.isFinite(frequency) || frequency <= 0) return null;
+  const equalTemperedFrequency = midiToFreq(midi, a4Ref);
+  if (!Number.isFinite(equalTemperedFrequency) || equalTemperedFrequency <= 0) return null;
 
-  const note = freqToNoteAndCents(frequency, a4Ref);
+  const note = freqToNoteAndCents(equalTemperedFrequency, a4Ref);
   const key = partialTargetOffsetKey(scaleId, note.note);
   const offsets = partialTargetOffsets[key] ?? DEFAULT_PARTIAL_TARGET_OFFSET;
+  const frequency = partialTargetFrequency(equalTemperedFrequency, 1, offsets.fundamentalCents);
   return {
     id: 'chromatic-' + midi,
     noteName: note.note,
