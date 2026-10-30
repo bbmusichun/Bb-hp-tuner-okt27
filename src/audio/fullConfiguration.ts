@@ -4,7 +4,7 @@ import { normalizeDisabledToneNotes } from './scaleNoteSelection';
 import { normalizeStrobeBands, type StrobeBandConfig } from './strobeBands';
 import type { AutoDetectionMode } from './detectionModes';
 import type { TuningReadoutMode } from './readoutModes';
-import type { ReferenceToneMode } from './referenceToneModes';
+import { isValidReferenceToneModesByRole, normalizeReferenceToneModesByRole, type ReferenceToneMode, type ReferenceToneModesByRole } from './referenceToneModes';
 import { isValidStrobeSensitivity, normalizeStrobeSensitivity } from './strobeSensitivity';
 
 export interface HangoalFullConfiguration {
@@ -18,6 +18,8 @@ export interface HangoalFullConfiguration {
     strobeSensitivity: number;
     readoutMode: TuningReadoutMode;
     referenceToneMode: ReferenceToneMode;
+    /** Per-band override; optional in schema v2 to retain compatibility with older backups. */
+    referenceToneModesByRole?: ReferenceToneModesByRole;
     activeInstrumentProfileId: string;
     instrumentProfiles: InstrumentProfile[];
   };
@@ -76,6 +78,8 @@ export function parseHangoalFullConfiguration(
   if (settings.autoDetect !== (settings.autoDetectionMode !== 'off')) return null;
   if (settings.readoutMode !== 'hz' && settings.readoutMode !== 'cents' && settings.readoutMode !== 'note' && settings.readoutMode !== 'ratio') return null;
   if (settings.referenceToneMode !== 'continuous' && settings.referenceToneMode !== 'strike' && settings.referenceToneMode !== 'off') return null;
+  if (settings.referenceToneModesByRole !== undefined && !isValidReferenceToneModesByRole(settings.referenceToneModesByRole)) return null;
+  const referenceToneModesByRole = normalizeReferenceToneModesByRole(settings.referenceToneModesByRole, settings.referenceToneMode);
   if (!(settings.toleranceOverrideCents === null ||
     (typeof settings.toleranceOverrideCents === 'number' && Number.isFinite(settings.toleranceOverrideCents) &&
       settings.toleranceOverrideCents >= 0.5 && settings.toleranceOverrideCents <= 20))) return null;
@@ -112,6 +116,7 @@ export function parseHangoalFullConfiguration(
       strobeSensitivity,
       readoutMode: settings.readoutMode,
       referenceToneMode: settings.referenceToneMode,
+      referenceToneModesByRole,
       activeInstrumentProfileId: settings.activeInstrumentProfileId,
       instrumentProfiles: profiles,
     },
