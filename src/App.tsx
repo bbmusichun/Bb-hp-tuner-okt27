@@ -28,6 +28,7 @@ import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
 import { recordAnalysisFrame } from './audio/analysisRate';
 import { normalizeStrobeBands } from './audio/strobeBands';
 import { normalizeStrobeSensitivity } from './audio/strobeSensitivity';
+import { formatAudioDeviceLabel, type AudioDeviceOption } from './audio/deviceSelection';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
@@ -69,6 +70,8 @@ function loadTuningPreferences(): {
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
   toleranceOverrideCents: TuningToleranceSetting;
+  selectedInputDeviceId: string;
+  selectedOutputDeviceId: string;
   transposeSemitones: number;
   strobeSensitivity: number;
   readoutMode: TuningReadoutMode;
@@ -91,6 +94,8 @@ function loadTuningPreferences(): {
     instrumentProfiles: [defaultProfile],
     activeInstrumentProfileId: defaultProfile.id,
     toleranceOverrideCents: null,
+    selectedInputDeviceId: '',
+    selectedOutputDeviceId: '',
     transposeSemitones: 0,
     strobeSensitivity: 1,
     readoutMode: 'hz' as TuningReadoutMode,
@@ -111,6 +116,8 @@ function loadTuningPreferences(): {
       instrumentProfiles?: unknown;
       activeInstrumentProfileId?: unknown;
       toleranceOverrideCents?: unknown;
+      selectedInputDeviceId?: unknown;
+      selectedOutputDeviceId?: unknown;
       transposeSemitones?: unknown;
       strobeSensitivity?: unknown;
       readoutMode?: unknown;
@@ -143,6 +150,8 @@ function loadTuningPreferences(): {
       instrumentProfiles: profiles,
       activeInstrumentProfileId,
       toleranceOverrideCents: normalizeTuningToleranceSetting(prefs.toleranceOverrideCents),
+      selectedInputDeviceId: typeof prefs.selectedInputDeviceId === 'string' ? prefs.selectedInputDeviceId : '',
+      selectedOutputDeviceId: typeof prefs.selectedOutputDeviceId === 'string' ? prefs.selectedOutputDeviceId : '',
       transposeSemitones: typeof prefs.transposeSemitones === 'number' && Number.isInteger(prefs.transposeSemitones) && prefs.transposeSemitones >= -12 && prefs.transposeSemitones <= 12
         ? prefs.transposeSemitones : 0,
       strobeSensitivity: normalizeStrobeSensitivity(prefs.strobeSensitivity),
@@ -206,6 +215,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<BBNavTab>('hangolas');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isKeyboardHelpOpen, setIsKeyboardHelpOpen] = useState(false);
+  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState<string>(() => loadTuningPreferences().selectedInputDeviceId);
+  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState<string>(() => loadTuningPreferences().selectedOutputDeviceId);
+  const [audioInputDevices, setAudioInputDevices] = useState<AudioDeviceOption[]>([]);
+  const [audioOutputDevices, setAudioOutputDevices] = useState<AudioDeviceOption[]>([]);
+  const [audioDeviceNotice, setAudioDeviceNotice] = useState('');
   const [autoDetectionMode, setAutoDetectionMode] = useState<AutoDetectionMode>(() => loadTuningPreferences().autoDetectionMode);
   const [singleShotCaptured, setSingleShotCaptured] = useState(false);
   const autoDetect = autoDetectionMode !== 'off';
@@ -217,6 +231,39 @@ export default function App() {
   const [strobeSensitivity, setStrobeSensitivity] = useState<number>(() => loadTuningPreferences().strobeSensitivity);
   const [readoutMode, setReadoutMode] = useState<TuningReadoutMode>(() => loadTuningPreferences().readoutMode);
   const [referenceToneMode, setReferenceToneMode] = useState<ReferenceToneMode>(() => loadTuningPreferences().referenceToneMode);
+
+  const refreshAudioDevices = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
+      setAudioDeviceNotice('Ez a böngésző nem támogatja az eszközlista lekérését.');
+      return;
+    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setAudioInputDevices(devices
+        .filter((device) => device.kind === 'audioinput' && device.deviceId)
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: formatAudioDeviceLabel(device.label, 'audioinput', index),
+        })));
+      setAudioOutputDevices(devices
+        .filter((device) => device.kind === 'audiooutput' && device.deviceId)
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: formatAudioDeviceLabel(device.label, 'audiooutput', index),
+        })));
+    } catch (error) {
+      console.warn('Nem sikerült lekérni a hang-eszközöket:', error);
+      setAudioDeviceNotice('Az eszközlista nem érhető el. Ellenőrizd a böngésző engedélyeit.');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+    void refreshAudioDevices();
+    const mediaDevices = navigator.mediaDevices;
+    mediaDevices?.addEventListener?.('devicechange', refreshAudioDevices);
+    return () => mediaDevices?.removeEventListener?.('devicechange', refreshAudioDevices);
+  }, [isSettingsOpen, refreshAudioDevices]);
 
   // Calibration and Scale
   const [a4Ref, setA4Ref] = useState<number>(() => loadTuningPreferences().a4Ref);
@@ -507,6 +554,8 @@ export default function App() {
           autoDetect: autoDetectionMode !== 'off',
           autoDetectionMode,
           toleranceOverrideCents,
+          selectedInputDeviceId,
+          selectedOutputDeviceId,
           transposeSemitones,
           strobeSensitivity,
           readoutMode,
@@ -570,6 +619,8 @@ export default function App() {
       setAutoDetectionMode(parsed.settings.autoDetectionMode);
       setSingleShotCaptured(false);
       setToleranceOverrideCents(parsed.settings.toleranceOverrideCents);
+      setSelectedInputDeviceId(parsed.settings.selectedInputDeviceId ?? '');
+      setSelectedOutputDeviceId(parsed.settings.selectedOutputDeviceId ?? '');
       setTransposeSemitones(parsed.settings.transposeSemitones);
       setStrobeSensitivity(parsed.settings.strobeSensitivity);
       setReadoutMode(parsed.settings.readoutMode);
@@ -735,6 +786,8 @@ export default function App() {
         autoDetect,
         autoDetectionMode,
         toleranceOverrideCents,
+        selectedInputDeviceId,
+        selectedOutputDeviceId,
         transposeSemitones,
         strobeSensitivity,
         readoutMode,
@@ -746,7 +799,7 @@ export default function App() {
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale, autoDetect, autoDetectionMode, toleranceOverrideCents, transposeSemitones, strobeSensitivity, readoutMode, referenceToneMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+  }, [a4Ref, currentScale, autoDetect, autoDetectionMode, toleranceOverrideCents, selectedInputDeviceId, selectedOutputDeviceId, transposeSemitones, strobeSensitivity, readoutMode, referenceToneMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
 
   useEffect(() => {
     try {
@@ -830,6 +883,27 @@ export default function App() {
     return () => cancelAnimationFrame(animId);
   }, [isSignalInputActive, isReferenceTonePlaying, selectedNote, resonanceNoteNames, autoDetect, autoDetectionMode, singleShotCaptured, toneNotes, enabledToneNotes, chromaticTargetMidi]);
 
+  const handleSelectAudioInput = (deviceId: string) => {
+    setSelectedInputDeviceId(deviceId);
+    setAudioDeviceNotice('A bemenet a következő mérésindításkor vált át. A futó mérést nem szakítja meg.');
+  };
+
+  const handleSelectAudioOutput = async (deviceId: string) => {
+    if (!bbAudioEngine.supportsOutputDeviceSelection()) {
+      setAudioDeviceNotice('Ebben a böngészőben a hangkimenetet a rendszer kezeli.');
+      return;
+    }
+    const applied = await bbAudioEngine.setOutputDevice(deviceId);
+    if (applied) {
+      setSelectedOutputDeviceId(deviceId);
+      setAudioDeviceNotice(deviceId
+        ? 'A kiválasztott hangkimenet aktív.'
+        : 'A rendszer alapértelmezett hangkimenete aktív.');
+    } else {
+      setAudioDeviceNotice('A kimenetváltást a böngésző nem engedélyezte. A jelenlegi kimenet változatlan maradt.');
+    }
+  };
+
   // Toggle microphone
   const handleToggleMic = async () => {
     if (isListening) {
@@ -865,8 +939,19 @@ export default function App() {
         setOwnDAudioCurrentTime(0);
         setIsOwnDPlaying(false);
       }
-      const ok = await bbAudioEngine.startMicrophone();
+      const ok = await bbAudioEngine.startMicrophone(selectedInputDeviceId);
       if (ok) {
+        void refreshAudioDevices();
+        if (bbAudioEngine.didFallbackToDefaultInput()) {
+          setSelectedInputDeviceId('');
+          setAudioDeviceNotice('A kiválasztott mikrofon nem érhető el; az alapértelmezett bemenetet használom.');
+        } else {
+          setAudioDeviceNotice(selectedInputDeviceId ? 'A kiválasztott mikrofon aktív.' : 'Az alapértelmezett mikrofon aktív.');
+        }
+        if (selectedOutputDeviceId && bbAudioEngine.supportsOutputDeviceSelection()) {
+          const outputApplied = await bbAudioEngine.setOutputDevice(selectedOutputDeviceId);
+          if (!outputApplied) setAudioDeviceNotice('A kiválasztott hangkimenet nem érhető el; a rendszer alapértelmezett kimenete marad aktív.');
+        }
         analysisRateWindowRef.current = { startedAtMs: performance.now(), frameCount: 0 };
         setAnalysisFps(null);
         setAutoGainControlStatus(bbAudioEngine.getAutoGainControlStatus());
@@ -966,7 +1051,7 @@ export default function App() {
     setReferenceToneMode(mode);
   };
 
-  const handleToggleReferenceTone = () => {
+  const handleToggleReferenceTone = async () => {
     if (referenceToneMode !== 'continuous' || isListening || isFileInputActive) return;
     if (isReferenceTonePlaying) {
       bbAudioEngine.stopTone();
@@ -974,6 +1059,12 @@ export default function App() {
       return;
     }
     if (!Number.isFinite(referenceToneHz) || referenceToneHz <= 0) return;
+    if (selectedOutputDeviceId && bbAudioEngine.supportsOutputDeviceSelection()) {
+      const outputApplied = await bbAudioEngine.setOutputDevice(selectedOutputDeviceId);
+      if (!outputApplied) {
+        setAudioDeviceNotice('A mentett hangkimenet nem érhető el; a rendszer alapértelmezett kimenetét használom.');
+      }
+    }
     bbAudioEngine.playTone(referenceToneHz);
     setIsReferenceTonePlaying(true);
   };
@@ -1784,6 +1875,16 @@ export default function App() {
           onResetPartialTargetOffsets={resetSelectedPartialOffsets}
           sampleRateKhz={sampleRateKhz}
           isListening={isListening}
+          autoGainControlStatus={autoGainControlStatus}
+          audioInputDevices={audioInputDevices}
+          audioOutputDevices={audioOutputDevices}
+          selectedInputDeviceId={selectedInputDeviceId}
+          selectedOutputDeviceId={selectedOutputDeviceId}
+          outputDeviceSelectionSupported={bbAudioEngine.supportsOutputDeviceSelection()}
+          audioDeviceNotice={audioDeviceNotice}
+          onRefreshAudioDevices={() => { void refreshAudioDevices(); }}
+          onChangeAudioInputDevice={handleSelectAudioInput}
+          onChangeAudioOutputDevice={handleSelectAudioOutput}
         />
       </div>
     </div>

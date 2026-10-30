@@ -7,6 +7,7 @@ import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/par
 import type { InstrumentProfile } from '../audio/instrumentProfiles';
 import { formatTuningToleranceSetting, type TuningToleranceSetting } from '../audio/tuningTolerance';
 import { parseScalaScl, scalaToCustomScaleText, type ParsedScalaScale } from '../audio/scala';
+import type { AudioDeviceOption } from '../audio/deviceSelection';
 
 function scalaImportSuccessMessage(parsed: ParsedScalaScale | null, message: string): string {
   const reference = parsed?.reference;
@@ -40,6 +41,16 @@ interface Props {
   onResetPartialTargetOffsets: () => void;
   sampleRateKhz: number | null;
   isListening: boolean;
+  autoGainControlStatus: boolean | null;
+  audioInputDevices: AudioDeviceOption[];
+  audioOutputDevices: AudioDeviceOption[];
+  selectedInputDeviceId: string;
+  selectedOutputDeviceId: string;
+  outputDeviceSelectionSupported: boolean;
+  audioDeviceNotice: string;
+  onRefreshAudioDevices: () => void;
+  onChangeAudioInputDevice: (deviceId: string) => void;
+  onChangeAudioOutputDevice: (deviceId: string) => void;
   instrumentProfiles: InstrumentProfile[];
   activeInstrumentProfileId: string;
   onSelectInstrumentProfile: (profileId: string) => void;
@@ -67,6 +78,16 @@ export const BBSettingsModal: React.FC<Props> = ({
   onResetPartialTargetOffsets,
   sampleRateKhz,
   isListening,
+  autoGainControlStatus,
+  audioInputDevices,
+  audioOutputDevices,
+  selectedInputDeviceId,
+  selectedOutputDeviceId,
+  outputDeviceSelectionSupported,
+  audioDeviceNotice,
+  onRefreshAudioDevices,
+  onChangeAudioInputDevice,
+  onChangeAudioOutputDevice,
   instrumentProfiles,
   activeInstrumentProfileId,
   onSelectInstrumentProfile,
@@ -567,6 +588,66 @@ export const BBSettingsModal: React.FC<Props> = ({
             </button>
           </div>
 
+          {/* Audio device routing */}
+          <section className="p-3 rounded-xl bg-[#080b0f] border border-white/5 space-y-3">
+            <div>
+              <div className="font-semibold text-slate-200">Hangbemenet és hangkimenet</div>
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+                A bemenet a mikrofonméréshez, a kimenet a referenciahanghoz és a lejátszáshoz tartozik. A lista a mikrofonengedély megadása után mutatja a legtöbb eszköz nevét.
+              </p>
+            </div>
+            <label className="block text-[10px] font-semibold text-slate-300">
+              Mikrofonbemenet
+              <select
+                aria-label="Mikrofonbemenet kiválasztása"
+                value={selectedInputDeviceId}
+                disabled={isListening}
+                onChange={(event) => onChangeAudioInputDevice(event.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-white disabled:opacity-50"
+              >
+                <option value="">Alapértelmezett mikrofon</option>
+                {audioInputDevices.map((device) => (
+                  <option key={device.deviceId} value={device.deviceId}>{device.label}</option>
+                ))}
+              </select>
+              {isListening && (
+                <span className="mt-1 block text-[10px] font-normal text-amber-300">
+                  A bemenetet mérés közben nem lehet átállítani. Állítsd le a mérést a váltáshoz.
+                </span>
+              )}
+            </label>
+            <label className="block text-[10px] font-semibold text-slate-300">
+              Hangkimenet
+              {outputDeviceSelectionSupported ? (
+                <select
+                  aria-label="Hangkimenet kiválasztása"
+                  value={selectedOutputDeviceId}
+                  onChange={(event) => onChangeAudioOutputDevice(event.target.value)}
+                  className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-xs text-white"
+                >
+                  <option value="">Rendszer alapértelmezett kimenete</option>
+                  {audioOutputDevices.map((device) => (
+                    <option key={device.deviceId} value={device.deviceId}>{device.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className="mt-1.5 block rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-2 text-[10px] font-normal leading-relaxed text-slate-400">
+                  A böngésző nem támogatja a programozott hangkimenet-választást. A rendszer hangútvonalát használd (például iPhone-on a Vezérlőközpontban).
+                </span>
+              )}
+            </label>
+            <button
+              type="button"
+              onClick={onRefreshAudioDevices}
+              className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-[10px] font-semibold text-slate-300 hover:bg-slate-800"
+            >
+              Eszközlista frissítése
+            </button>
+            {audioDeviceNotice && (
+              <p role="status" className="text-[10px] leading-relaxed text-amber-200">{audioDeviceNotice}</p>
+            )}
+          </section>
+
           {/* Audio Engine Info */}
           <div className="p-3 rounded-xl bg-[#080b0f] border border-white/5 text-[11px] text-slate-400 space-y-1">
             <div className="flex items-center gap-1 text-slate-300 font-semibold mb-1">
@@ -574,8 +655,9 @@ export const BBSettingsModal: React.FC<Props> = ({
               <span>Akusztikai Mérési Környezet</span>
             </div>
             <div>{isListening ? 'Aktuális mintavételezés' : 'Legutóbbi mintavételezés'}: <span className="font-mono text-white">{sampleRateKhz !== null ? `${sampleRateKhz} kHz (Web Audio API)` : '— (a mérés indításakor jelenik meg)'}</span></div>
-            <div>FFT felbontás: <span className="font-mono text-white">32768 pont + parabolikus csúcsinterpoláció</span></div>
-            <div>Zajcsökkentés / AGC: <span className="font-mono text-[#10b981]">Kikapcsolva (Nyers jel)</span></div>
+            <div>FFT felbontás: <span className="font-mono text-white">16384 pont + parabolikus csúcsinterpoláció</span></div>
+            <div>Zajcsökkentés / visszhangszűrés: <span className="font-mono text-white">Kikapcsolva</span></div>
+            <div>Automatikus erősítés (AGC): <span className="font-mono text-white">{autoGainControlStatus === null ? 'A böngésző nem közölt állapotot' : autoGainControlStatus ? 'Bekapcsolva' : 'Kikapcsolva'}</span></div>
           </div>
         </div>
 

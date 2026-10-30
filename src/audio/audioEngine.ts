@@ -15,12 +15,14 @@ import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peak
 import { findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
+import { shouldRetryDefaultAudioInput } from './deviceSelection';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private microphoneStream: MediaStream | null = null;
   private autoGainControlStatus: boolean | null = null;
+  private lastInputDeviceFallback = false;
   private sourceNode: AudioNode | null = null;
   private mediaElementSourceNode: MediaElementAudioSourceNode | null = null;
   private mediaElementSourceElement: HTMLAudioElement | null = null;
@@ -58,7 +60,7 @@ export class BBAudioEngine {
   private toneGain: GainNode | null = null;
   private toneSilenceGain: GainNode | null = null;
 
-  public async startMicrophone(): Promise<boolean> {
+  public async startMicrophone(preferredDeviceId?: string): Promise<boolean> {
     try {
       if (this.micState === 'active' && this.microphoneStream) return true;
       if (this.inputMode === 'tone') this.stopTone();
@@ -79,16 +81,34 @@ export class BBAudioEngine {
 
       this.sampleRate = this.audioCtx.sampleRate;
 
-      // Request raw, unadulterated microphone audio without telecom filtering
-      this.microphoneStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          // Ask the browser/OS to normalize microphone level for quiet strikes.
-          // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
-          autoGainControl: true,
-        },
-      });
+      // Request raw microphone audio without telecom filtering. A selected device is
+      // requested with an exact ID; if it has disappeared, retry the default device.
+      this.lastInputDeviceFallback = false;
+      const baseAudioConstraints: MediaTrackConstraints = {
+        echoCancellation: false,
+        noiseSuppression: false,
+        // Ask the browser/OS to normalize microphone level for quiet strikes.
+        // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
+        autoGainControl: true,
+      };
+      if (preferredDeviceId) {
+        try {
+          this.microphoneStream = await navigator.mediaDevices.getUserMedia({
+            audio: { ...baseAudioConstraints, deviceId: { exact: preferredDeviceId } },
+          });
+        } catch (deviceError: unknown) {
+          const errorName = deviceError instanceof DOMException
+            ? deviceError.name
+            : deviceError && typeof deviceError === 'object' && 'name' in deviceError
+              ? String((deviceError as { name: unknown }).name)
+              : '';
+          if (!shouldRetryDefaultAudioInput(errorName, preferredDeviceId)) throw deviceError;
+          this.lastInputDeviceFallback = true;
+          this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: baseAudioConstraints });
+        }
+      } else {
+        this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: baseAudioConstraints });
+      }
       const microphoneTrack = this.microphoneStream.getAudioTracks()[0];
       const trackSettings = typeof microphoneTrack?.getSettings === 'function'
         ? microphoneTrack.getSettings()
@@ -255,6 +275,50 @@ export class BBAudioEngine {
   /** Returns the reported state of browser-managed mic AGC, or null if unavailable. */
   public getAutoGainControlStatus(): boolean | null {
     return this.autoGainControlStatus;
+  }
+
+  public getCurrentInputDeviceId(): string | null {
+    const track = this.microphoneStream?.getAudioTracks()[0];
+    if (!track || typeof track.getSettings !== 'function') return null;
+    const deviceId = track.getSettings().deviceId;
+    return typeof deviceId === 'string' && deviceId ? deviceId : null;
+  }
+
+  public didFallbackToDefaultInput(): boolean {
+    return this.lastInputDeviceFallback;
+  }
+
+  /** Browser feature detection; Safari/iOS currently relies on the system audio route. */
+  public supportsOutputDeviceSelection(): boolean {
+    const AudioCtxClass = window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtxClass) return false;
+    const prototype = AudioCtxClass.prototype as unknown as {
+      setSinkId?: (deviceId: string) => Promise<void>;
+    };
+    return typeof prototype.setSinkId === 'function';
+  }
+
+  /** Route the shared analyser and generated reference tones to a selected output device. */
+  public async setOutputDevice(deviceId: string): Promise<boolean> {
+    if (!this.supportsOutputDeviceSelection()) return false;
+    try {
+      if (!this.audioCtx) {
+        const AudioCtxClass = window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (!AudioCtxClass) return false;
+        this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
+      }
+      const context = this.audioCtx as AudioContext & {
+        setSinkId?: (selectedDeviceId: string) => Promise<void>;
+      };
+      if (typeof context.setSinkId !== 'function') return false;
+      await context.setSinkId(deviceId);
+      return true;
+    } catch (error) {
+      console.warn('Nem sikerült a hangkimeneti eszköz váltása:', error);
+      return false;
+    }
   }
 
   public getInputLevelDb(): number {
