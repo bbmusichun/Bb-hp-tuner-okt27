@@ -306,6 +306,7 @@ export class BBAudioEngine {
       if (!this.audioCtx) {
         const AudioCtxClass = window.AudioContext ||
           (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (!AudioCtxClass) return false;
         this.audioCtx = new AudioCtxClass({ latencyHint: 'interactive' });
       }
       const context = this.audioCtx as AudioContext & {
