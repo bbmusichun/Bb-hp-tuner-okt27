@@ -989,11 +989,17 @@ export default function App() {
     ? ''
     : activeResonance.status !== 'valid' || activeCents === null
     ? '(nem mérhető biztosan)'
+    : toleranceOverrideCents === 'always'
+    ? '(elfogadva · minden eltérés)'
+    : toleranceOverrideCents === 'never'
+    ? '(zöld jelzés tiltva)'
     : isNearTune
     ? '(pontos)'
-    : activeCents !== null && activeCents > 0
+    : activeCents > 0
     ? '(kissé magas)'
-    : '(kissé mély)';
+    : activeCents < 0
+    ? '(kissé mély)'
+    : '(0 cent eltérés)';
 
   const keyboardActionsRef = useRef({
     handleToggleMic,
