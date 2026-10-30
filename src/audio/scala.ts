@@ -149,11 +149,13 @@ export function scalaToCustomScaleText(
   parsed: ParsedScalaScale,
   rootNote: string,
   rootFrequencyHz: number,
+  a4Ref = 440,
 ): string | null {
   if (!Number.isFinite(rootFrequencyHz) || rootFrequencyHz < 20 || rootFrequencyHz > 2000 ||
-      !/^[A-Ga-g](?:#|b)?-?\d{1,2}$/.test(rootNote)) return null;
+      !Number.isFinite(a4Ref) || a4Ref < 420 || a4Ref > 450 ||
+      !/^[A-Ga-g](?:#|b)?-?\d{1,2}(?:[+-]\d+c)?$/.test(rootNote)) return null;
 
-  const root = freqToNoteAndCents(rootFrequencyHz);
+  const root = freqToNoteAndCents(rootFrequencyHz, a4Ref);
   const tonicLabel = parsePitchClassLabel(parsed.periodLabel);
   const rootPitchClass = ((root.midi % 12) + 12) % 12;
   const labelShift = tonicLabel ? (rootPitchClass - tonicLabel.pitchClass + 12) % 12 : null;
@@ -168,7 +170,7 @@ export function scalaToCustomScaleText(
 
     const semitoneOffset = Math.round(cents / 100);
     const targetMidi = root.midi + semitoneOffset;
-    const targetEqualTemperamentHz = 440 * Math.pow(2, (targetMidi - 69) / 12);
+    const targetEqualTemperamentHz = a4Ref * Math.pow(2, (targetMidi - 69) / 12);
     const centsFromSemitone = 1200 * Math.log2(frequency / targetEqualTemperamentHz);
     const sourceLabel = parsed.degreeLabels[i];
     const sourcePitchClass = parsePitchClassLabel(sourceLabel);
@@ -240,7 +242,9 @@ export function resolveScalaReferenceAnchor(
   const rootFrequencyHz = referenceHz / Math.pow(2, intervalCents / 1200);
   if (!Number.isFinite(rootFrequencyHz) || rootFrequencyHz < 20 || rootFrequencyHz > 2000) return null;
 
-  const label = reference.label ? reference.label.toUpperCase().replace(/\^#/g, '#').replace(/\^b/g, 'B') : `fok ${reference.degreeIndex}`;
+  const label = reference.label
+    ? reference.label.charAt(0).toUpperCase() + reference.label.slice(1).replace(/\^#/g, '#').replace(/\^b/g, 'b')
+    : `fok ${reference.degreeIndex}`;
   return {
     referenceName: `${label}${reference.octave}`,
     referenceHz,
