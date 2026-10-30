@@ -294,7 +294,7 @@ export const BBStrobeBands: React.FC<Props> = ({
                 const valid = active && hasSignal && !transientHoldoff &&
                   measurement.status === 'valid' &&
                   Number.isFinite(measuredHz) && measuredHz !== null &&
-                  Number.isFinite(targetHz) && targetHz !== null;
+                  targetHz !== null && Number.isFinite(targetHz);
                 const calibrated = valid
                   ? calibratePartialTargetOffset(partialTargetOffsets, field, measuredHz, targetHz)
                   : null;
@@ -305,13 +305,13 @@ export const BBStrobeBands: React.FC<Props> = ({
                       {valid && measuredHz !== null ? measuredHz.toFixed(3) + ' Hz' : 'Nincs stabil mérés'}
                     </div>
                     <div className="font-mono text-[9px] text-slate-500">
-                      Cél: {Number.isFinite(targetHz) ? targetHz.toFixed(3) : '—'} Hz
+                      Cél: {targetHz !== null && Number.isFinite(targetHz) ? targetHz.toFixed(3) : '—'} Hz
                     </div>
                     <button
                       type="button"
                       disabled={!calibrated}
                       onClick={() => {
-                        if (valid && measuredHz !== null && Number.isFinite(targetHz)) {
+                        if (valid && measuredHz !== null && targetHz !== null && Number.isFinite(targetHz)) {
                           onCalibrateRole?.(role, measuredHz, targetHz);
                         }
                       }}
