@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
-import { isWithinTuningTolerance } from '../audio/tuningTolerance';
+import { isWithinTuningTolerance, type TuningToleranceSetting } from '../audio/tuningTolerance';
 
 interface Props {
   roleName: string;
@@ -8,7 +8,7 @@ interface Props {
   currentCents: number;
   targetHz: number | null;
   standardDeviationCents: number;
-  toleranceOverrideCents?: number | null;
+  toleranceOverrideCents?: TuningToleranceSetting;
 }
 
 export const BBStabilityGraph: React.FC<Props> = ({
