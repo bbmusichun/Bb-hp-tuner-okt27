@@ -455,8 +455,16 @@ function missingPartial(multiplier: ReferenceSignalMultiplier, expectedHz: numbe
 
 function toResult(
   scenario: ReferenceSignalScenario,
-  frame: WavFrameAnalysis | null,
+  frames: readonly WavFrameAnalysis[],
+  expectedFrameCount: number,
 ): ReferenceSignalBenchmarkResult {
+  const frame = frames[0] ?? null;
+  const validFundamentalFrames = frames.filter((item) => item.resonances[0]?.measuredHz !== null);
+  const firstValidFundamentalSeconds = validFundamentalFrames[0]?.timeSeconds ?? null;
+  const lastValidFundamentalSeconds = validFundamentalFrames[validFundamentalFrames.length - 1]?.timeSeconds ?? null;
+  const targetDoublePeak = frame?.spectrum && frame.sampleRate
+    ? inspectTargetPeak(frame.spectrum, frame.sampleRate, scenario.targetHz, 150, -82)
+    : null;
   const expectedFundamentalHz = (scenario.synthesizedRootHz ?? scenario.targetHz) * Math.pow(2, scenario.detuneCents / 1200);
   const candidateTargetHz = scenario.targetHz * Math.pow(2, scenario.detuneCents / 1200);
   const expectedFrequencies: [number, number, number] = [
@@ -495,6 +503,13 @@ function toResult(
     rmsDb: frame?.rmsDb ?? null,
     identifiabilityStatus: frame?.identifiability?.status ?? 'not-analysed',
     identifiabilityReasons: frame?.identifiability?.reasons ?? [],
+    possibleDoublePeak: targetDoublePeak?.possibleDoublePeak ?? false,
+    doublePeakSeparationCents: targetDoublePeak?.separationCents ?? null,
+    analysedFrameCount: frames.length,
+    validFundamentalFrameCount: validFundamentalFrames.length,
+    fundamentalFrameCoverage: expectedFrameCount > 0 ? validFundamentalFrames.length / expectedFrameCount : 0,
+    firstValidFundamentalSeconds,
+    lastValidFundamentalSeconds,
     partials,
   };
 }
@@ -507,19 +522,43 @@ export function runReferenceSignalBenchmark(
 ): ReferenceSignalBenchmarkResult[] {
   if (!Number.isInteger(fftSize) || fftSize < 1024 || (fftSize & (fftSize - 1)) !== 0) return [];
   const results: ReferenceSignalBenchmarkResult[] = [];
+  const hopSize = Math.max(1, Math.floor(fftSize / 2));
   for (const scenario of scenarios) {
     if (!validScenario(scenario)) continue;
-    const samples = generateReferenceSignal(scenario, sampleRate, fftSize);
-    const frame = samples
-      ? analyzeWavWindow(samples, sampleRate, {
+    const sampleCount = Math.max(
+      fftSize,
+      Math.ceil((scenario.durationSeconds ?? (fftSize / sampleRate)) * sampleRate),
+    );
+    const samples = generateReferenceSignal(scenario, sampleRate, sampleCount);
+    const expectedFrameCount = samples
+      ? Math.floor((samples.length - fftSize) / hopSize) + 1
+      : 0;
+    const frames = samples
+      ? analyzeWavRecording(samples, sampleRate, {
           fftSize,
+          hopSize,
           targetHz: scenario.targetHz,
           peakFloorDb: -82,
         })
-      : null;
-    results.push(toResult(scenario, frame));
+      : [];
+    results.push(toResult(scenario, frames, expectedFrameCount));
   }
   return results;
+}
+
+/** Run the difficult-signal subset across all configured FFT/sample-rate profiles. */
+export function runReferenceSignalProfileBenchmark(
+  scenarios: readonly ReferenceSignalScenario[] = DEFAULT_REFERENCE_SIGNAL_SCENARIOS.filter((scenario) =>
+    (REFERENCE_SIGNAL_PROFILE_SCENARIO_IDS as readonly string[]).includes(scenario.id),
+  ),
+  profiles: readonly ReferenceSignalAnalysisProfile[] = REFERENCE_SIGNAL_ANALYSIS_PROFILES,
+): ReferenceSignalProfileBenchmarkResult[] {
+  return profiles.map((profile) => ({
+    profile,
+    summary: summarizeReferenceSignalBenchmark(
+      runReferenceSignalBenchmark(scenarios, profile.sampleRate, profile.fftSize),
+    ),
+  }));
 }
 
 export function summarizeReferenceSignalBenchmark(
@@ -548,5 +587,9 @@ export function summarizeReferenceSignalBenchmark(
       ? residualErrors.reduce((sum, error) => sum + error, 0) / residualErrors.length
       : null,
     worstAbsoluteResidualErrorCents: residualErrors.length ? Math.max(...residualErrors) : null,
+    possibleDoublePeakScenarioCount: results.filter((result) => result.possibleDoublePeak).length,
+    meanFundamentalFrameCoverage: results.length
+      ? results.reduce((sum, result) => sum + result.fundamentalFrameCoverage, 0) / results.length
+      : null,
   };
 }
