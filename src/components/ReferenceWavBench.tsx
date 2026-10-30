@@ -241,6 +241,8 @@ export default function ReferenceWavBench() {
               <span>Nem azonosítható: {benchmarkSummary.unidentifiedCount}</span>
               <span>Hiányzó 1× csúcs: {benchmarkSummary.missingFundamentalCount}</span>
               <span>Hiányzó csúcsok összesen: {benchmarkSummary.missingPartialCount}</span>
+              <span>Jelölt/valódi gyökér eltérés: {benchmarkSummary.candidateRootMismatchCount}</span>
+              <span>Oktávhiba-eset: {benchmarkSummary.suspectedOctaveErrorCount}</span>
             </div>
             <div className="overflow-x-auto rounded-xl border border-slate-800">
               <table className="w-full min-w-[850px] text-left text-xs">
@@ -248,6 +250,7 @@ export default function ReferenceWavBench() {
                   <tr>
                     <th className="p-2.5">Tesztjel</th>
                     <th className="p-2.5">Alaphang státusza</th>
+                    <th className="p-2.5">Cél / valódi gyökér</th>
                     <th className="p-2.5">1× hiba</th>
                     <th className="p-2.5">2× hiba</th>
                     <th className="p-2.5">3× hiba</th>
@@ -275,6 +278,9 @@ export default function ReferenceWavBench() {
                           <span className="font-mono text-[10px] text-slate-500">cél {result.targetHz.toFixed(3)} Hz · tényleges gyökér {result.expectedFundamentalHz.toFixed(3)} Hz</span>
                         </td>
                         <td className={'p-2.5 ' + statusClass}>{status}</td>
+                        <td className="p-2.5 font-mono text-slate-300">
+                          {Math.abs(result.candidateRootDifferenceCents) < 20 ? 'egyezik' : (result.candidateRootDifferenceCents > 0 ? '+' : '') + result.candidateRootDifferenceCents.toFixed(0) + ' c'}
+                        </td>
                         {result.partials.map((partial) => (
                           <td key={partial.multiplier} className="p-2.5 font-mono text-slate-300">
                             {partial.residualErrorCents === null ? '—' : (partial.residualErrorCents > 0 ? '+' : '') + partial.residualErrorCents.toFixed(2) + ' c'}
@@ -291,7 +297,7 @@ export default function ReferenceWavBench() {
             </div>
             <p className="text-[10px] leading-5 text-slate-500">
               A maradékhiba a mért frekvencia és a szintetikus jelforrás pontosan ismert frekvenciája közötti különbség.
-              A céleltérés (cent) ettől külön érték; inharmonikus felhangnál nem kell nullának lennie.
+              A céleltérés (cent) ettől külön érték; inharmonikus felhangnál nem kell nullának lennie. A „cél / valódi gyökér” oszlop külön jelzi, ha a kiválasztott mérési cél valójában a generált jel 2× vagy 3× részfelhangjára esik.
             </p>
           </>
         )}
