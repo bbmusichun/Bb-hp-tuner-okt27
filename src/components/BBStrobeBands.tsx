@@ -274,7 +274,7 @@ export const BBStrobeBands: React.FC<Props> = ({
     if (customBands.length >= MAX_CUSTOM_BANDS) return;
     setCustomBands((previous) => [...previous, {
       id: createBandId(), name: 'Egyedi sáv ' + (previous.length + 1), source: 'custom',
-      targetHz: Math.max(20, Math.min(20000, baseFrequencyHz * 1.5)), centsOffset: 0, enabled: true,
+      targetHz: Math.max(20, Math.min(20000, baseFrequencyHz * 1.5)), centsOffset: 0, enabled: true, referenceToneMode: 'off',
     }]);
     setIsEditorOpen(true);
   };
