@@ -1870,6 +1870,7 @@ export default function App() {
           onResetPartialTargetOffsets={resetSelectedPartialOffsets}
           sampleRateKhz={sampleRateKhz}
           isListening={isListening}
+          autoGainControlStatus={autoGainControlStatus}
           audioInputDevices={audioInputDevices}
           audioOutputDevices={audioOutputDevices}
           selectedInputDeviceId={selectedInputDeviceId}
