@@ -7,6 +7,12 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] HTTPS-en nyílik meg a végleges URL.
 - [ ] iPhone/Safari és a célként megadott másik böngésző megnyitja az appot.
 - [ ] A mikrofonengedély elfogadása után a mikrofon állapota aktív, a mintavételi frekvencia megjelenik.
+- [ ] A Beállításokban az eszközlista megjelenik; mikrofonengedély előtt a név nélküli eszközök olvasható sorszámozott címkét kapnak, engedély után a böngésző neveit használjuk.
+- [ ] Kiválasztott mikrofon esetén a mérőmotor valóban az exact `deviceId`-t kéri; a mérés leállított állapotban engedi a bemenetváltást.
+- [ ] A kiválasztott mikrofon eltávolítása vagy elérhetetlenné válása után a mérés az alapértelmezett bemenetre esik vissza; engedélymegtagadás vagy foglalt mikrofon nem vált ki csendes fallbacket.
+- [ ] Azokon a böngészőkön, amelyek támogatják az `AudioContext.setSinkId` API-t, a hangkimenet-választás ténylegesen átirányítja a referenciahangot.
+- [ ] Nem támogatott böngészőn (különösen iOS Safari) egyértelmű jelzés jelenik meg, és az operációs rendszer hangútvonalát kell használni.
+- [ ] Bemeneti/kimeneti eszközbeállítás újratöltés és teljes konfigurációs export/import után megmarad; eltávolított eszköz visszaállításakor biztonságos alapértelmezett útvonal használatos.
 - [ ] Elutasított mikrofonengedélynél érthető hibaüzenet jelenik meg, az app nem fagy le.
 - [ ] A mikrofon leállítása után a mérési állapot visszatér várakozó módba.
 - [ ] A saját D-felvétel lejátszható, a hangerő és a pozíció csúszkával állítható.
