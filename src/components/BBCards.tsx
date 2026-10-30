@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ResonanceMeasurement } from '../types/tuner';
-import { isWithinTuningTolerance } from '../audio/tuningTolerance';
+import { isWithinTuningTolerance, type TuningToleranceSetting } from '../audio/tuningTolerance';
 import { formatMeasurementReadout, type TuningReadoutMode } from '../audio/readoutModes';
 
 interface Props {
@@ -10,7 +10,7 @@ interface Props {
   hasSignal: boolean;
   selectedRole: 'fundamental' | 'fifth' | 'octave';
   onSelectRole: (role: 'fundamental' | 'fifth' | 'octave') => void;
-  toleranceOverrideCents?: number | null;
+  toleranceOverrideCents?: TuningToleranceSetting;
   readoutMode?: TuningReadoutMode;
   a4Ref?: number;
 }
