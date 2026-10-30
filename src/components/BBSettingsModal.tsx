@@ -6,7 +6,23 @@ import { MAX_PARTIAL_TARGET_OFFSET_CENTS, partialTargetFrequency } from '../audi
 import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/partialTargets';
 import type { InstrumentProfile } from '../audio/instrumentProfiles';
 import { tuningToleranceCents } from '../audio/tuningTolerance';
-import { parseScalaScl, scalaToCustomScaleText } from '../audio/scala';
+import { parseScalaScl, scalaToCustomScaleText, type ParsedScalaScale } from '../audio/scala';
+
+function scalaImportSuccessMessage(parsed: ParsedScalaScale | null, message: string): string {
+  const reference = parsed?.reference;
+  if (!reference) return message;
+
+  const label = reference.label
+    ? reference.label.charAt(0).toUpperCase() + reference.label.slice(1)
+    : `fok ${reference.degreeIndex}`;
+  const referenceName = `${label}${reference.octave}`;
+  const frequency = reference.frequencyHz === undefined
+    ? ''
+    : ` (${reference.frequencyHz.toFixed(3)} Hz)`;
+
+  return `${message} Scala referencia-metaadat: ${referenceName}${frequency}. A célfrekvenciák a kiválasztott alaphanghoz igazodnak; az A4-kalibráció nem változik automatikusan.`;
+}
+
 
 interface Props {
   isOpen: boolean;
@@ -116,7 +132,7 @@ export const BBSettingsModal: React.FC<Props> = ({
       }
       setCustomScaleNameDraft(asset.name);
       setCustomScaleTextDraft(converted);
-      setCustomScaleMessage('A beépített skála betöltve. Ellenőrizd, majd alkalmazd az egyedi hangmezőt.');
+      setCustomScaleMessage(scalaImportSuccessMessage(parsed, 'A beépített skála betöltve. Ellenőrizd, majd alkalmazd az egyedi hangmezőt.'));
     } catch {
       setCustomScaleMessage('A beépített Scala-fájl nem olvasható.');
     } finally {
@@ -434,7 +450,7 @@ export const BBSettingsModal: React.FC<Props> = ({
                   const file = event.target.files?.[0];
                   if (!file) return;
                   try {
-                    const parsed = parseScalaScl(await file.text());
+                    const parsed = parseScalaScl(await file.text(), { preserveSourceOrder: true });
                     const converted = parsed
                       ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
                       : null;
@@ -444,7 +460,7 @@ export const BBSettingsModal: React.FC<Props> = ({
                     }
                     setCustomScaleNameDraft(file.name.replace(/\.scl$/i, ''));
                     setCustomScaleTextDraft(converted);
-                    setCustomScaleMessage('A Scala-skála beolvasva. Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.');
+                    setCustomScaleMessage(scalaImportSuccessMessage(parsed, 'A Scala-skála beolvasva. Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.'));
                   } catch {
                     setCustomScaleMessage('A Scala-fájl nem olvasható.');
                   } finally {
@@ -487,7 +503,7 @@ export const BBSettingsModal: React.FC<Props> = ({
               <p className="text-[10px] text-emerald-300">Aktív egyedi mező: {activeProfile.customScale.name} · {activeProfile.customScale.noteCount} hang</p>
             )}
             {customScaleMessage && (
-              <p role="status" className={customScaleMessage.startsWith('Az egyedi') ? 'text-[10px] text-emerald-300' : 'text-[10px] text-amber-300'}>
+              <p role="status" className={(['Az egyedi', 'A beépített skála betöltve', 'A Scala-skála beolvasva'].some((prefix) => customScaleMessage.startsWith(prefix))) ? 'text-[10px] text-emerald-300' : 'text-[10px] text-amber-300'}>
                 {customScaleMessage}
               </p>
             )}

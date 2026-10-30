@@ -10,9 +10,11 @@ describe('Scala SCL import', () => {
     assert.equal(parsed.count, 12);
     assert.equal(parsed.intervalsCents.length, 11);
     assert.equal(parsed.periodCents, 1200);
+    assert.equal(parsed.degreeLabels.length, 11);
+    assert.equal(parsed.periodLabel, undefined);
   });
 
-  it('accepts ratio intervals and creates exact-frequency custom scale rows', () => {
+  it('accepts ratios and produces exact-frequency custom scale rows', () => {
     const parsed = parseScalaScl('Just scale\n5\n5/4\n4/3\n3/2\n5/3\n2/1\n');
     assert.ok(parsed);
     const rows = scalaToCustomScaleText(parsed, 'D3', 146.832384);
@@ -23,9 +25,54 @@ describe('Scala SCL import', () => {
     assert.ok(Math.abs((scale.notes[1].frequencyHz ?? 0) - 146.832384 * Math.pow(2, 386.3137 / 1200)) < 0.1);
   });
 
-  it('rejects invalid, unordered, and oversized SCL files by default', () => {
+  it('preserves note labels and explicit !!reference metadata', () => {
+    const parsed = parseScalaScl([
+      'Golden Gate (just)',
+      '8',
+      '135/128 :c#',
+      '9/8 :D',
+      '5/4 :E',
+      '45/32 :F^#',
+      '3/2 :G',
+      '27/16 :a !!reference 4 442.5 (reference pitch)',
+      '15/8 :B',
+      '2/1 :C',
+    ].join('\n'));
+    assert.ok(parsed);
+    assert.deepEqual(parsed.degreeLabels, ['c#', 'D', 'E', 'F^#', 'G', 'a', 'B']);
+    assert.equal(parsed.periodLabel, 'C');
+    assert.deepEqual(parsed.reference, {
+      degreeIndex: 6,
+      octave: 4,
+      frequencyHz: 442.5,
+      label: 'a',
+    });
+
+    // Source degree spellings are transposed to match the selected tonic while
+    // each row keeps the exact ratio-derived frequency.
+    const rows = scalaToCustomScaleText(parsed, 'D3', 146.832384);
+    assert.ok(rows);
+    assert.match(rows, /^D3, 146\.832\nD#3-8c \(f2\), /);
+    const expectedSecondFrequency = 146.832384 * Math.pow(2, (1200 * Math.log2(135 / 128)) / 1200);
+    assert.ok(rows.includes(', ' + expectedSecondFrequency.toFixed(3)));
+    const scale = parseCustomScale('Golden Gate (just)', rows, 'golden-gate-test');
+    assert.ok(scale);
+    assert.equal(scale.noteCount, 8);
+  });
+
+  it('accepts a reference octave without an explicit frequency', () => {
+    const parsed = parseScalaScl('Circle of fifths\n3\n700 :G\n900 :A !!reference 4\n1200 :C\n', { preserveSourceOrder: true });
+    assert.ok(parsed);
+    assert.deepEqual(parsed.reference, { degreeIndex: 2, octave: 4, label: 'A' });
+  });
+
+  it('rejects invalid metadata, unordered regular imports, and oversized SCL files', () => {
     assert.equal(parseScalaScl('bad\nnot-a-count\n'), null);
     assert.equal(parseScalaScl('Bad order\n2\n700\n500\n'), null);
+    assert.equal(parseScalaScl('Bad reference\n2\n500 :E !!reference four\n1200 :C\n'), null);
+    assert.equal(parseScalaScl('Multiple references\n3\n200 :D !!reference 4\n700 :G !!reference 4 440\n1200 :C\n', { preserveSourceOrder: true }), null);
+    assert.equal(parseScalaScl('Invalid Hz\n2\n500 :E !!reference 4 3000\n1200 :C\n'), null);
+
     const sourceOrdered = parseScalaScl('Circle order\n3\n700\n200\n1200\n', { preserveSourceOrder: true });
     assert.deepEqual(sourceOrdered?.intervalsCents, [700, 200]);
     assert.equal(parseScalaScl('Too many\n129\n'), null);
