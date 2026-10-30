@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { analyzeWavRecording, downmixChannels, WavFrameAnalysis } from '../audio/wavAnalysis';
+import { runReferenceSignalBenchmark, summarizeReferenceSignalBenchmark, type ReferenceSignalBenchmarkResult } from '../audio/referenceSignalBenchmark';
 import {
   MeasurementQualityReason,
   MeasurementQualityStatus,
@@ -89,6 +90,8 @@ export default function ReferenceWavBench() {
   const [frames, setFrames] = useState<WavFrameAnalysis[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [benchmarkBusy, setBenchmarkBusy] = useState(false);
+  const [benchmarkResults, setBenchmarkResults] = useState<ReferenceSignalBenchmarkResult[]>([]);
   const audioDataRef = useRef<{ channels: Float32Array[]; sampleRate: number } | null>(null);
 
   const analyzeLoadedAudio = (targetHz: number, mode: ChannelMode) => {
@@ -106,6 +109,21 @@ export default function ReferenceWavBench() {
     return { ...partial, targetHz: partial.targetHz || target.hz * multiplier };
   });
   const identifiability = summarizeFundamentalIdentifiability(frames);
+  const benchmarkSummary = benchmarkResults.length > 0 ? summarizeReferenceSignalBenchmark(benchmarkResults) : null;
+
+  const runSyntheticBenchmark = () => {
+    if (benchmarkBusy) return;
+    setBenchmarkBusy(true);
+    window.setTimeout(() => {
+      try {
+        setBenchmarkResults(runReferenceSignalBenchmark());
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : 'A szintetikus referenciajel-benchmark sikertelen.');
+      } finally {
+        setBenchmarkBusy(false);
+      }
+    }, 0);
+  };
 
   const loadFile = async (file?: File) => {
     if (!file) return;
@@ -181,6 +199,109 @@ export default function ReferenceWavBench() {
           <a href="/" className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-300">Vissza</a>
         </div>
       </header>
+
+      <section className="space-y-3 rounded-2xl border border-amber-500/30 bg-amber-950/10 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="font-semibold text-amber-100">Automatikus referenciajel-benchmark</h2>
+            <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
+              Determinisztikusan generált D3/A3/D4 jelek: ismert centeltolás, inharmonikus 2×/3× részfelhang,
+              gyenge alaphang, zaj, túlvezérlés, alacsony jelszint és csend. Ugyanazt a tényleges WAV-elemzőt futtatja,
+              mint a felvétellabor. Ez szoftveres regressziós teszt, nem külső akusztikai referencia.
+            </p>
+          </div>
+          <button type="button" onClick={runSyntheticBenchmark} disabled={benchmarkBusy}
+            className="shrink-0 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 disabled:cursor-wait disabled:opacity-50">
+            {benchmarkBusy ? 'Benchmark fut…' : benchmarkResults.length ? 'Benchmark újrafuttatása' : 'Benchmark futtatása'}
+          </button>
+        </div>
+        {benchmarkSummary && (
+          <>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-lg bg-black/25 p-3">
+                <p className="text-[10px] text-slate-400">Elemzett eset</p>
+                <p className="mt-1 font-mono text-lg text-white">{benchmarkSummary.analysedScenarioCount}/{benchmarkSummary.scenarioCount}</p>
+              </div>
+              <div className="rounded-lg bg-black/25 p-3">
+                <p className="text-[10px] text-slate-400">Mért részfelhang</p>
+                <p className="mt-1 font-mono text-lg text-white">{benchmarkSummary.measuredPartialCount}</p>
+              </div>
+              <div className="rounded-lg bg-black/25 p-3">
+                <p className="text-[10px] text-slate-400">Átlagos abszolút maradékhiba</p>
+                <p className="mt-1 font-mono text-lg text-white">{fmt(benchmarkSummary.meanAbsoluteResidualErrorCents, 3)} c</p>
+              </div>
+              <div className="rounded-lg bg-black/25 p-3">
+                <p className="text-[10px] text-slate-400">Legnagyobb abszolút maradékhiba</p>
+                <p className="mt-1 font-mono text-lg text-white">{fmt(benchmarkSummary.worstAbsoluteResidualErrorCents, 3)} c</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-400">
+              <span>Alaphang azonosított: {benchmarkSummary.identifiedCount}</span>
+              <span>Bizonytalan: {benchmarkSummary.ambiguousCount}</span>
+              <span>Nem azonosítható: {benchmarkSummary.unidentifiedCount}</span>
+              <span>Hiányzó 1× csúcs: {benchmarkSummary.missingFundamentalCount}</span>
+              <span>Hiányzó csúcsok összesen: {benchmarkSummary.missingPartialCount}</span>
+              <span>Jelölt/valódi gyökér eltérés: {benchmarkSummary.candidateRootMismatchCount}</span>
+              <span>Oktávhiba-eset: {benchmarkSummary.suspectedOctaveErrorCount}</span>
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="w-full min-w-[850px] text-left text-xs">
+                <thead className="bg-slate-950/80 text-slate-400">
+                  <tr>
+                    <th className="p-2.5">Tesztjel</th>
+                    <th className="p-2.5">Alaphang státusza</th>
+                    <th className="p-2.5">Cél / valódi gyökér</th>
+                    <th className="p-2.5">1× hiba</th>
+                    <th className="p-2.5">2× hiba</th>
+                    <th className="p-2.5">3× hiba</th>
+                    <th className="p-2.5">Csúcsok</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {benchmarkResults.map((result) => {
+                    const status = result.identifiabilityStatus === 'identified'
+                      ? 'azonosított'
+                      : result.identifiabilityStatus === 'ambiguous'
+                        ? 'bizonytalan'
+                        : result.identifiabilityStatus === 'unidentified'
+                          ? 'nem azonosítható'
+                          : 'nincs elemzés';
+                    const statusClass = result.identifiabilityStatus === 'identified'
+                      ? 'text-emerald-300'
+                      : result.identifiabilityStatus === 'ambiguous'
+                        ? 'text-amber-300'
+                        : 'text-rose-300';
+                    return (
+                      <tr key={result.scenarioId} className="border-t border-slate-800">
+                        <td className="p-2.5">
+                          <span className="block text-slate-200">{result.name}</span>
+                          <span className="font-mono text-[10px] text-slate-500">cél {result.targetHz.toFixed(3)} Hz · tényleges gyökér {result.expectedFundamentalHz.toFixed(3)} Hz</span>
+                        </td>
+                        <td className={'p-2.5 ' + statusClass}>{status}</td>
+                        <td className="p-2.5 font-mono text-slate-300">
+                          {Math.abs(result.candidateRootDifferenceCents) < 20 ? 'egyezik' : (result.candidateRootDifferenceCents > 0 ? '+' : '') + result.candidateRootDifferenceCents.toFixed(0) + ' c'}
+                        </td>
+                        {result.partials.map((partial) => (
+                          <td key={partial.multiplier} className="p-2.5 font-mono text-slate-300">
+                            {partial.residualErrorCents === null ? '—' : (partial.residualErrorCents > 0 ? '+' : '') + partial.residualErrorCents.toFixed(2) + ' c'}
+                          </td>
+                        ))}
+                        <td className="p-2.5 font-mono text-slate-400">
+                          {result.partials.filter((partial) => partial.measuredHz !== null).length}/3
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-[10px] leading-5 text-slate-500">
+              A maradékhiba a mért frekvencia és a szintetikus jelforrás pontosan ismert frekvenciája közötti különbség.
+              A céleltérés (cent) ettől külön érték; inharmonikus felhangnál nem kell nullának lennie. A „cél / valódi gyökér” oszlop külön jelzi, ha a kiválasztott mérési cél valójában a generált jel 2× vagy 3× részfelhangjára esik.
+            </p>
+          </>
+        )}
+      </section>
 
       <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
         <h2 className="font-semibold">1. Referenciafelvétel betöltése</h2>

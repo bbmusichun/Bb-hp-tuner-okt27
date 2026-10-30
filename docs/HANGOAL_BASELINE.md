@@ -11,6 +11,15 @@ This document defines the functional baseline for the Hangoal handpan tuner from
 - Scala `!!reference` metadata can be resolved into an absolute scale-root frequency from the marked degree. Explicit Hz is authoritative; otherwise a standard pitch label is resolved through the current A4 reference. Applying the anchor is an explicit, opt-in import choice; the global A4 setting is never changed. The resulting exact-frequency note list is saved with the instrument profile.
 - Source degree order is preserved for bundled presets that intentionally use a non-monotonic list. Standard user imports are validated as ascending intervals by default.
 
+## Reproducible synthetic reference benchmark
+
+- The offline WAV laboratory can generate and analyse 14 deterministic software signals using the actual production WAV analyser.
+- Coverage includes clean D3, A3 and D4 notes; signed detuning (−10 to +25 cents); independent 2×/3× inharmonic offsets; a deliberately wrong octave target; a weak root with stronger upper partials; deterministic broadband noise; low-level input; clipping; and silence.
+- Every measurable partial is compared with the exact frequency used to generate that component. The report keeps target deviation separate from residual analyser error, so an inharmonic partial is not incorrectly treated as an analyser failure.
+- The octave-error case reports the difference between the selected candidate target and the true generated root, as well as the analyser's identifiability reasons.
+- Synthetic results are repeatable and suitable for regression testing. They are not an external frequency standard and do not validate microphone response, room acoustics, handpan radiation or absolute physical accuracy.
+- Remaining benchmark work: repeat the same test matrix at multiple FFT sizes and sample rates, add transient/decay, 50/60 Hz interference and close double peaks, and record analysis latency/UI FPS. Physical comparison against an external calibrated reference remains mandatory.
+
 ## Functional acceptance checklist
 
 | Capability | Current baseline / remaining work |
