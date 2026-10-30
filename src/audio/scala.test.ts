@@ -125,6 +125,18 @@ describe('Scala !!reference anchor resolution', () => {
     assert.equal(resolveScalaReferenceAnchor(implicit), null);
   });
 
+  it('uses the supplied A4 calibration for exact-frequency note labels and cent annotations', () => {
+    const parsed = parseScalaScl('A4 anchored scale\\n3\\n500 :E\\n900 :A !!reference 4\\n1200 :C\\n', { preserveSourceOrder: true });
+    assert.ok(parsed);
+    const anchor = resolveScalaReferenceAnchor(parsed, 442);
+    assert.ok(anchor);
+    const rootLabel = 'C4+' + Math.round(1200 * Math.log2(anchor.rootFrequencyHz / 442 / Math.pow(2, (60 - 69) / 12))) + 'c';
+    const rows = scalaToCustomScaleText(parsed, rootLabel, anchor.rootFrequencyHz, 442);
+    assert.ok(rows);
+    assert.ok(rows.startsWith(rootLabel + ', ' + anchor.rootFrequencyHz.toFixed(3)));
+    assert.equal(scalaToCustomScaleText(parsed, 'C4+2.5c', anchor.rootFrequencyHz, 442), null);
+  });
+
   it('handles a reference marker on the period row and rejects impossible anchor data', () => {
     const period = parseScalaScl('Octave reference\\n2\\n700 :G\\n2/1 :C !!reference 4 261.625565\\n');
     assert.ok(period);
