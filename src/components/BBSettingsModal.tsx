@@ -579,7 +579,6 @@ export const BBSettingsModal: React.FC<Props> = ({
                     setPendingScalaImport({ parsed, name: file.name.replace(/\.scl$/i, '') });
                     setUseScalaReferenceAnchor(false);
                     setCustomScaleNameDraft(file.name.replace(/\.scl$/i, ''));
-                    setPendingScalaImport({ parsed, name: file.name.replace(/\.scl$/i, '') });
                     setCustomScaleTextDraft(converted.text);
                     setCustomScaleMessage(scalaImportSuccessMessage(parsed, 'A Scala-skála beolvasva. Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.'));
                   } catch {
