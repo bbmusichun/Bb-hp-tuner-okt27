@@ -1,6 +1,7 @@
 import React from 'react';
 import { TuningLogEntry } from '../types/tuner';
 import { summarizeRepeatability } from '../audio/repeatabilitySummary';
+import { formatTuningToleranceSetting, isWithinTuningTolerance } from '../audio/tuningTolerance';
 import { Download, Trash2, CheckCircle, AlertTriangle, FileJson } from 'lucide-react';
 
 interface Props {
@@ -38,7 +39,7 @@ export const BBMeresekView: React.FC<Props> = ({
       l.noteName,
       l.audioSampleRateHz?.toFixed(0) ?? '',
       l.inputLevelDbfs?.toFixed(1) ?? '',
-      l.toleranceOverrideCents === undefined ? '' : l.toleranceOverrideCents === null ? 'Auto' : `±${l.toleranceOverrideCents.toFixed(1)} cent`,
+      l.toleranceOverrideCents === undefined ? '' : formatTuningToleranceSetting(l.toleranceOverrideCents, l.fundamentalTargetHz ?? l.fundamentalHz),
       l.fundamentalHz.toFixed(3),
       l.fundamentalTargetHz?.toFixed(3) ?? '',
       l.fundamentalCents.toFixed(2),
@@ -164,9 +165,17 @@ export const BBMeresekView: React.FC<Props> = ({
                     {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                   </span>
                 </div>
-                {log.overallInTune ? (
+                {log.toleranceOverrideCents === 'never' ? (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded-full">
+                    <AlertTriangle className="w-3 h-3" /> Zöld jelzés tiltva
+                  </span>
+                ) : log.toleranceOverrideCents === 'always' ? (
+                  <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-200 bg-emerald-500/15 px-2 py-0.5 rounded-full">
+                    <CheckCircle className="w-3 h-3" /> Minden eltérés elfogadva
+                  </span>
+                ) : log.overallInTune ? (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-[#10b981] bg-[#10b981]/15 px-2 py-0.5 rounded-full">
-                    <CheckCircle className="w-3 h-3" /> Célértéken (dinamikus tolerancia)
+                    <CheckCircle className="w-3 h-3" /> Célértéken
                   </span>
                 ) : (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-[#f59e0b] bg-[#f59e0b]/15 px-2 py-0.5 rounded-full">
@@ -181,7 +190,7 @@ export const BBMeresekView: React.FC<Props> = ({
                   {log.scaleId && <span>Hangolás: {log.scaleId}</span>}
                   {log.audioSampleRateHz !== undefined && <span>Fs: {log.audioSampleRateHz.toFixed(0)} Hz</span>}
                   {log.inputLevelDbfs !== undefined && <span>Bemenet: {log.inputLevelDbfs.toFixed(1)} dBFS</span>}
-                  {log.toleranceOverrideCents !== undefined && <span>Tűrés: {log.toleranceOverrideCents === null ? 'Auto' : `±${log.toleranceOverrideCents.toFixed(1)} cent`}</span>}
+                  {log.toleranceOverrideCents !== undefined && <span>Tűrés: {formatTuningToleranceSetting(log.toleranceOverrideCents, log.fundamentalTargetHz ?? log.fundamentalHz)}</span>}
                 </div>
               )}
               <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px] text-center">
@@ -189,7 +198,7 @@ export const BBMeresekView: React.FC<Props> = ({
                   <div className="text-[9px] text-[#f59e0b] font-sans font-semibold">Alap</div>
                   <div>{log.fundamentalHz.toFixed(2)} Hz</div>
                   <div className="text-[9px] text-slate-500">Cél: {log.fundamentalTargetHz !== undefined ? log.fundamentalTargetHz.toFixed(2) : '—'} Hz</div>
-                  <div className={Math.abs(log.fundamentalCents) <= 3 ? 'text-[#10b981] font-bold' : 'text-[#f59e0b]'}>
+                  <div className={isWithinTuningTolerance(log.fundamentalCents, log.fundamentalTargetHz ?? null, log.toleranceOverrideCents ?? null) ? 'text-[#10b981] font-bold' : 'text-[#f59e0b]'}>
                     {log.fundamentalCents > 0 ? '+' : ''}{log.fundamentalCents.toFixed(1)}¢
                   </div>
                 </div>
@@ -198,7 +207,7 @@ export const BBMeresekView: React.FC<Props> = ({
                   <div className="text-[9px] text-[#c084fc] font-sans font-semibold">3. parciális</div>
                   <div>{log.fifthHz.toFixed(2)} Hz</div>
                   <div className="text-[9px] text-slate-500">Cél: {log.fifthTargetHz !== undefined ? log.fifthTargetHz.toFixed(2) : '—'} Hz</div>
-                  <div className={Math.abs(log.fifthCents) <= 3 ? 'text-[#10b981] font-bold' : 'text-[#c084fc]'}>
+                  <div className={isWithinTuningTolerance(log.fifthCents, log.fifthTargetHz ?? null, log.toleranceOverrideCents ?? null) ? 'text-[#10b981] font-bold' : 'text-[#c084fc]'}>
                     {log.fifthCents > 0 ? '+' : ''}{log.fifthCents.toFixed(1)}¢
                   </div>
                 </div>
@@ -207,7 +216,7 @@ export const BBMeresekView: React.FC<Props> = ({
                   <div className="text-[9px] text-[#38bdf8] font-sans font-semibold">Oktáv</div>
                   <div>{log.octaveHz.toFixed(2)} Hz</div>
                   <div className="text-[9px] text-slate-500">Cél: {log.octaveTargetHz !== undefined ? log.octaveTargetHz.toFixed(2) : '—'} Hz</div>
-                  <div className={Math.abs(log.octaveCents) <= 3 ? 'text-[#10b981] font-bold' : 'text-[#38bdf8]'}>
+                  <div className={isWithinTuningTolerance(log.octaveCents, log.octaveTargetHz ?? null, log.toleranceOverrideCents ?? null) ? 'text-[#10b981] font-bold' : 'text-[#38bdf8]'}>
                     {log.octaveCents > 0 ? '+' : ''}{log.octaveCents.toFixed(1)}¢
                   </div>
                 </div>
