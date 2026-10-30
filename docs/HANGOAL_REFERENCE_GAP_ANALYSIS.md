@@ -71,7 +71,7 @@ A szoftveres jelek a matematikai hibákat tesztelik; a fizikai handpan, mikrofon
 
 1. **P0 - Mérés és célértékek:** relatív arány/cent cél a kiválasztott alaphanghoz kötve (az implementáció elkészült a PR-ágon); strobe-kontraszt és stabilitás (első implementáció, valós hanggal kalibrálandó); Scala névcímkék és `!!reference`; automatikus referenciajel-benchmark.
 2. **P0 - Referenciaeszköz paritás:** sávonkénti referenciahang, spektrum-interakció és tűrésmódok.
-3. **P1 - Munkafolyamat:** a stroboszkóp érzékenységszabályzója már elkészült; további hiány a bemeneti/kimeneti eszköz kiválasztása és a célra kalibrálás egy kattintással.
+3. **P1 - Munkafolyamat:** a stroboszkóp érzékenységszabályzója, az egyedi sávok egy kattintásos kalibrálása és a bemeneti/kimeneti eszközválasztás szoftveresen elkészült; valós mikrofonon, kimeneti útvonalon és handpanen végzett átvétel szükséges.
 4. **P1 - Valós eszköz átvétel:** iPhone/Safari és legalább egy másik célböngésző, valódi handpannal és külső referenciával.
 5. **P2 - Haladó kezelőfelület:** freeze, teljes billentyűzet-navigáció, több példány közötti vezérlés, ha valós felhasználási igény indokolja.
 
