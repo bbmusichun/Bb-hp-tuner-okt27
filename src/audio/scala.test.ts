@@ -82,21 +82,21 @@ describe('Scala SCL import', () => {
 
 describe('Scala reference pitch calibration', () => {
   it('uses an explicitly marked A4 frequency directly', () => {
-    const parsed = parseScalaScl('A reference\\n2\\n500 :A !!reference 4 442.5\\n1200 :C\\n');
+    const parsed = parseScalaScl('A reference\n2\n500 :A !!reference 4 442.5\n1200 :C\n');
     assert.ok(parsed);
     assert.equal(getScalaReferenceA4(parsed), 442.5);
   });
 
   it('derives A4 from a non-A reference note and its octave', () => {
-    const parsed = parseScalaScl('C reference\\n1\\n1200 :C !!reference 3 131.2\\n');
+    const parsed = parseScalaScl('C reference\n1\n1200 :C !!reference 3 131.2\n');
     assert.ok(parsed);
     const expected = 131.2 * Math.pow(2, 21 / 12);
     assert.ok(Math.abs((getScalaReferenceA4(parsed) ?? 0) - expected) < 1e-9);
   });
 
   it('does not infer a reference when the frequency or note label is absent', () => {
-    const noFrequency = parseScalaScl('Octave only\\n2\\n500 :A !!reference 4\\n1200 :C\\n');
-    const noLabel = parseScalaScl('Unlabelled reference\\n2\\n500 !!reference 4 442.5\\n1200 :C\\n');
+    const noFrequency = parseScalaScl('Octave only\n2\n500 :A !!reference 4\n1200 :C\n');
+    const noLabel = parseScalaScl('Unlabelled reference\n2\n500 !!reference 4 442.5\n1200 :C\n');
     assert.ok(noFrequency);
     assert.ok(noLabel);
     assert.equal(getScalaReferenceA4(noFrequency), null);
@@ -104,7 +104,7 @@ describe('Scala reference pitch calibration', () => {
   });
 
   it('rejects a reference that would exceed Hangoal A4 calibration limits', () => {
-    const parsed = parseScalaScl('Out of range\\n1\\n1200 :C !!reference 3 140\\n');
+    const parsed = parseScalaScl('Out of range\n1\n1200 :C !!reference 3 140\n');
     assert.ok(parsed);
     assert.equal(getScalaReferenceA4(parsed), null);
   });
