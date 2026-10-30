@@ -117,7 +117,7 @@ describe('Scala !!reference anchor resolution', () => {
     assert.ok(explicit);
     const anchor = resolveScalaReferenceAnchor(explicit);
     assert.ok(anchor);
-    assert.equal(anchor.referenceName, 'MI4');
+    assert.equal(anchor.referenceName, 'Mi4');
     assert.equal(anchor.referenceHz, 528);
 
     const implicit = parseScalaScl('Solfeggio\n2\n3/2 :Mi !!reference 4\n2/1 :C\n');
