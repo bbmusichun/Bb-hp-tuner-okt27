@@ -5,6 +5,8 @@ import {
   medianAbsoluteDeviation,
   summarizeWavPartial,
   QUALITY_THRESHOLDS,
+  describeMeasurementQuality,
+  MEASUREMENT_QUALITY_REASON_LABELS,
 } from './measurementQuality';
 import { analyzeWavRecording } from './wavAnalysis';
 import type { WavFrameAnalysis } from './wavAnalysis';
@@ -40,6 +42,41 @@ function sine(frequency: number, length: number, amplitude = 0.5): Float32Array 
   for (let i = 0; i < length; i++) samples[i] = amplitude * Math.sin(2 * Math.PI * frequency * i / RATE);
   return samples;
 }
+
+describe('quality verdict wording', () => {
+  it('explains the distinction between repeatability and absolute accuracy', () => {
+    const reliable = describeMeasurementQuality({
+      status: 'reliable',
+      reasons: [],
+      coverage: 1,
+    });
+    assert.equal(reliable.title, 'Ismételhető mérés');
+    assert.match(reliable.description, /abszolút pontosságot/);
+  });
+
+  it('gives actionable guidance for marginal and insufficient readings', () => {
+    const marginal = describeMeasurementQuality({
+      status: 'marginal',
+      reasons: ['too-few-windows'],
+      coverage: 0.5,
+    });
+    const insufficient = describeMeasurementQuality({
+      status: 'insufficient',
+      reasons: ['weak-peak'],
+      coverage: 0.1,
+    });
+    assert.match(marginal.description, /újramérni/);
+    assert.match(insufficient.description, /mérj újra/);
+  });
+
+  it('provides a Hungarian explanation for each quality reason', () => {
+    const reasons = Object.keys(MEASUREMENT_QUALITY_REASON_LABELS);
+    assert.equal(reasons.length, 6);
+    for (const reason of reasons) {
+      assert.ok(MEASUREMENT_QUALITY_REASON_LABELS[reason as keyof typeof MEASUREMENT_QUALITY_REASON_LABELS].length > 10);
+    }
+  });
+});
 
 describe('partial measurement quality', () => {
   it('treats repeatable, strong, prominent windows as a reliable reading', () => {

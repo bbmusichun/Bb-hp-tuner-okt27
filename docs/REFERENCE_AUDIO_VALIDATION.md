@@ -197,3 +197,9 @@ fixed cent threshold used for the saved overall in-tune status. Older records re
 fields are absent. Input level is a snapshot of the app's input meter, not a calibrated sound-pressure
 level (dB SPL); it must not be interpreted as acoustic loudness or used to compare microphone sensitivity
 without a calibrated acoustic reference.
+
+## Hangoal measurement quality feedback
+
+The WAV-based multi-window quality assessment provides human-readable Hungarian feedback about repeatability and important limitations. “Ismételhető mérés” means only that coverage, stability, signal level, and local peak prominence pass the current software criteria. It is not calibrated confidence, certified measurement uncertainty, or proof of absolute accuracy against an external frequency reference.
+
+Quality reasons are labeled separately: no measurement, too few windows, low coverage, unstable frequency, weak peak, or low peak prominence. The text feedback does not modify measured frequency or cents deviation. Real microphone and device testing remains a required release check.
