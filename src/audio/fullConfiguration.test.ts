@@ -36,6 +36,8 @@ const validBackup = () => ({
     autoDetect: true,
     autoDetectionMode: 'single-shot',
     toleranceOverrideCents: 2,
+    selectedInputDeviceId: 'input-device-1',
+    selectedOutputDeviceId: 'output-device-2',
     transposeSemitones: -3,
     strobeSensitivity: 1.25,
     readoutMode: 'ratio',
@@ -58,6 +60,8 @@ test('parses a complete validated bundle and preserves its settings', () => {
   assert.equal(result.settings.strobeSensitivity, 1.25);
   assert.equal(result.settings.readoutMode, 'ratio');
   assert.equal(result.settings.referenceToneMode, 'off');
+  assert.equal(result.settings.selectedInputDeviceId, 'input-device-1');
+  assert.equal(result.settings.selectedOutputDeviceId, 'output-device-2');
   assert.equal(result.settings.activeInstrumentProfileId, 'instrument-default');
   assert.deepEqual(result.disabledToneNotesByScale, { 'd-kurd-9': ['note-1'] });
   assert.equal(result.customStrobeBands[0].targetHz, 440);
@@ -132,4 +136,24 @@ test('rejects unknown special tolerance modes in imported backups', () => {
   const backup = validBackup();
   (backup.settings as unknown as Record<string, unknown>).toleranceOverrideCents = 'usually';
   assert.equal(parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile), null);
+});
+
+test('keeps older schema-v2 backups compatible when device routing preferences are absent', () => {
+  const backup = validBackup();
+  delete (backup.settings as unknown as Record<string, unknown>).selectedInputDeviceId;
+  delete (backup.settings as unknown as Record<string, unknown>).selectedOutputDeviceId;
+  const result = parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile);
+  assert.ok(result);
+  assert.equal(result.settings.selectedInputDeviceId, '');
+  assert.equal(result.settings.selectedOutputDeviceId, '');
+});
+
+test('rejects malformed audio device routing IDs in imported backups', () => {
+  const badInput = validBackup();
+  (badInput.settings as unknown as Record<string, unknown>).selectedInputDeviceId = 42;
+  assert.equal(parseHangoalFullConfiguration(badInput, ['d-kurd-9'], fallbackProfile), null);
+
+  const badOutput = validBackup();
+  (badOutput.settings as unknown as Record<string, unknown>).selectedOutputDeviceId = { id: 'output' };
+  assert.equal(parseHangoalFullConfiguration(badOutput, ['d-kurd-9'], fallbackProfile), null);
 });
