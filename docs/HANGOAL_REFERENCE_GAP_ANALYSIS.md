@@ -69,7 +69,7 @@ A szoftveres jelek a matematikai hibákat tesztelik; a fizikai handpan, mikrofon
 
 ## Prioritási sorrend
 
-1. **P0 - Mérés és célértékek:** relatív arány/cent cél a kiválasztott alaphanghoz kötve; Scala névcímkék és opt-in `!!reference` horgonyfeloldás automatizált tesztekkel elkészült; strobe-kontraszt és stabilitás valós hanggal kalibrálandó; az automatikus referenciajel-benchmark továbbra is nyitott.
+1. **P0 - Mérés és célértékek:** relatív arány/cent cél a kiválasztott alaphanghoz kötve; Scala névcímkék és opt-in `!!reference` horgonyfeloldás automatizált tesztekkel elkészült; a 14 esetből álló, determinisztikus szintetikus referenciajel-benchmark lefuttatható a WAV-laborból, benne detune-, inharmonicitás-, zaj-, szint-, klippelés-, csend- és szándékos oktávhiba-esettel. A fizikai handpan + külső referencia-összehasonlítás, időzítés/FPS és több mintavételezési/FFT profil még nyitott.
 2. **P0 - Referenciaeszköz paritás:** sávonkénti referenciahang, spektrum-interakció és tűrésmódok.
 3. **P1 - Munkafolyamat:** a stroboszkóp érzékenységszabályzója, az egyedi sávok egy kattintásos kalibrálása és a bemeneti/kimeneti eszközválasztás szoftveresen elkészült; valós mikrofonon, kimeneti útvonalon és handpanen végzett átvétel szükséges.
 4. **P1 - Valós eszköz átvétel:** iPhone/Safari és legalább egy másik célböngésző, valódi handpannal és külső referenciával.
