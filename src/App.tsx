@@ -26,7 +26,7 @@ import { isDetectionArmed, nextAutoDetectionMode, normalizeAutoDetectionMode, ty
 import { isEditableKeyboardTarget, resolveHangoalKeyboardAction } from './audio/keyboardShortcuts';
 import { parseHangoalFullConfiguration } from './audio/fullConfiguration';
 import { recordAnalysisFrame } from './audio/analysisRate';
-import { normalizeStrobeBands } from './audio/strobeBands';
+import { getStrobeBandTargetHz, normalizeStrobeBands, type StrobeBandConfig } from './audio/strobeBands';
 import { normalizeStrobeSensitivity } from './audio/strobeSensitivity';
 import { formatAudioDeviceLabel, type AudioDeviceOption } from './audio/deviceSelection';
 import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
@@ -163,6 +163,17 @@ function loadTuningPreferences(): {
     return defaults;
   }
 }
+function loadCustomStrobeBands(): StrobeBandConfig[] {
+  try {
+    const raw = localStorage.getItem('hangoal-custom-strobe-bands-v1');
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return normalizeStrobeBands(parsed).filter((band) => band.source === 'custom').slice(0, 8);
+  } catch {
+    return [];
+  }
+}
+
 function loadOwnDVolumePreference(): number {
   try {
     const stored = localStorage.getItem('hangoal-own-d-volume-v1');
@@ -231,6 +242,20 @@ export default function App() {
   const [strobeSensitivity, setStrobeSensitivity] = useState<number>(() => loadTuningPreferences().strobeSensitivity);
   const [readoutMode, setReadoutMode] = useState<TuningReadoutMode>(() => loadTuningPreferences().readoutMode);
   const [referenceToneMode, setReferenceToneMode] = useState<ReferenceToneMode>(() => loadTuningPreferences().referenceToneMode);
+  const [customStrobeBands, setCustomStrobeBands] = useState<StrobeBandConfig[]>(loadCustomStrobeBands);
+
+  useEffect(() => {
+    const refreshCustomBands = () => setCustomStrobeBands(loadCustomStrobeBands());
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === 'hangoal-custom-strobe-bands-v1') refreshCustomBands();
+    };
+    window.addEventListener('hangoal-custom-strobe-bands-updated', refreshCustomBands);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener('hangoal-custom-strobe-bands-updated', refreshCustomBands);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
 
   const refreshAudioDevices = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
