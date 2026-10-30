@@ -20,6 +20,8 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] A frekvencia (Hz), a céltól való eltérés (cent), a spektrum és a stabilitási grafikon konzisztens.
 - [ ] Túl nagy bemeneti szintnél figyelmeztetés jelenik meg; a túlvezérelt mérés nem tekintendő elfogadhatónak.
 - [ ] Folyamatos módban a referenciahang a kiválasztott csatorna célfrekvenciáján szól, és csak a mikrofon leállított állapotában indítható.
+- [ ] Az alaphang, a 3. parciális és az oktáv referenciahang-módja egymástól függetlenül módosítható, újranyitás után megmarad, és a teljes konfigurációs export/import is megőrzi őket.
+- [ ] Korábbi, csak globális referenciahang-módot tartalmazó beállítások és schema-v2 mentések mindhárom sávon ugyanazzal a móddal töltődnek be.
 - [ ] Ütésmódnál az egyszeri, 120 ms-os hang a tranziensvédelmi ablak elején szól; össze kell vetni a mért eredményt a hang nélkül kapott értékkel.
 - [ ] Kikapcsolt módban sem a referenciahang-gomb, sem a hangmezőtérkép nem generál referenciahangot.
 
