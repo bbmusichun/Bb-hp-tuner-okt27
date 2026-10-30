@@ -3,8 +3,8 @@ name: BB Tuner CI
 on:
   push:
     branches: [main, master, 'feature/sine-reference-calibration']
+  # Validate every pull request, including stacked feature-to-feature PRs.
   pull_request:
-    branches: [main, master, 'feature/sine-reference-calibration']
   workflow_dispatch:
 
 permissions:
