@@ -1864,6 +1864,15 @@ export default function App() {
           onResetPartialTargetOffsets={resetSelectedPartialOffsets}
           sampleRateKhz={sampleRateKhz}
           isListening={isListening}
+          audioInputDevices={audioInputDevices}
+          audioOutputDevices={audioOutputDevices}
+          selectedInputDeviceId={selectedInputDeviceId}
+          selectedOutputDeviceId={selectedOutputDeviceId}
+          outputDeviceSelectionSupported={bbAudioEngine.supportsOutputDeviceSelection()}
+          audioDeviceNotice={audioDeviceNotice}
+          onRefreshAudioDevices={() => { void refreshAudioDevices(); }}
+          onChangeAudioInputDevice={handleSelectAudioInput}
+          onChangeAudioOutputDevice={handleSelectAudioOutput}
         />
       </div>
     </div>
