@@ -40,6 +40,7 @@ const validBackup = () => ({
     strobeSensitivity: 1.25,
     readoutMode: 'ratio',
     referenceToneMode: 'off',
+    referenceToneModesByRole: { fundamental: 'continuous', fifth: 'strike', octave: 'off' },
     activeInstrumentProfileId: 'instrument-default',
     instrumentProfiles: [fallbackProfile],
   },
@@ -58,6 +59,7 @@ test('parses a complete validated bundle and preserves its settings', () => {
   assert.equal(result.settings.strobeSensitivity, 1.25);
   assert.equal(result.settings.readoutMode, 'ratio');
   assert.equal(result.settings.referenceToneMode, 'off');
+  assert.deepEqual(result.settings.referenceToneModesByRole, { fundamental: 'continuous', fifth: 'strike', octave: 'off' });
   assert.equal(result.settings.activeInstrumentProfileId, 'instrument-default');
   assert.deepEqual(result.disabledToneNotesByScale, { 'd-kurd-9': ['note-1'] });
   assert.equal(result.customStrobeBands[0].targetHz, 440);
@@ -111,5 +113,26 @@ test('keeps older complete backups compatible when strobe sensitivity is absent'
 test('rejects a strobe sensitivity outside the supported range', () => {
   const backup = validBackup();
   backup.settings.strobeSensitivity = 9;
+  assert.equal(parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile), null);
+});
+
+test('keeps schema-v2 backups compatible when per-band reference modes are absent', () => {
+  const backup = validBackup();
+  delete (backup.settings as unknown as Record<string, unknown>).referenceToneModesByRole;
+  const result = parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile);
+  assert.ok(result);
+  assert.deepEqual(result.settings.referenceToneModesByRole, {
+    fundamental: 'off',
+    fifth: 'off',
+    octave: 'off',
+  });
+});
+
+test('rejects partial or invalid per-band reference tone maps in imported backups', () => {
+  const backup = validBackup();
+  (backup.settings as unknown as Record<string, unknown>).referenceToneModesByRole = {
+    fundamental: 'continuous',
+    fifth: 'strike',
+  };
   assert.equal(parseHangoalFullConfiguration(backup, ['d-kurd-9'], fallbackProfile), null);
 });
