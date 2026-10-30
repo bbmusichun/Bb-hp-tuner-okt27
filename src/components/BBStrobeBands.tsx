@@ -143,7 +143,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         if (inTolerance) greenSinceRef.current[key] ??= now;
         else greenSinceRef.current[key] = null;
         const green = inTolerance && greenSinceRef.current[key] !== null && now - (greenSinceRef.current[key] ?? now) >= 1000;
-        const near = row.valid && row.cents !== null && Math.abs(row.cents) <= tolerance && !green;
+        const near = inTolerance && !green;
         const stripeWidth = row.stripeWidth;
         const period = stripeWidth * 2;
         const offset = ((phasesRef.current[key] % period) + period) % period;
