@@ -5,7 +5,7 @@ import { PRESET_SCALES } from '../audio/scales';
 import { MAX_PARTIAL_TARGET_OFFSET_CENTS, partialTargetFrequency } from '../audio/partialTargets';
 import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/partialTargets';
 import type { InstrumentProfile } from '../audio/instrumentProfiles';
-import { tuningToleranceCents } from '../audio/tuningTolerance';
+import { formatTuningToleranceSetting, type TuningToleranceSetting } from '../audio/tuningTolerance';
 import { parseScalaScl, scalaToCustomScaleText, type ParsedScalaScale } from '../audio/scala';
 
 function scalaImportSuccessMessage(parsed: ParsedScalaScale | null, message: string): string {
@@ -29,8 +29,8 @@ interface Props {
   onClose: () => void;
   a4Ref: number;
   onChangeA4: (a4: number) => void;
-  toleranceOverrideCents: number | null;
-  onChangeToleranceOverrideCents: (value: number | null) => void;
+  toleranceOverrideCents: TuningToleranceSetting;
+  onChangeToleranceOverrideCents: (value: TuningToleranceSetting) => void;
   selectedScaleId: string;
   onSelectScale: (scale: HandpanScale) => void;
   selectedNoteName: string;
@@ -343,14 +343,22 @@ export const BBSettingsModal: React.FC<Props> = ({
             <div className="flex items-center justify-between gap-2">
               <div className="font-semibold text-slate-300">Pontossági tűrés</div>
               <div className="font-mono text-[10px] text-[#f59e0b]">
-                ±{(toleranceOverrideCents ?? tuningToleranceCents(selectedNoteFundamentalHz)).toFixed(1)} cent
+                {formatTuningToleranceSetting(toleranceOverrideCents, selectedNoteFundamentalHz)}
               </div>
             </div>
             <p className="text-[10px] leading-relaxed text-slate-400">
-              A színjelzést és a mentett „pontos” minősítést állítja; a mért frekvenciát és centeltérést nem módosítja.
+              Csak az elfogadási jelzést állítja. A mért frekvencia és centeltérés egyik módban sem változik. A két szélső mód a referenciaalkalmazás „mindig elfogadott” és „soha nem zöld” beállítását követi.
             </p>
-            <div className="grid grid-cols-5 gap-1.5">
-              {([{ label: 'Auto', value: null }, { label: '±1', value: 1 }, { label: '±2', value: 2 }, { label: '±5', value: 5 }, { label: '±10', value: 10 }] as const).map((option) => {
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {([
+                { label: 'Auto', value: null },
+                { label: '±1', value: 1 },
+                { label: '±2', value: 2 },
+                { label: '±5', value: 5 },
+                { label: '±10', value: 10 },
+                { label: 'Mindig elfogadott', value: 'always' },
+                { label: 'Soha ne legyen zöld', value: 'never' },
+              ] as const).map((option) => {
                 const selected = toleranceOverrideCents === option.value;
                 return (
                   <button
