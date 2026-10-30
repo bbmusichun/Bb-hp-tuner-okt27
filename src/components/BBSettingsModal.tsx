@@ -1,13 +1,34 @@
 import React from 'react';
 import { X, Sliders, Music, ShieldCheck } from 'lucide-react';
 import { HandpanScale } from '../types/tuner';
-import { PRESET_SCALES } from '../audio/scales';
+import { freqToNoteAndCents, PRESET_SCALES } from '../audio/scales';
 import { MAX_PARTIAL_TARGET_OFFSET_CENTS, partialTargetFrequency } from '../audio/partialTargets';
 import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/partialTargets';
 import type { InstrumentProfile } from '../audio/instrumentProfiles';
 import { formatTuningToleranceSetting, type TuningToleranceSetting } from '../audio/tuningTolerance';
-import { parseScalaScl, scalaToCustomScaleText, type ParsedScalaScale } from '../audio/scala';
+import { parseScalaScl, resolveScalaReferenceAnchor, scalaToCustomScaleText, type ParsedScalaScale } from '../audio/scala';
 import type { AudioDeviceOption } from '../audio/deviceSelection';
+
+function createScalaImportPreview(
+  parsed: ParsedScalaScale,
+  selectedNoteName: string,
+  selectedNoteFundamentalHz: number,
+  a4Ref: number,
+  useReferenceAnchor: boolean,
+): { text: string; rootFrequencyHz: number; rootName: string } | null {
+  let rootFrequencyHz = selectedNoteFundamentalHz;
+  let rootName = selectedNoteName;
+  if (useReferenceAnchor) {
+    const anchor = resolveScalaReferenceAnchor(parsed, a4Ref);
+    if (!anchor) return null;
+    rootFrequencyHz = anchor.rootFrequencyHz;
+    const pitch = freqToNoteAndCents(rootFrequencyHz, a4Ref);
+    const cents = Math.round(pitch.cents);
+    rootName = pitch.note + (cents === 0 ? '' : (cents > 0 ? '+' : '') + cents + 'c');
+  }
+  const text = scalaToCustomScaleText(parsed, rootName, rootFrequencyHz, a4Ref);
+  return text ? { text, rootFrequencyHz, rootName } : null;
+}
 
 function scalaImportSuccessMessage(parsed: ParsedScalaScale | null, message: string): string {
   const reference = parsed?.reference;
@@ -21,7 +42,7 @@ function scalaImportSuccessMessage(parsed: ParsedScalaScale | null, message: str
     ? ''
     : ` (${reference.frequencyHz.toFixed(3)} Hz)`;
 
-  return `${message} Scala referencia-metaadat: ${referenceName}${frequency}. A célfrekvenciák a kiválasztott alaphanghoz igazodnak; az A4-kalibráció nem változik automatikusan.`;
+  return `${message} Scala referencia-metaadat: ${referenceName}${frequency}. Alapértelmezésben a kiválasztott hang marad a skála alaphangja; a referenciahorgony külön, kifejezett választással alkalmazható.`;
 }
 
 
@@ -106,9 +127,24 @@ export const BBSettingsModal: React.FC<Props> = ({
     activeProfile?.customScale?.notes.map((note) => `${note.name}, ${note.frequencyHz?.toFixed(3) ?? ''}`).join('\n') ?? '',
   );
   const [customScaleMessage, setCustomScaleMessage] = React.useState('');
+  const [pendingScalaImport, setPendingScalaImport] = React.useState<{ parsed: ParsedScalaScale; name: string } | null>(null);
+  const [useScalaReferenceAnchor, setUseScalaReferenceAnchor] = React.useState(false);
   const [bundledScalaAssets, setBundledScalaAssets] = React.useState<Array<{ path: string; category: string; name: string }>>([]);
   const [selectedBundledScalaPath, setSelectedBundledScalaPath] = React.useState('');
   const [isLoadingBundledScala, setIsLoadingBundledScala] = React.useState(false);
+  const pendingScalaAnchor = pendingScalaImport ? resolveScalaReferenceAnchor(pendingScalaImport.parsed, a4Ref) : null;
+
+  React.useEffect(() => {
+    if (!pendingScalaImport || !useScalaReferenceAnchor) return;
+    const preview = createScalaImportPreview(
+      pendingScalaImport.parsed,
+      selectedNoteName,
+      selectedNoteFundamentalHz,
+      a4Ref,
+      true,
+    );
+    if (preview) setCustomScaleTextDraft(preview.text);
+  }, [pendingScalaImport, useScalaReferenceAnchor, selectedNoteName, selectedNoteFundamentalHz, a4Ref]);
 
   React.useEffect(() => {
     if (!isOpen || bundledScalaAssets.length > 0) return;
@@ -138,6 +174,8 @@ export const BBSettingsModal: React.FC<Props> = ({
   const loadBundledScala = async () => {
     const asset = bundledScalaAssets.find((item) => item.path === selectedBundledScalaPath);
     if (!asset) return;
+    setPendingScalaImport(null);
+    setUseScalaReferenceAnchor(false);
     setIsLoadingBundledScala(true);
     try {
       const response = await fetch(asset.path);
@@ -145,14 +183,16 @@ export const BBSettingsModal: React.FC<Props> = ({
       const source = await response.text();
       const parsed = parseScalaScl(source, { preserveSourceOrder: true });
       const converted = parsed
-        ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
+        ? createScalaImportPreview(parsed, selectedNoteName, selectedNoteFundamentalHz, a4Ref, false)
         : null;
-      if (!converted) {
+      if (!parsed || !converted) {
         setCustomScaleMessage('Ez a Scala-fájl nem alakítható át biztonságosan a kiválasztott hanghoz.');
         return;
       }
+      setPendingScalaImport({ parsed, name: asset.name });
+      setUseScalaReferenceAnchor(false);
       setCustomScaleNameDraft(asset.name);
-      setCustomScaleTextDraft(converted);
+      setCustomScaleTextDraft(converted.text);
       setCustomScaleMessage(scalaImportSuccessMessage(parsed, 'A beépített skála betöltve. Ellenőrizd, majd alkalmazd az egyedi hangmezőt.'));
     } catch {
       setCustomScaleMessage('A beépített Scala-fájl nem olvasható.');
@@ -176,6 +216,8 @@ export const BBSettingsModal: React.FC<Props> = ({
       activeProfile?.customScale?.notes.map((note) => `${note.name}, ${note.frequencyHz?.toFixed(3) ?? ''}`).join('\n') ?? '',
     );
     setCustomScaleMessage('');
+    setPendingScalaImport(null);
+    setUseScalaReferenceAnchor(false);
   }, [activeInstrumentProfileId, activeProfile?.name, activeProfile?.customScale]);
 
   const commitOffset = (field: PartialTargetOffsetField, draft: string) => {
@@ -443,7 +485,52 @@ export const BBSettingsModal: React.FC<Props> = ({
               Készítői méréshez itt minden hang saját Hz-célértéket kap. Soronként egy hang: hangnév, frekvencia Hz-ben. 2–24 sor, 20–2000 Hz.
             </p>
             <div className="space-y-2 rounded-lg border border-white/5 bg-slate-900/60 p-3">
-              <label className="block text-xs font-semibold text-slate-200" htmlFor="bundled-scala-select">Beépített Scala-könyvtár · {bundledScalaAssets.length} skála</label>
+              {pendingScalaImport?.parsed.reference && (
+              <div className="rounded-lg border border-amber-400/25 bg-amber-400/5 p-3 space-y-2">
+                <label className={`flex items-start gap-2 text-[11px] font-semibold ${pendingScalaAnchor ? 'text-amber-100' : 'text-slate-400'}`}>
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 accent-amber-400"
+                    checked={useScalaReferenceAnchor}
+                    disabled={!pendingScalaAnchor}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      if (enabled && !pendingScalaAnchor) return;
+                      const preview = createScalaImportPreview(
+                        pendingScalaImport.parsed,
+                        selectedNoteName,
+                        selectedNoteFundamentalHz,
+                        a4Ref,
+                        enabled,
+                      );
+                      if (!preview) {
+                        setCustomScaleMessage('A referenciahorgonyból számított skála kívül esik a használható frekvenciatartományon.');
+                        return;
+                      }
+                      setUseScalaReferenceAnchor(enabled);
+                      setCustomScaleTextDraft(preview.text);
+                      setCustomScaleMessage(enabled
+                        ? `A !!reference horgony aktív: ${pendingScalaAnchor!.referenceName} = ${pendingScalaAnchor!.referenceHz.toFixed(3)} Hz. A skála gyökérfrekvenciája ${preview.rootFrequencyHz.toFixed(3)} Hz (${preview.rootName}); a globális A4 beállítás nem módosult.`
+                        : 'A Scala-előnézet visszaállt a kiválasztott hanghoz igazított alaphangra.');
+                    }}
+                  />
+                  <span>!!reference használata skálahorgonyként</span>
+                </label>
+                {pendingScalaAnchor ? (
+                  <p className="text-[10px] leading-relaxed text-slate-300">
+                    Referencia: <span className="font-mono text-white">{pendingScalaAnchor.referenceName} = {pendingScalaAnchor.referenceHz.toFixed(3)} Hz</span>.
+                    Ebből számított skálagyökér: <span className="font-mono text-white">{pendingScalaAnchor.rootFrequencyHz.toFixed(3)} Hz</span>.
+                    A jelölőnél szereplő hangot és oktávot a Scala-fájl explicit Hz értékével, vagy ennek hiányában az aktuális A4-kalibrációval oldjuk fel. A globális A4 nem íródik át.
+                  </p>
+                ) : (
+                  <p className="text-[10px] leading-relaxed text-amber-200">
+                    A referenciahorgony nem számítható ki. A jelölt fokhoz explicit Hz érték vagy szabványos hangnév szükséges; például a „Mi” címke önmagában nem határoz meg hangmagasságot.
+                  </p>
+                )}
+                <p className="text-[9px] text-slate-500">A kapcsoló újragenerálja a skála előnézeti hanglistáját. Alkalmazás előtt ellenőrizd a frekvenciákat.</p>
+              </div>
+            )}
+            <label className="block text-xs font-semibold text-slate-200" htmlFor="bundled-scala-select">Beépített Scala-könyvtár · {bundledScalaAssets.length} skála</label>
               <select
                 id="bundled-scala-select"
                 value={selectedBundledScalaPath}
@@ -479,16 +566,20 @@ export const BBSettingsModal: React.FC<Props> = ({
                   const file = event.target.files?.[0];
                   if (!file) return;
                   try {
+                    setPendingScalaImport(null);
+                    setUseScalaReferenceAnchor(false);
                     const parsed = parseScalaScl(await file.text(), { preserveSourceOrder: true });
                     const converted = parsed
-                      ? scalaToCustomScaleText(parsed, selectedNoteName, selectedNoteFundamentalHz)
+                      ? createScalaImportPreview(parsed, selectedNoteName, selectedNoteFundamentalHz, a4Ref, false)
                       : null;
-                    if (!converted) {
+                    if (!parsed || !converted) {
                       setCustomScaleMessage('A Scala-fájl hibás, vagy a skála több mint 24 használható hangot tartalmaz.');
                       return;
                     }
+                    setPendingScalaImport({ parsed, name: file.name.replace(/\.scl$/i, '') });
+                    setUseScalaReferenceAnchor(false);
                     setCustomScaleNameDraft(file.name.replace(/\.scl$/i, ''));
-                    setCustomScaleTextDraft(converted);
+                    setCustomScaleTextDraft(converted.text);
                     setCustomScaleMessage(scalaImportSuccessMessage(parsed, 'A Scala-skála beolvasva. Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.'));
                   } catch {
                     setCustomScaleMessage('A Scala-fájl nem olvasható.');
@@ -519,6 +610,10 @@ export const BBSettingsModal: React.FC<Props> = ({
               type="button"
               onClick={() => {
                 const applied = onApplyCustomScale(customScaleNameDraft, customScaleTextDraft);
+                if (applied) {
+                  setPendingScalaImport(null);
+                  setUseScalaReferenceAnchor(false);
+                }
                 setCustomScaleMessage(applied
                   ? 'Az egyedi hangmező alkalmazva és a hangszerprofilhoz mentve.'
                   : 'Hibás adatok. Ellenőrizd a hangneveket, a duplikációkat és a 20–2000 Hz közötti célfrekvenciákat.');

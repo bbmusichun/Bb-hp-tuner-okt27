@@ -8,6 +8,7 @@ This document defines the functional baseline for the Hangoal handpan tuner from
 - public/scales/catalog.json indexes every bundled scale for the in-app selector.
 - The in-app Scala selector loads bundled scales directly; users do not need to upload the built-in files.
 - Manual import remains available for additional user-provided .scl files.
+- Scala `!!reference` metadata can be resolved into an absolute scale-root frequency from the marked degree. Explicit Hz is authoritative; otherwise a standard pitch label is resolved through the current A4 reference. Applying the anchor is an explicit, opt-in import choice; the global A4 setting is never changed. The resulting exact-frequency note list is saved with the instrument profile.
 - Source degree order is preserved for bundled presets that intentionally use a non-monotonic list. Standard user imports are validated as ascending intervals by default.
 
 ## Functional acceptance checklist

@@ -32,7 +32,17 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] Ütésmódnál az egyszeri, 120 ms-os hang a tranziensvédelmi ablak elején szól; össze kell vetni a mért eredményt a hang nélkül kapott értékkel.
 - [ ] Kikapcsolt módban sem a referenciahang-gomb, sem a hangmezőtérkép nem generál referenciahangot.
 
-## 3. Hangszerprofilok és célértékek
+## 3. Scala-import és referenciahorgony
+
+- [ ] `!!reference` nélküli SCL-import továbbra is a kiválasztott hangot használja skálagyökérként.
+- [ ] Explicit `!!reference 4 442.5` esetén a megjelölt skálafok 442.5 Hz-re kerül, a gyökérfrekvencia az adott fok intervalumából számolódik ki.
+- [ ] Hz nélküli, szabványos hangcímkéjű jelölő (A4, F#4, Bb4) az aktuális A4-kalibrációval oldódik fel.
+- [ ] Solfège címke (pl. Mi) explicit Hz nélkül nem aktiválható referenciahorgonyként; a felület egyértelmű magyarázatot ad.
+- [ ] A horgony alkalmazása külön, alapból kikapcsolt választás; bekapcsoláskor a preview a tényleges gyökérhangot és centeltérést mutatja.
+- [ ] A Scala-horgony alkalmazása nem módosítja a globális A4-kalibrációt; a profil újratöltése után a pontos frekvencialista változatlan.
+- [ ] Periodus-soron elhelyezett `!!reference` marker is helyesen számolódik.
+
+## 4. Hangszerprofilok és célértékek
 
 - [ ] Két fizikai handpanhez külön profil hozható létre, kiválasztható és átnevezhető.
 - [ ] Az egyes profilok A4-referenciája és parciális-célértékei nem keverednek.
@@ -40,7 +50,7 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] Egy ismert egyedi cél — például D3, 146.900 — pontosan megmarad; az alkalmazás nem kerekíti vissza egyenletes temperálásra.
 - [ ] Hibás vagy duplikált hangnév, illetve 20–2000 Hz tartományon kívüli érték esetén hibajelzés jelenik meg.
 
-## 4. Tűrés és mérési napló
+## 5. Tűrés és mérési napló
 
 - [ ] Az Auto, ±1, ±2, ±5 és ±10 cent, „Mindig elfogadott” és „Soha ne legyen zöld” beállítás a fő kijelzésben, a mérési kártyákon, mindkét stroboszkópon, a spektrumon és a stabilitási grafikonon ugyanazt az elfogadási szabályt használja.
 - [ ] „Mindig elfogadott” módban minden érvényes mérés elfogadott jelzést kap, de a tényleges Hz- és centérték változatlan marad.
@@ -52,7 +62,7 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] CSV- és JSON-export megnyitható, és a fejléc/oszlopok a mentett adatokkal egyeznek.
 - [ ] Az ismételhetőségi összegzés legalább három érvényes, ugyanahhoz a fizikai hangszerhez, hangolási profilhoz és hanghoz tartozó mintát igényel.
 
-## 5. Adatmentés és hibakezelés
+## 6. Adatmentés és hibakezelés
 
 - [ ] A teljes konfiguráció JSON-biztonsági mentése letölthető; ellenőrizd, hogy tartalmazza a profilokat, hangolási beállításokat, hangmező-aktiválást, egyedi stroboszkópsávokat és mérési naplót.
 - [ ] A teljes konfiguráció visszaállítása újratöltés után is megőrzi a célprofilt, A4-referenciát, transzponálást, módokat, hangmezőket és egyedi sávokat.
@@ -62,7 +72,7 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] Hibás JSON vagy hibás profil importja nem törli a meglévő beállításokat.
 - [ ] Újratöltés után a profil, az egyedi hangmező és a tűrésbeállítás megmarad.
 
-## 6. Akusztikai átvétel
+## 7. Akusztikai átvétel
 
 - [ ] Ugyanazt a hangot többször megütve ellenőrizzük az eredmények stabilitását, azonos mikrofonelhelyezéssel.
 - [ ] Az eredményt egy dokumentált, külső frekvencia-referenciával vetjük össze a tényleges célkészüléken.

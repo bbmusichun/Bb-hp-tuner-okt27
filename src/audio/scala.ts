@@ -142,18 +142,21 @@ export function parseScalaScl(
  * Convert Scala intervals to exact-frequency custom-scale rows.
  * The chosen note/frequency remains the tonic anchor. Familiar note labels in
  * the SCL file are transposed to that tonic for clearer enharmonic spelling;
- * explicit !!reference metadata is retained separately and never silently
- * overrides the user's selected target or global A4 calibration.
+ * explicit !!reference metadata is retained separately. The caller may
+ * opt in to using that metadata as a reference anchor; the global A4 setting
+ * is passed explicitly and is never mutated by this conversion.
  */
 export function scalaToCustomScaleText(
   parsed: ParsedScalaScale,
   rootNote: string,
   rootFrequencyHz: number,
+  a4Ref = 440,
 ): string | null {
   if (!Number.isFinite(rootFrequencyHz) || rootFrequencyHz < 20 || rootFrequencyHz > 2000 ||
-      !/^[A-Ga-g](?:#|b)?-?\d{1,2}$/.test(rootNote)) return null;
+      !Number.isFinite(a4Ref) || a4Ref < 420 || a4Ref > 450 ||
+      !/^[A-Ga-g](?:#|b)?-?\d{1,2}(?:[+-]\d+c)?$/.test(rootNote)) return null;
 
-  const root = freqToNoteAndCents(rootFrequencyHz);
+  const root = freqToNoteAndCents(rootFrequencyHz, a4Ref);
   const tonicLabel = parsePitchClassLabel(parsed.periodLabel);
   const rootPitchClass = ((root.midi % 12) + 12) % 12;
   const labelShift = tonicLabel ? (rootPitchClass - tonicLabel.pitchClass + 12) % 12 : null;
@@ -168,7 +171,7 @@ export function scalaToCustomScaleText(
 
     const semitoneOffset = Math.round(cents / 100);
     const targetMidi = root.midi + semitoneOffset;
-    const targetEqualTemperamentHz = 440 * Math.pow(2, (targetMidi - 69) / 12);
+    const targetEqualTemperamentHz = a4Ref * Math.pow(2, (targetMidi - 69) / 12);
     const centsFromSemitone = 1200 * Math.log2(frequency / targetEqualTemperamentHz);
     const sourceLabel = parsed.degreeLabels[i];
     const sourcePitchClass = parsePitchClassLabel(sourceLabel);
@@ -184,7 +187,7 @@ export function scalaToCustomScaleText(
         ? note
         : note + (roundedCents > 0 ? '+' : '') + roundedCents + 'c';
     } else {
-      const pitch = freqToNoteAndCents(frequency);
+      const pitch = freqToNoteAndCents(frequency, a4Ref);
       const roundedCents = Math.round(pitch.cents);
       noteName = roundedCents === 0
         ? pitch.note
@@ -196,4 +199,57 @@ export function scalaToCustomScaleText(
 
   if (notes.length < 2 || notes.length > 24) return null;
   return notes.map((note) => note.name + ', ' + note.frequency.toFixed(3)).join('\n');
+}
+
+
+export interface ResolvedScalaReferenceAnchor {
+  referenceName: string;
+  referenceHz: number;
+  intervalCents: number;
+  rootFrequencyHz: number;
+}
+
+/**
+ * Resolve the non-standard !!reference marker into an absolute tonic anchor.
+ *
+ * The marked row identifies a degree in the SCL period. With explicit Hz, that
+ * value is authoritative. Without Hz, only a conventional note label (A, F^#,
+ * Bb...) can be resolved, using the supplied A4 calibration. Solfege labels
+ * such as Mi require explicit Hz rather than a guessed pitch.
+ */
+export function resolveScalaReferenceAnchor(
+  parsed: ParsedScalaScale,
+  a4Ref = 440,
+): ResolvedScalaReferenceAnchor | null {
+  const reference = parsed.reference;
+  if (!reference || !Number.isFinite(a4Ref) || a4Ref < 420 || a4Ref > 450 ||
+      !Number.isInteger(reference.degreeIndex) || reference.degreeIndex < 1 ||
+      reference.degreeIndex > parsed.count) return null;
+
+  const intervalCents = reference.degreeIndex === parsed.count
+    ? parsed.periodCents
+    : parsed.intervalsCents[reference.degreeIndex - 1];
+  if (!Number.isFinite(intervalCents) || intervalCents <= 0) return null;
+
+  let referenceHz = reference.frequencyHz;
+  if (referenceHz === undefined) {
+    const pitch = parsePitchClassLabel(reference.label);
+    if (!pitch) return null;
+    const midi = 12 * (reference.octave + 1) + pitch.pitchClass;
+    referenceHz = a4Ref * Math.pow(2, (midi - 69) / 12);
+  }
+  if (!Number.isFinite(referenceHz) || referenceHz < 20 || referenceHz > 2000) return null;
+
+  const rootFrequencyHz = referenceHz / Math.pow(2, intervalCents / 1200);
+  if (!Number.isFinite(rootFrequencyHz) || rootFrequencyHz < 20 || rootFrequencyHz > 2000) return null;
+
+  const label = reference.label
+    ? reference.label.charAt(0).toUpperCase() + reference.label.slice(1).replace(/\^#/g, '#').replace(/\^b/g, 'b')
+    : `fok ${reference.degreeIndex}`;
+  return {
+    referenceName: `${label}${reference.octave}`,
+    referenceHz,
+    intervalCents,
+    rootFrequencyHz,
+  };
 }
