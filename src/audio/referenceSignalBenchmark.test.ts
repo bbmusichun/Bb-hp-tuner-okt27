@@ -16,6 +16,7 @@ describe('deterministic reference signal benchmark', () => {
     assert.ok(ids.has('d3-minus-5-cent'));
     assert.ok(ids.has('d3-plus-25-cent'));
     assert.ok(ids.has('third-partial-inharmonic'));
+    assert.ok(ids.has('octave-error-candidate'));
     assert.ok(ids.has('weak-fundamental'));
     assert.ok(ids.has('deterministic-noise'));
     assert.ok(ids.has('low-level'));
@@ -53,6 +54,18 @@ describe('deterministic reference signal benchmark', () => {
         assert.ok(Math.abs(partial.residualErrorCents ?? Infinity) < 1, result.name + ' residual: ' + partial.residualErrorCents);
       }
     }
+  });
+
+  it('flags a candidate one octave above the true synthesized root', () => {
+    const scenario = DEFAULT_REFERENCE_SIGNAL_SCENARIOS.find((item) => item.id === 'octave-error-candidate');
+    assert.ok(scenario);
+    const [result] = runReferenceSignalBenchmark([scenario]);
+    assert.ok(result.analysisAvailable);
+    assert.ok(Math.abs(result.candidateRootDifferenceCents - 1200) < 1e-9);
+    assert.equal(result.identifiabilityStatus, 'unidentified');
+    assert.ok(result.identifiabilityReasons.includes('strong-subharmonic'));
+    assert.ok(result.partials[0].measuredHz !== null);
+    assert.ok(Math.abs(result.partials[0].residualErrorCents ?? Infinity) < 1);
   });
 
   it('separates designed inharmonicity from analyser residual error', () => {
@@ -94,6 +107,8 @@ describe('deterministic reference signal benchmark', () => {
     assert.ok(summary.meanAbsoluteResidualErrorCents !== null);
     assert.ok(summary.worstAbsoluteResidualErrorCents !== null);
     assert.ok(summary.worstAbsoluteResidualErrorCents < 1);
+    assert.equal(summary.candidateRootMismatchCount, 1);
+    assert.equal(summary.suspectedOctaveErrorCount, 1);
     assert.ok(summary.missingPartialCount >= 3);
   });
 });
