@@ -15,6 +15,9 @@ export interface HangoalFullConfiguration {
     autoDetect: boolean;
     autoDetectionMode: AutoDetectionMode;
     toleranceOverrideCents: TuningToleranceSetting;
+    /** Browser/device-specific routing preferences; optional for older schema-v2 backups. */
+    selectedInputDeviceId?: string;
+    selectedOutputDeviceId?: string;
     transposeSemitones: number;
     strobeSensitivity: number;
     readoutMode: TuningReadoutMode;
@@ -77,6 +80,8 @@ export function parseHangoalFullConfiguration(
   if (settings.readoutMode !== 'hz' && settings.readoutMode !== 'cents' && settings.readoutMode !== 'note' && settings.readoutMode !== 'ratio') return null;
   if (settings.referenceToneMode !== 'continuous' && settings.referenceToneMode !== 'strike' && settings.referenceToneMode !== 'off') return null;
   if (!isValidTuningToleranceSetting(settings.toleranceOverrideCents)) return null;
+  if (settings.selectedInputDeviceId !== undefined && typeof settings.selectedInputDeviceId !== 'string') return null;
+  if (settings.selectedOutputDeviceId !== undefined && typeof settings.selectedOutputDeviceId !== 'string') return null;
   if (typeof settings.transposeSemitones !== 'number' || !Number.isInteger(settings.transposeSemitones) ||
     settings.transposeSemitones < -12 || settings.transposeSemitones > 12) return null;
   if (settings.strobeSensitivity !== undefined && !isValidStrobeSensitivity(settings.strobeSensitivity)) return null;
@@ -106,6 +111,8 @@ export function parseHangoalFullConfiguration(
       autoDetect: settings.autoDetect,
       autoDetectionMode: settings.autoDetectionMode,
       toleranceOverrideCents: settings.toleranceOverrideCents,
+      selectedInputDeviceId: settings.selectedInputDeviceId ?? '',
+      selectedOutputDeviceId: settings.selectedOutputDeviceId ?? '',
       transposeSemitones: settings.transposeSemitones,
       strobeSensitivity,
       readoutMode: settings.readoutMode,
