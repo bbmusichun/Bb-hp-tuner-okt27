@@ -74,8 +74,8 @@ export const BBStrobeBands: React.FC<Props> = ({
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const lastPersistedBandsRef = useRef<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands });
-  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands };
+  const latestRef = useRef({ alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands, isMicrophoneListening });
+  latestRef.current = { alap, kvint, oktav, hasSignal, active, transientHoldoff, toleranceOverrideCents, strobeSensitivity, baseFrequencyHz, customBands, isMicrophoneListening };
   const phasesRef = useRef<Record<string, number>>({});
   const smoothRef = useRef<Record<string, number>>({});
   const lastValidRef = useRef<Record<string, number>>({});
@@ -261,10 +261,13 @@ export const BBStrobeBands: React.FC<Props> = ({
       const outputApplied = await bbAudioEngine.setOutputDevice(selectedOutputDeviceId);
       if (!outputApplied) onAudioDeviceNotice?.('A mentett hangkimenet nem érhető el; a rendszer alapértelmezett kimenetét használom.');
     }
-    if (isMicrophoneListening || band.referenceToneMode !== 'continuous') return;
+    const latestBand = latestRef.current.customBands.find((candidate) => candidate.id === band.id);
+    if (latestRef.current.isMicrophoneListening || !latestBand || !latestBand.enabled || latestBand.referenceToneMode !== 'continuous') return;
+    const latestTargetHz = getStrobeBandTargetHz(latestBand, latestRef.current.baseFrequencyHz);
+    if (!Number.isFinite(latestTargetHz) || latestTargetHz <= 0) return;
     playingCustomToneBandIdRef.current = band.id;
     setPlayingCustomToneBandId(band.id);
-    bbAudioEngine.playTone(targetHz);
+    bbAudioEngine.playTone(latestTargetHz);
     onCustomReferenceTonePlaying?.(true);
   };
   const addBand = () => {
