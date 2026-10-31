@@ -10,12 +10,14 @@ import { detectTransientOnset, isTransientHoldoffActive, StablePitchTracker } fr
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
 import { isNearDigitalClipPeak } from './inputClipping';
+import { isUsableSignalLevel } from './signalLevel';
 import { isSameMeasurementTarget } from './measurementCache';
-import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
-import { analyzeSpectralPeakInWindow, findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
+import { isReliableResonanceConfidence, isTrackableResonancePeak, resonanceConfidenceFromDb } from './peakConfidence';
+import { analyzeSpectralPeakInWindow } from './spectralPeak';
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
+import { createMicrophoneAudioConstraints } from './microphoneConstraints';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -81,20 +83,13 @@ export class BBAudioEngine {
 
       this.sampleRate = this.audioCtx.sampleRate;
 
-      // Request raw microphone audio without telecom filtering. A selected device is
-      // requested with an exact ID; if it has disappeared, retry the default device.
+      // Request the least-processed microphone signal available. Browser/device DSP
+      // may still override these preferences; inspect the actual track settings below.
       this.lastInputDeviceFallback = false;
-      const baseAudioConstraints: MediaTrackConstraints = {
-        echoCancellation: false,
-        noiseSuppression: false,
-        // Ask the browser/OS to normalize microphone level for quiet strikes.
-        // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
-        autoGainControl: true,
-      };
       if (preferredDeviceId) {
         try {
           this.microphoneStream = await navigator.mediaDevices.getUserMedia({
-            audio: { ...baseAudioConstraints, deviceId: { exact: preferredDeviceId } },
+            audio: createMicrophoneAudioConstraints(preferredDeviceId),
           });
         } catch (deviceError: unknown) {
           const errorName = deviceError instanceof DOMException
@@ -104,10 +99,10 @@ export class BBAudioEngine {
               : '';
           if (!shouldRetryDefaultAudioInput(errorName, preferredDeviceId)) throw deviceError;
           this.lastInputDeviceFallback = true;
-          this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: baseAudioConstraints });
+          this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: createMicrophoneAudioConstraints() });
         }
       } else {
-        this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: baseAudioConstraints });
+        this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: createMicrophoneAudioConstraints() });
       }
       const microphoneTrack = this.microphoneStream.getAudioTracks()[0];
       const trackSettings = typeof microphoneTrack?.getSettings === 'function'
@@ -341,18 +336,24 @@ export class BBAudioEngine {
   public detectNote(candidates: NoteCandidate[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
     if (!this.analyser || this.micState !== 'active' || candidates.length === 0) return null;
     this.analyser.getFloatFrequencyData(this.freqData as any);
-    const binWidth = this.sampleRate / (this.freqData.length * 2);
-    const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number } | null => {
-      const minHz = targetHz * Math.pow(2, -centsWindow / 1200);
-      const maxHz = targetHz * Math.pow(2, centsWindow / 1200);
-      const lo = Math.max(1, Math.floor(minHz / binWidth));
-      const hi = Math.min(this.freqData.length - 2, Math.ceil(maxHz / binWidth));
-      let best = -1;
-      for (let i = lo; i <= hi; i++) {
-        if (this.freqData[i] > this.freqData[i - 1] && this.freqData[i] >= this.freqData[i + 1] && (best < 0 || this.freqData[i] > this.freqData[best])) best = i;
-      }
-      if (best < 0 || this.freqData[best] < -78) return null;
-      return { db: this.freqData[best], hz: interpolateSpectralPeak(best, this.freqData, this.sampleRate).freq };
+    const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number; ambiguous?: boolean; prominenceDb?: number } | null => {
+      const analysis = analyzeSpectralPeakInWindow(
+        targetHz,
+        centsWindow,
+        this.freqData,
+        this.sampleRate,
+        -78,
+        4,
+        2,
+        150,
+      );
+      if (!analysis.peak) return null;
+      return {
+        db: analysis.peak.magDb,
+        hz: analysis.peak.freq,
+        ambiguous: analysis.ambiguous,
+        prominenceDb: analysis.prominenceDb,
+      };
     };
     return chooseNoteCandidate(candidates, peakNear);
   }
@@ -417,7 +418,10 @@ export class BBAudioEngine {
     const db = rms > 1e-5 ? Math.max(-100, Math.min(0, 20 * Math.log10(rms))) : -100;
     this.inputLevelDb = Math.round(db);
 
-    const hasSignal = db > -58; // RMS gate for audio presence
+    // Retain quiet late-decay resonances; individual FFT peak strength and stable tracking
+    // still decide whether each channel is reliable. The real D3 reference remains measurable
+    // around -71 dBFS RMS, while its final noise-level tail falls below this gate.
+    const hasSignal = isUsableSignalLevel(db);
     const highInputLevel = db > -8; // Near-full-scale input can clip or distort transients.
 
     // Detect attacks with a short-time RMS window that overlaps adjacent analysis
@@ -459,7 +463,13 @@ export class BBAudioEngine {
     const rawFundamentalPeak = fundamentalAnalysis?.peak ?? null;
     // Refine the fundamental only when the independent periodicity estimate strongly agrees
     // with the FFT peak. The FFT remains the primary reference; YIN cannot pull it to an octave.
-    const fPeak = rawFundamentalPeak && yinEstimate.frequencyHz !== null
+    const fundamentalPeakIsTrackable = rawFundamentalPeak !== null &&
+      isTrackableResonancePeak(
+        fundamentalAnalysis?.ambiguous ?? false,
+        resonanceConfidenceFromDb(rawFundamentalPeak.magDb),
+        fundamentalAnalysis?.prominenceDb ?? 0,
+      );
+    const fPeak = fundamentalPeakIsTrackable && rawFundamentalPeak && yinEstimate.frequencyHz !== null
       ? {
           ...rawFundamentalPeak,
           freq: fuseAgreeingFrequencyEstimates(
@@ -484,7 +494,8 @@ export class BBAudioEngine {
       targetFundamentalHz,
       now,
       hasSignal,
-      fundamentalAnalysis?.ambiguous ?? false
+      fundamentalAnalysis?.ambiguous ?? false,
+      fundamentalAnalysis?.prominenceDb ?? 0
     );
 
     const kvint = this.buildResonanceMeasurement(
@@ -495,7 +506,8 @@ export class BBAudioEngine {
       targetFifthHz,
       now,
       hasSignal,
-      fifthAnalysis?.ambiguous ?? false
+      fifthAnalysis?.ambiguous ?? false,
+      fifthAnalysis?.prominenceDb ?? 0
     );
 
     const oktav = this.buildResonanceMeasurement(
@@ -506,7 +518,8 @@ export class BBAudioEngine {
       targetOctaveHz,
       now,
       hasSignal,
-      octaveAnalysis?.ambiguous ?? false
+      octaveAnalysis?.ambiguous ?? false,
+      octaveAnalysis?.prominenceDb ?? 0
     );
 
     // Stability history follows the currently displayed resonance. Exclude transient and
@@ -573,20 +586,30 @@ export class BBAudioEngine {
     targetHz: number,
     now: number,
     hasSignal: boolean,
-    peakAmbiguous = false
+    peakAmbiguous = false,
+    peakProminenceDb = 0
   ): ResonanceMeasurement {
     // Never accept a spectral peak when the time-domain gate says there is no usable signal.
     const rawPeak = hasSignal ? peak : null;
+    const confidence = rawPeak ? resonanceConfidenceFromDb(rawPeak.magDb) : 0;
+    const trackable = rawPeak !== null &&
+      isTrackableResonancePeak(peakAmbiguous, confidence, peakProminenceDb);
     let currentPeak = rawPeak;
-    if (rawPeak) {
+
+    if (trackable && rawPeak) {
       const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now);
       this.pitchHistory[role] = smoothed.history;
       currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
+    } else {
+      // A weak, ambiguous, or missing peak must not enter the median history or
+      // complete a stability run. Keep a visible raw reading where available.
+      this.pitchHistory[role] = [];
+      this.stablePitchTrackers[role].reset();
     }
-    const confidence = currentPeak ? resonanceConfidenceFromDb(currentPeak.magDb) : 0;
-    const stability = rawPeak
+
+    const stability = trackable && rawPeak
       ? this.stablePitchTrackers[role].observe({ frequencyHz: rawPeak.freq, confidence, timestampMs: now })
-      : (this.stablePitchTrackers[role].reset(), { stable: false, frequencyHz: null, count: 0 });
+      : { stable: false, frequencyHz: null, count: 0 };
     const finalized = finalizePeakReading(
       currentPeak,
       stability.stable ? stability.frequencyHz : null,
@@ -599,7 +622,7 @@ export class BBAudioEngine {
     // than live. This gives the player time to read the value after a strike while
     // preserving a clear distinction between a live measurement and a retained result.
     const status = currentPeak && hasSignal
-      ? !peakAmbiguous && stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      ? trackable && stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
       : 'no-signal';
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {

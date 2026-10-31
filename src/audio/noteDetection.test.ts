@@ -89,3 +89,75 @@ describe('robust note recognition for detuned handpan notes', () => {
     assert.equal(chooseNoteCandidate([d3, a3], detect)?.id, 'd3');
   });
 });
+
+
+describe('ambiguous resonance handling during automatic note detection', () => {
+  it('does not count an ambiguous fundamental as valid note evidence', () => {
+    const detect = (targetHz: number): SpectralPeak | null => {
+      if (Math.abs(targetHz - d3.frequency) < 0.1) {
+        return { hz: d3.frequency, db: -32, ambiguous: true };
+      }
+      if (Math.abs(targetHz - d3.frequency * 2) < 0.1) {
+        return { hz: d3.frequency * 2, db: -42 };
+      }
+      return null;
+    };
+    assert.equal(chooseNoteCandidate([d3], detect), null);
+  });
+
+  it('can use two clear partials when the fundamental is ambiguous', () => {
+    const detect = (targetHz: number): SpectralPeak | null => {
+      if (Math.abs(targetHz - d3.frequency) < 0.1) {
+        return { hz: d3.frequency, db: -32, ambiguous: true };
+      }
+      if (Math.abs(targetHz - d3.frequency * 2) < 0.1) {
+        return { hz: d3.frequency * 2, db: -42 };
+      }
+      if (Math.abs(targetHz - d3.frequency * 3) < 0.1) {
+        return { hz: d3.frequency * 3, db: -44 };
+      }
+      return null;
+    };
+    assert.equal(chooseNoteCandidate([d3, a3], detect)?.id, 'd3');
+  });
+
+  it('does not count an ambiguous partial when the fundamental is missing', () => {
+    const detect = (targetHz: number): SpectralPeak | null => {
+      if (Math.abs(targetHz - d3.frequency * 2) < 0.1) {
+        return { hz: d3.frequency * 2, db: -40, ambiguous: true };
+      }
+      if (Math.abs(targetHz - d3.frequency * 3) < 0.1) {
+        return { hz: d3.frequency * 3, db: -44 };
+      }
+      return null;
+    };
+    assert.equal(chooseNoteCandidate([d3], detect), null);
+  });
+});
+
+
+describe('spectral prominence in automatic note detection', () => {
+  it('ignores a loud peak that does not stand sufficiently above its local spectrum floor', () => {
+    const detect = (targetHz: number): SpectralPeak | null => {
+      if (Math.abs(targetHz - d3.frequency) < 0.1) {
+        return { hz: d3.frequency, db: -25, prominenceDb: 3 };
+      }
+      if (Math.abs(targetHz - d3.frequency * 2) < 0.1) {
+        return { hz: d3.frequency * 2, db: -35, prominenceDb: 24 };
+      }
+      if (Math.abs(targetHz - d3.frequency * 3) < 0.1) {
+        return { hz: d3.frequency * 3, db: -38, prominenceDb: 22 };
+      }
+      return null;
+    };
+    assert.equal(chooseNoteCandidate([d3], detect)?.id, 'd3');
+  });
+
+  it('rejects a note when only its weak-prominence fundamental is present', () => {
+    const detect = (targetHz: number): SpectralPeak | null =>
+      Math.abs(targetHz - d3.frequency) < 0.1
+        ? { hz: d3.frequency, db: -25, prominenceDb: 3 }
+        : null;
+    assert.equal(chooseNoteCandidate([d3], detect), null);
+  });
+});

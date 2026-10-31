@@ -1,0 +1,12 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Vite serves a client-side single-page application. Preserve direct links and refreshes.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
