@@ -104,3 +104,8 @@ The spectral peak test suite now includes composite, Blackman-windowed signals c
 Each component is generated at its own frequency and amplitude, then all three are mixed into one signal before the FFT. The test verifies that each target window recovers its own resonance to within 1 cent and that the Yishama D4 result remains distinct from exactly twice its D3 fundamental.
 
 This is a deterministic regression test of the production peak-selection/interpolation helper, not a substitute for replaying the original WAV files through a browser's Web Audio analyser. The real-recording browser comparison remains an outstanding validation step.
+
+
+## Microphone capture policy
+
+The live microphone request disables echo cancellation, noise suppression, and automatic gain control. This keeps browser-managed dynamics processing from compressing the instrument's natural decay or lifting the background noise floor. The actual track setting is inspected after capture; if a browser/device reports that AGC remained enabled despite the request, the UI warns that decay-level comparisons may be less reliable. This does not guarantee an unprocessed microphone signal: device DSP and operating-system processing can still vary.
