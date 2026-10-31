@@ -38,6 +38,39 @@ The D3 fundamental varies more across the decay than the other two resonances. T
 - At 0.15 s, D3 is near 146.772 Hz (−0.7 cents); at 0.30 s it is near 146.265 Hz (−6.7 cents). The early decay is not stationary.
 - Near 4.00 s, the D3 target window contains two similarly strong local peaks near 157.948 Hz and 140.248 Hz. A single strongest-peak readout would be misleading here. The live tuner should flag this frame as ambiguous rather than calling it a valid stable pitch.
 
+
+## Second real instrument — Yishama D3 sample
+
+A second, independently recorded D3 handpan sample was analysed to check whether the resonance relationships from the first instrument generalize.
+
+- File: `Handpan d3 yishama(1).wav`
+- Duration: 6.653243 s
+- Sample rate: 44,100 Hz
+- Channels: stereo with identical left/right channels.
+- This is another real struck-instrument recording, not a synthesized test tone.
+
+Using overlapping 32,768-sample Blackman windows (about 743 ms) and parabolic interpolation of log magnitudes, the stable section from 0.55 s to 2.8 s produced:
+
+| Channel | Median measured | Median deviation | 10th–90th percentile deviation |
+|---|---:|---:|---:|
+| D3 fundamental (1×) | 147.102 Hz | +3.18 cents | +2.04 to +3.85 cents |
+| D4 octave resonance (2×) | 292.362 Hz | −7.70 cents | −9.35 to −7.17 cents |
+| D3 third partial (3×) | 441.492 Hz | +3.91 cents | +2.58 to +4.79 cents |
+
+The D4 resonance is notably flatter than the exact 2× of the measured D3 fundamental: 2 × 147.102 Hz = 294.204 Hz, while the independently measured D4 resonance is 292.362 Hz. This is why Hangoal must measure 1×, 2×, and 3× independently instead of deriving partials from a harmonic ratio.
+
+## Local spectral-prominence check
+
+The new tracking gate also considers how far a peak rises above the local spectral floor, rather than relying only on its absolute dBFS level. An offline 16,384-point Blackman FFT check of the Yishama recording used 13 windows beginning from 0.55 s through 2.8 s. For each resonance, the local floor was the median dB magnitude in its ±150-cent target window after excluding the five bins centred on the strongest peak.
+
+| Channel | Median peak prominence | 10th–90th percentile |
+|---|---:|---:|
+| D3 fundamental (1×) | 43.4 dB | 32.2–49.4 dB |
+| D4 octave resonance (2×) | 41.6 dB | 32.5–45.8 dB |
+| D3 third partial (3×) | 57.3 dB | 51.5–59.5 dB |
+
+These values are comfortably above the initial 8 dB software gate for this recording. They do not establish a universal threshold: a different phone microphone, room noise, or instrument may produce lower prominence. The gate therefore remains an engineering safeguard that must be checked with browser playback and the target microphone, not a certified SNR standard.
+
 ## Acceptance implications
 
 1. Keep attack rejection separate from stable-decay measurement.
