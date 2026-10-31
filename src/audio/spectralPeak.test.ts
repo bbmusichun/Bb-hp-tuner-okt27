@@ -212,3 +212,44 @@ describe('ambiguous spectral peak diagnostics', () => {
     assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE)?.bin, 50);
   });
 });
+
+
+describe('local spectral prominence', () => {
+  it('measures a peak against the median floor in its target window', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-70);
+    spectrum[49] = -50;
+    spectrum[50] = -30;
+    spectrum[51] = -50;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.equal(result.noiseFloorDb, -70);
+    assert.equal(result.prominenceDb, 40);
+  });
+
+  it('does not treat a strong peak on a raised noise floor as reliable', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-35);
+    spectrum[49] = -20;
+    spectrum[50] = -10;
+    spectrum[51] = -20;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.equal(result.noiseFloorDb, -35);
+    assert.equal(result.prominenceDb, 25);
+  });
+
+  it('returns zero prominence when the local spectrum is flat at the peak level', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-20);
+    spectrum[49] = -20;
+    spectrum[50] = -10;
+    spectrum[51] = -20;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.equal(result.prominenceDb, 10);
+  });
+});
