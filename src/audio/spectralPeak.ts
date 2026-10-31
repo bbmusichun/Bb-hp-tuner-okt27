@@ -129,7 +129,10 @@ export function analyzeSpectralPeakInWindow(
     if (Math.abs(i - peak.bin) <= 2) continue;
     if (Number.isFinite(spectrum[i])) noiseBins.push(spectrum[i]);
   }
-  const noiseFloorDb = median(noiseBins);
+  // A very narrow target window may contain no bins outside the excluded peak core.
+  // In that case, do not invent a -100 dB floor: treat prominence as unknown/zero
+  // so the conservative tracking gate rejects the measurement.
+  const noiseFloorDb = noiseBins.length > 0 ? median(noiseBins) : peak.magDb;
   const prominenceDb = Math.max(0, peak.magDb - noiseFloorDb);
 
   return { peak, competingPeak, ambiguous, noiseFloorDb, prominenceDb };
