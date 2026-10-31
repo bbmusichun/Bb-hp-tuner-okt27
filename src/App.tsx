@@ -29,7 +29,7 @@ import { recordAnalysisFrame } from './audio/analysisRate';
 import { normalizeStrobeBands } from './audio/strobeBands';
 import { normalizeStrobeSensitivity } from './audio/strobeSensitivity';
 import { formatAudioDeviceLabel, type AudioDeviceOption } from './audio/deviceSelection';
-import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone, type ReferenceToneMode } from './audio/referenceToneModes';
+import { createReferenceToneModesByRole, normalizeReferenceToneMode, normalizeReferenceToneModesByRole, shouldTriggerStrikeReferenceTone, type ReferenceToneMode, type ReferenceToneModesByRole } from './audio/referenceToneModes';
 import { getEnabledToneNotes, normalizeDisabledToneNotes } from './audio/scaleNoteSelection';
 import {
   DEFAULT_PARTIAL_TARGET_OFFSET,
@@ -77,6 +77,7 @@ function loadTuningPreferences(): {
   strobeSensitivity: number;
   readoutMode: TuningReadoutMode;
   referenceToneMode: ReferenceToneMode;
+  referenceToneModesByRole: ReferenceToneModesByRole;
   scale: HandpanScale;
 } {
   const defaultProfile: InstrumentProfile = {
@@ -101,6 +102,7 @@ function loadTuningPreferences(): {
     strobeSensitivity: 1,
     readoutMode: 'hz' as TuningReadoutMode,
     referenceToneMode: 'continuous' as ReferenceToneMode,
+    referenceToneModesByRole: createReferenceToneModesByRole('continuous'),
     scale: PRESET_SCALES[0],
   };
   try {
@@ -123,6 +125,7 @@ function loadTuningPreferences(): {
       strobeSensitivity?: unknown;
       readoutMode?: unknown;
       referenceToneMode?: unknown;
+      referenceToneModesByRole?: unknown;
     };
     const legacyA4 = typeof prefs.a4Ref === 'number' && Number.isFinite(prefs.a4Ref) && prefs.a4Ref >= 420 && prefs.a4Ref <= 450
       ? prefs.a4Ref : defaultProfile.a4Ref;
@@ -158,6 +161,10 @@ function loadTuningPreferences(): {
       strobeSensitivity: normalizeStrobeSensitivity(prefs.strobeSensitivity),
       readoutMode: normalizeTuningReadoutMode(prefs.readoutMode),
       referenceToneMode: normalizeReferenceToneMode(prefs.referenceToneMode),
+      referenceToneModesByRole: normalizeReferenceToneModesByRole(
+        prefs.referenceToneModesByRole,
+        normalizeReferenceToneMode(prefs.referenceToneMode),
+      ),
       scale: activeProfile.customScale ?? PRESET_SCALES.find((scale) => scale.id === activeProfile.scaleId) ?? PRESET_SCALES[0],
     };
   } catch {
@@ -231,7 +238,9 @@ export default function App() {
   const [transposeSemitones, setTransposeSemitones] = useState<number>(() => loadTuningPreferences().transposeSemitones);
   const [strobeSensitivity, setStrobeSensitivity] = useState<number>(() => loadTuningPreferences().strobeSensitivity);
   const [readoutMode, setReadoutMode] = useState<TuningReadoutMode>(() => loadTuningPreferences().readoutMode);
-  const [referenceToneMode, setReferenceToneMode] = useState<ReferenceToneMode>(() => loadTuningPreferences().referenceToneMode);
+  const [referenceToneModesByRole, setReferenceToneModesByRole] = useState<ReferenceToneModesByRole>(
+    () => loadTuningPreferences().referenceToneModesByRole,
+  );
 
   const refreshAudioDevices = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) {
@@ -283,6 +292,7 @@ export default function App() {
 
   // Selected resonance focus for the main display and stability graph
   const [selectedRole, setSelectedRole] = useState<'fundamental' | 'fifth' | 'octave'>('fundamental');
+  const referenceToneMode = referenceToneModesByRole[selectedRole];
   const [isReferenceTonePlaying, setIsReferenceTonePlaying] = useState(false);
   const ownDPlayerRef = useRef<HTMLAudioElement | null>(null);
   const [ownDLoop, setOwnDLoop] = useState(() => {
@@ -589,6 +599,7 @@ export default function App() {
           strobeSensitivity,
           readoutMode,
           referenceToneMode,
+          referenceToneModesByRole,
           activeInstrumentProfileId,
           instrumentProfiles: currentProfiles,
         },
@@ -653,7 +664,7 @@ export default function App() {
       setTransposeSemitones(parsed.settings.transposeSemitones);
       setStrobeSensitivity(parsed.settings.strobeSensitivity);
       setReadoutMode(parsed.settings.readoutMode);
-      setReferenceToneMode(parsed.settings.referenceToneMode);
+      setReferenceToneModesByRole(parsed.settings.referenceToneModesByRole ?? createReferenceToneModesByRole(parsed.settings.referenceToneMode));
       setDisabledToneNotesByScale(parsed.disabledToneNotesByScale);
       setLogs(parsed.measurements);
       setSelectedRole('fundamental');
@@ -821,6 +832,7 @@ export default function App() {
         strobeSensitivity,
         readoutMode,
         referenceToneMode,
+        referenceToneModesByRole,
         partialTargetOffsets,
         instrumentProfiles: profilesToSave,
         activeInstrumentProfileId,
@@ -828,7 +840,7 @@ export default function App() {
     } catch (error) {
       console.warn('Nem sikerült menteni a hangoló beállításait:', error);
     }
-  }, [a4Ref, currentScale, autoDetect, autoDetectionMode, toleranceOverrideCents, selectedInputDeviceId, selectedOutputDeviceId, transposeSemitones, strobeSensitivity, readoutMode, referenceToneMode, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
+  }, [a4Ref, currentScale, autoDetect, autoDetectionMode, toleranceOverrideCents, selectedInputDeviceId, selectedOutputDeviceId, transposeSemitones, strobeSensitivity, readoutMode, referenceToneMode, referenceToneModesByRole, selectedRole, partialTargetOffsets, instrumentProfiles, activeInstrumentProfileId]);
 
   useEffect(() => {
     try {
@@ -1077,7 +1089,7 @@ export default function App() {
       strikeToneTimerRef.current = null;
     }
     previousTransientHoldoffRef.current = transientHoldoff;
-    setReferenceToneMode(mode);
+    setReferenceToneModesByRole((previous) => ({ ...previous, [selectedRole]: mode }));
   };
 
   const handleToggleReferenceTone = async () => {
@@ -1630,7 +1642,7 @@ export default function App() {
               </div>
 
               <div className="mb-1 flex items-center justify-between gap-2 px-1">
-                <label htmlFor="hangoal-reference-tone-mode" className="text-[10px] text-slate-500">Referenciahang módja</label>
+                <label htmlFor="hangoal-reference-tone-mode" className="text-[10px] text-slate-500">{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'} referenciahang-módja</label>
                 <select
                   id="hangoal-reference-tone-mode"
                   value={referenceToneMode}
@@ -1642,11 +1654,9 @@ export default function App() {
                   <option value="off">Kikapcsolva</option>
                 </select>
               </div>
-              {referenceToneMode === 'strike' && (
-                <p className="mb-2 px-1 text-[10px] leading-relaxed text-slate-500">
-                  A rövid hang a tranziensvédelmi ablak elején szól. A készülék hangszórójából visszajutó hang hibát okozhat; mérési átvételhez fejhallgatós és hangszórós teszt is szükséges.
-                </p>
-              )}
+              <p className="mb-2 px-1 text-[10px] leading-relaxed text-slate-500">
+                Ez a mód csak a kiválasztott sávra vonatkozik; az alaphang, a 3. parciális és az oktáv külön állítható. Ütésmódban a rövid hang a tranziensvédelmi ablak elején szól; a hangszóró visszacsatolása mérési hibát okozhat.
+              </p>
 
               <div className="mb-1 flex justify-end px-1">
                 <button
@@ -1809,7 +1819,7 @@ export default function App() {
             <BBHangmezoView
               notes={enabledToneNotes}
               totalNoteCount={toneNotes.length}
-              allowReferenceTonePreview={referenceToneMode === 'continuous' && !isListening && !isFileInputActive && !isReferenceTonePlaying}
+              allowReferenceTonePreview={referenceToneModesByRole.fundamental === 'continuous' && !isListening && !isFileInputActive && !isReferenceTonePlaying}
               selectedNote={selectedNote}
               onSelectNote={handleSelectToneFieldNote}
               hasSignal={hasSignal}
