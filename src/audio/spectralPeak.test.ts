@@ -228,17 +228,17 @@ describe('local spectral prominence', () => {
     assert.equal(result.prominenceDb, 40);
   });
 
-  it('does not treat a strong peak on a raised noise floor as reliable', () => {
+  it('reports only a small prominence when a peak barely rises above the local floor', () => {
     const spectrum = new Float32Array(FFT_SIZE / 2);
-    spectrum.fill(-35);
-    spectrum[49] = -20;
-    spectrum[50] = -10;
-    spectrum[51] = -20;
+    spectrum.fill(-20);
+    spectrum[49] = -16;
+    spectrum[50] = -15;
+    spectrum[51] = -16;
 
     const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
     assert.ok(result.peak);
-    assert.equal(result.noiseFloorDb, -35);
-    assert.equal(result.prominenceDb, 25);
+    assert.equal(result.noiseFloorDb, -20);
+    assert.equal(result.prominenceDb, 5);
   });
 
   it('returns zero prominence when the local spectrum is flat at the peak level', () => {
