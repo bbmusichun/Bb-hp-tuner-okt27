@@ -41,7 +41,7 @@ export function tuningToleranceCents(targetHz: number, overrideCents?: number | 
   if (!Number.isFinite(targetHz) || targetHz <= 0) return 1.5;
   const referenceHz = 146.832384; // D3 at A4 = 440 Hz
   const octaveSteps = Math.log2(targetHz / referenceHz);
-  return Math.max(1.5, Math.min(4, 1.5 + 0.75 * octaveSteps));
+  return Math.max(1.5, Math.min(3, 1.5 + 0.75 * octaveSteps));
 }
 
 /**

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { strobeContrastFromDb, strobeSharpnessFromCents } from './strobeVisualMetrics';
+import { hasStrobeBeenStable, strobeContrastFromDb, strobeSharpnessFromCents } from './strobeVisualMetrics';
 
 describe('Hangoal-inspired strobe visual metrics', () => {
   it('maps dBFS peak levels to a bounded visual contrast range', () => {
@@ -28,5 +28,12 @@ describe('Hangoal-inspired strobe visual metrics', () => {
 
   it('ignores non-finite stability samples', () => {
     assert.equal(strobeSharpnessFromCents([2, Number.NaN, 2.1, 1.9]), 1);
+  });
+  it('turns green only after a full second of continuous in-tolerance readings', () => {
+    assert.equal(hasStrobeBeenStable(true, 1000, 1999), false);
+    assert.equal(hasStrobeBeenStable(true, 1000, 2000), true);
+    assert.equal(hasStrobeBeenStable(false, 1000, 5000), false);
+    assert.equal(hasStrobeBeenStable(true, null, 5000), false);
+    assert.equal(hasStrobeBeenStable(true, 2000, 1999), false);
   });
 });
