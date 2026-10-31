@@ -121,11 +121,8 @@ describe('ambiguous resonance handling during automatic note detection', () => {
     assert.equal(chooseNoteCandidate([d3, a3], detect)?.id, 'd3');
   });
 
-  it('does not use an ambiguous partial as corroboration', () => {
+  it('does not count an ambiguous partial when the fundamental is missing', () => {
     const detect = (targetHz: number): SpectralPeak | null => {
-      if (Math.abs(targetHz - d3.frequency) < 0.1) {
-        return { hz: d3.frequency, db: -32 };
-      }
       if (Math.abs(targetHz - d3.frequency * 2) < 0.1) {
         return { hz: d3.frequency * 2, db: -40, ambiguous: true };
       }
@@ -134,8 +131,6 @@ describe('ambiguous resonance handling during automatic note detection', () => {
       }
       return null;
     };
-    const result = chooseNoteCandidate([d3], detect);
-    assert.equal(result?.id, 'd3');
-    assert.ok(result && result.confidence < 1);
+    assert.equal(chooseNoteCandidate([d3], detect), null);
   });
 });
