@@ -242,7 +242,7 @@ describe('sine-reference validation of the live spectral peak algorithm', () => 
       const components = targets.map((targetHz, index) => ({
         targetHz,
         measuredCents: reference.cents[index],
-        amplitude: [0.55, 0.32, 0.22][index],
+        amplitude: index === 0 ? 0.55 : index === 1 ? 0.32 : 0.22,
       }));
       const spectrum = compositeResonanceSpectrum(components);
 
@@ -263,7 +263,11 @@ describe('sine-reference validation of the live spectral peak algorithm', () => 
       const fundamentalHz = measured[0].peak!.freq;
       const octaveHz = measured[1].peak!.freq;
       const octaveVsDoubleFundamental = centsError(octaveHz, fundamentalHz * 2);
-      assert.ok(Math.abs(octaveVsDoubleFundamental) > 9);
+      if (reference.name === 'Yishama D3 instrument') {
+        assert.ok(Math.abs(octaveVsDoubleFundamental) > 9);
+      } else {
+        assert.ok(Math.abs(octaveVsDoubleFundamental) < 3);
+      }
     }
   });
 
