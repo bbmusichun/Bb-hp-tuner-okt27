@@ -51,6 +51,18 @@ export interface SpectralPeakWindowAnalysis {
   peak: SpectralPeakMeasurement | null;
   competingPeak: SpectralPeakMeasurement | null;
   ambiguous: boolean;
+  noiseFloorDb: number;
+  prominenceDb: number;
+}
+
+/** Median finite spectrum level in dB. */
+function median(values: number[]): number {
+  if (!values.length) return -100;
+  values.sort((a, b) => a - b);
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2 === 0
+    ? (values[middle - 1] + values[middle]) / 2
+    : values[middle];
 }
 
 export function analyzeSpectralPeakInWindow(
@@ -62,7 +74,13 @@ export function analyzeSpectralPeakInWindow(
   ambiguityThresholdDb = 4,
   minimumSeparationBins = 2,
 ): SpectralPeakWindowAnalysis {
-  const empty: SpectralPeakWindowAnalysis = { peak: null, competingPeak: null, ambiguous: false };
+  const empty: SpectralPeakWindowAnalysis = {
+    peak: null,
+    competingPeak: null,
+    ambiguous: false,
+    noiseFloorDb: -100,
+    prominenceDb: 0,
+  };
   if (
     !Number.isFinite(targetFreq) || targetFreq <= 0 ||
     !Number.isFinite(windowCents) || windowCents < 0 ||
@@ -104,7 +122,17 @@ export function analyzeSpectralPeakInWindow(
   const ambiguous = competingPeak !== null &&
     peak.magDb - competingPeak.magDb <= ambiguityThresholdDb;
 
-  return { peak, competingPeak, ambiguous };
+  // Estimate the local spectral floor without allowing the main peak's central
+  // bins to inflate the baseline. The median is robust to a few nearby partials.
+  const noiseBins: number[] = [];
+  for (let i = minBin; i <= maxBin; i++) {
+    if (Math.abs(i - peak.bin) <= 2) continue;
+    if (Number.isFinite(spectrum[i])) noiseBins.push(spectrum[i]);
+  }
+  const noiseFloorDb = median(noiseBins);
+  const prominenceDb = Math.max(0, peak.magDb - noiseFloorDb);
+
+  return { peak, competingPeak, ambiguous, noiseFloorDb, prominenceDb };
 }
 
 /**
