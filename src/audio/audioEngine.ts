@@ -349,6 +349,9 @@ export class BBAudioEngine {
         this.freqData,
         this.sampleRate,
         -78,
+        4,
+        2,
+        150,
       );
       if (!analysis.peak) return null;
       return {
