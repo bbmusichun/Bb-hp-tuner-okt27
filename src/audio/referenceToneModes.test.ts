@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeReferenceToneMode, shouldTriggerStrikeReferenceTone } from './referenceToneModes';
+import { isValidReferenceToneModesByRole, normalizeReferenceToneMode, normalizeReferenceToneModesByRole, shouldTriggerStrikeReferenceTone } from './referenceToneModes';
 
 test('validates persistent reference tone modes with a backward-compatible default', () => {
   assert.equal(normalizeReferenceToneMode('continuous'), 'continuous');
@@ -17,4 +17,49 @@ test('strike mode triggers only once on the rising edge of a transient during mi
   assert.equal(shouldTriggerStrikeReferenceTone('strike', false, true, false), false);
   assert.equal(shouldTriggerStrikeReferenceTone('continuous', true, true, false), false);
   assert.equal(shouldTriggerStrikeReferenceTone('off', true, true, false), false);
+});
+
+test('normalizes independent modes for fundamental, third partial and octave', () => {
+  assert.deepEqual(normalizeReferenceToneModesByRole({
+    fundamental: 'continuous',
+    fifth: 'strike',
+    octave: 'off',
+  }), {
+    fundamental: 'continuous',
+    fifth: 'strike',
+    octave: 'off',
+  });
+});
+
+test('maps legacy global mode to all bands and fills only missing preference entries', () => {
+  assert.deepEqual(normalizeReferenceToneModesByRole(undefined, 'strike'), {
+    fundamental: 'strike',
+    fifth: 'strike',
+    octave: 'strike',
+  });
+  assert.deepEqual(normalizeReferenceToneModesByRole({
+    fundamental: 'off',
+    fifth: 'invalid',
+  }, 'strike'), {
+    fundamental: 'off',
+    fifth: 'strike',
+    octave: 'strike',
+  });
+});
+
+test('strictly validates complete per-band configuration maps', () => {
+  assert.equal(isValidReferenceToneModesByRole({
+    fundamental: 'continuous',
+    fifth: 'strike',
+    octave: 'off',
+  }), true);
+  assert.equal(isValidReferenceToneModesByRole({
+    fundamental: 'continuous',
+    fifth: 'strike',
+  }), false);
+  assert.equal(isValidReferenceToneModesByRole({
+    fundamental: 'continuous',
+    fifth: 'beep',
+    octave: 'off',
+  }), false);
 });
