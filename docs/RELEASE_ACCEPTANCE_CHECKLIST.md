@@ -28,6 +28,8 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] A handpantól és a háttérzajtól függő, érvényes mérési ablakot használjuk; ütés után megvárjuk a tranziensvédelmi jelzés végét.
 - [ ] A kiválasztott hang alaphangja, oktávja (2×) és harmadik parciálisa (3×) külön-külön követhető.
 - [ ] A frekvencia (Hz), a céltól való eltérés (cent), a spektrum és a stabilitási grafikon konzisztens.
+- [ ] A spektrumkurzor a mutatott pontnál helyes Hz, alaphanghoz viszonyított arány/cent és dBFS értéket ad.
+- [ ] A Teljes, 1×, 2× és 3× spektrum-nézetben a frekvenciatengely, a csúcsjelölők és a kurzor-leolvasás ugyanahhoz a célfrekvenciához igazodik; a zoom nem változtat mérési célt.
 - [ ] Az egyedi sáv „Cél nullázása a mért frekvenciához” gombja csak érvényes csúcs esetén aktív, és a cél eltérését 0 cent közelébe állítja.
 - [ ] A fő alaphang (1×), oktáv (2×) és harmadik parciális (3×) külön-külön, érvényes stabil élő mérésből nullára kalibrálható.
 - [ ] A fő rezonanciák kalibrálása csak az adott hang adott parciálisának centkorrekcióját módosítja; a másik két parciális célja és a korábbi mérési napló változatlan marad.
