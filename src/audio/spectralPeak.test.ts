@@ -161,6 +161,20 @@ describe('sine-reference validation of the live spectral peak algorithm', () => 
   it('returns no measurement when the spectrum is too short to contain a valid local peak', () => {
     assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, new Float32Array([0, -10]), SAMPLE_RATE), null);
   });
+
+  it('uses a wider local-floor window while keeping the peak search narrow', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-70);
+    spectrum[49] = -50;
+    spectrum[50] = -30;
+    spectrum[51] = -50;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, 45, spectrum, SAMPLE_RATE, -82, 4, 2, 150);
+    assert.ok(result.peak);
+    assert.equal(result.peak.bin, 50);
+    assert.equal(result.noiseFloorDb, -70);
+    assert.equal(result.prominenceDb, 40);
+  });
 });
 
 describe('ambiguous spectral peak diagnostics', () => {
@@ -253,7 +267,7 @@ describe('local spectral prominence', () => {
     assert.equal(result.prominenceDb, 10);
   });
 
-  it('does not invent high prominence when a narrow window has no local-floor bins', () => {
+  it('does not invent high prominence when both search and floor windows are too narrow', () => {
     const spectrum = new Float32Array(FFT_SIZE / 2);
     spectrum.fill(-70);
     spectrum[49] = -50;
