@@ -51,6 +51,18 @@ export interface SpectralPeakWindowAnalysis {
   peak: SpectralPeakMeasurement | null;
   competingPeak: SpectralPeakMeasurement | null;
   ambiguous: boolean;
+  noiseFloorDb: number;
+  prominenceDb: number;
+}
+
+/** Median finite spectrum level in dB. */
+function median(values: number[]): number {
+  if (!values.length) return -100;
+  values.sort((a, b) => a - b);
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2 === 0
+    ? (values[middle - 1] + values[middle]) / 2
+    : values[middle];
 }
 
 export function analyzeSpectralPeakInWindow(
@@ -61,8 +73,15 @@ export function analyzeSpectralPeakInWindow(
   minimumPeakDb = -82,
   ambiguityThresholdDb = 4,
   minimumSeparationBins = 2,
+  prominenceWindowCents = windowCents,
 ): SpectralPeakWindowAnalysis {
-  const empty: SpectralPeakWindowAnalysis = { peak: null, competingPeak: null, ambiguous: false };
+  const empty: SpectralPeakWindowAnalysis = {
+    peak: null,
+    competingPeak: null,
+    ambiguous: false,
+    noiseFloorDb: -100,
+    prominenceDb: 0,
+  };
   if (
     !Number.isFinite(targetFreq) || targetFreq <= 0 ||
     !Number.isFinite(windowCents) || windowCents < 0 ||
@@ -70,6 +89,7 @@ export function analyzeSpectralPeakInWindow(
     !Number.isFinite(minimumPeakDb) ||
     !Number.isFinite(ambiguityThresholdDb) || ambiguityThresholdDb < 0 ||
     !Number.isFinite(minimumSeparationBins) || minimumSeparationBins < 1 ||
+    !Number.isFinite(prominenceWindowCents) || prominenceWindowCents < 0 ||
     spectrum.length < 3
   ) return empty;
 
@@ -104,7 +124,25 @@ export function analyzeSpectralPeakInWindow(
   const ambiguous = competingPeak !== null &&
     peak.magDb - competingPeak.magDb <= ambiguityThresholdDb;
 
-  return { peak, competingPeak, ambiguous };
+  // Estimate the local spectral floor without allowing the main peak's central
+  // bins to inflate the baseline. The median is robust to a few nearby partials.
+  const floorWindowCents = Math.max(windowCents, prominenceWindowCents);
+  const floorMinFreq = targetFreq * Math.pow(2, -floorWindowCents / 1200);
+  const floorMaxFreq = targetFreq * Math.pow(2, floorWindowCents / 1200);
+  const floorMinBin = Math.max(1, Math.floor(floorMinFreq / binWidth));
+  const floorMaxBin = Math.min(spectrum.length - 2, Math.ceil(floorMaxFreq / binWidth));
+  const noiseBins: number[] = [];
+  for (let i = floorMinBin; i <= floorMaxBin; i++) {
+    if (Math.abs(i - peak.bin) <= 2) continue;
+    if (Number.isFinite(spectrum[i])) noiseBins.push(spectrum[i]);
+  }
+  // A very narrow target window may contain no bins outside the excluded peak core.
+  // In that case, do not invent a -100 dB floor: treat prominence as unknown/zero
+  // so the conservative tracking gate rejects the measurement.
+  const noiseFloorDb = noiseBins.length > 0 ? median(noiseBins) : peak.magDb;
+  const prominenceDb = Math.max(0, peak.magDb - noiseFloorDb);
+
+  return { peak, competingPeak, ambiguous, noiseFloorDb, prominenceDb };
 }
 
 /**

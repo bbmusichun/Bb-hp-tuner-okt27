@@ -342,19 +342,23 @@ export class BBAudioEngine {
   public detectNote(candidates: NoteCandidate[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
     if (!this.analyser || this.micState !== 'active' || candidates.length === 0) return null;
     this.analyser.getFloatFrequencyData(this.freqData as any);
-    const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number; ambiguous?: boolean } | null => {
+    const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number; ambiguous?: boolean; prominenceDb?: number } | null => {
       const analysis = analyzeSpectralPeakInWindow(
         targetHz,
         centsWindow,
         this.freqData,
         this.sampleRate,
         -78,
+        4,
+        2,
+        150,
       );
       if (!analysis.peak) return null;
       return {
         db: analysis.peak.magDb,
         hz: analysis.peak.freq,
         ambiguous: analysis.ambiguous,
+        prominenceDb: analysis.prominenceDb,
       };
     };
     return chooseNoteCandidate(candidates, peakNear);
@@ -469,6 +473,7 @@ export class BBAudioEngine {
       isTrackableResonancePeak(
         fundamentalAnalysis?.ambiguous ?? false,
         resonanceConfidenceFromDb(rawFundamentalPeak.magDb),
+        fundamentalAnalysis?.prominenceDb ?? 0,
       );
     const fPeak = fundamentalPeakIsTrackable && rawFundamentalPeak && yinEstimate.frequencyHz !== null
       ? {
@@ -495,7 +500,8 @@ export class BBAudioEngine {
       targetFundamentalHz,
       now,
       hasSignal,
-      fundamentalAnalysis?.ambiguous ?? false
+      fundamentalAnalysis?.ambiguous ?? false,
+      fundamentalAnalysis?.prominenceDb ?? 0
     );
 
     const kvint = this.buildResonanceMeasurement(
@@ -506,7 +512,8 @@ export class BBAudioEngine {
       targetFifthHz,
       now,
       hasSignal,
-      fifthAnalysis?.ambiguous ?? false
+      fifthAnalysis?.ambiguous ?? false,
+      fifthAnalysis?.prominenceDb ?? 0
     );
 
     const oktav = this.buildResonanceMeasurement(
@@ -517,7 +524,8 @@ export class BBAudioEngine {
       targetOctaveHz,
       now,
       hasSignal,
-      octaveAnalysis?.ambiguous ?? false
+      octaveAnalysis?.ambiguous ?? false,
+      octaveAnalysis?.prominenceDb ?? 0
     );
 
     // Stability history follows the currently displayed resonance. Exclude transient and
@@ -584,12 +592,14 @@ export class BBAudioEngine {
     targetHz: number,
     now: number,
     hasSignal: boolean,
-    peakAmbiguous = false
+    peakAmbiguous = false,
+    peakProminenceDb = 0
   ): ResonanceMeasurement {
     // Never accept a spectral peak when the time-domain gate says there is no usable signal.
     const rawPeak = hasSignal ? peak : null;
     const confidence = rawPeak ? resonanceConfidenceFromDb(rawPeak.magDb) : 0;
-    const trackable = rawPeak !== null && isTrackableResonancePeak(peakAmbiguous, confidence);
+    const trackable = rawPeak !== null &&
+      isTrackableResonancePeak(peakAmbiguous, confidence, peakProminenceDb);
     let currentPeak = rawPeak;
 
     if (trackable && rawPeak) {
