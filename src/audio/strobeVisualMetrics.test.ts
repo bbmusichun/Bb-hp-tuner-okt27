@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { strobeContrastFromDb, strobeSharpnessFromCents } from './strobeVisualMetrics';
+import { hasStrobeBeenStable, strobeContrastFromDb, strobeSharpnessFromCents } from './strobeVisualMetrics';
 
 describe('Hangoal-inspired strobe visual metrics', () => {
   it('maps dBFS peak levels to a bounded visual contrast range', () => {
