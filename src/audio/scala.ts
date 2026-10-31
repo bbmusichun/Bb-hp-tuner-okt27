@@ -197,3 +197,23 @@ export function scalaToCustomScaleText(
   if (notes.length < 2 || notes.length > 24) return null;
   return notes.map((note) => note.name + ', ' + note.frequency.toFixed(3)).join('\n');
 }
+
+
+/**
+ * Resolve the Scala application's explicit reference pitch to the equivalent
+ * A4 calibration used by Hangoal. The reference marker's note label + octave
+ * identify the equal-tempered reference note; its explicit Hz value determines
+ * the A4 anchor. We do not infer anything when either piece is missing.
+ *
+ * The returned value is constrained to Hangoal's supported 420–450 Hz A4 range.
+ */
+export function getScalaReferenceA4(parsed: ParsedScalaScale): number | null {
+  const reference = parsed.reference;
+  if (!reference || reference.frequencyHz === undefined || !reference.label) return null;
+  const pitchClass = parsePitchClassLabel(reference.label);
+  if (!pitchClass) return null;
+
+  const midi = (reference.octave + 1) * 12 + pitchClass.pitchClass;
+  const a4Hz = reference.frequencyHz * Math.pow(2, (69 - midi) / 12);
+  return Number.isFinite(a4Hz) && a4Hz >= 420 && a4Hz <= 450 ? a4Hz : null;
+}

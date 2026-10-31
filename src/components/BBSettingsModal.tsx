@@ -6,7 +6,7 @@ import { MAX_PARTIAL_TARGET_OFFSET_CENTS, partialTargetFrequency } from '../audi
 import type { PartialTargetOffset, PartialTargetOffsetField } from '../audio/partialTargets';
 import type { InstrumentProfile } from '../audio/instrumentProfiles';
 import { formatTuningToleranceSetting, type TuningToleranceSetting } from '../audio/tuningTolerance';
-import { parseScalaScl, scalaToCustomScaleText, type ParsedScalaScale } from '../audio/scala';
+import { getScalaReferenceA4, parseScalaScl, scalaToCustomScaleText, type ParsedScalaScale } from '../audio/scala';
 import type { AudioDeviceOption } from '../audio/deviceSelection';
 
 function scalaImportSuccessMessage(parsed: ParsedScalaScale | null, message: string): string {
@@ -20,8 +20,12 @@ function scalaImportSuccessMessage(parsed: ParsedScalaScale | null, message: str
   const frequency = reference.frequencyHz === undefined
     ? ''
     : ` (${reference.frequencyHz.toFixed(3)} Hz)`;
+  const a4Reference = parsed ? getScalaReferenceA4(parsed) : null;
+  const calibration = a4Reference === null
+    ? 'A beágyazott metaadatból nem számítható biztonságos A4-kalibráció.'
+    : `Ez A4 = ${a4Reference.toFixed(3)} Hz kalibrációt jelent; külön gombbal alkalmazható.`;
 
-  return `${message} Scala referencia-metaadat: ${referenceName}${frequency}. A célfrekvenciák a kiválasztott alaphanghoz igazodnak; az A4-kalibráció nem változik automatikusan.`;
+  return `${message} Scala referencia-metaadat: ${referenceName}${frequency}. ${calibration}`;
 }
 
 
@@ -109,6 +113,7 @@ export const BBSettingsModal: React.FC<Props> = ({
   const [bundledScalaAssets, setBundledScalaAssets] = React.useState<Array<{ path: string; category: string; name: string }>>([]);
   const [selectedBundledScalaPath, setSelectedBundledScalaPath] = React.useState('');
   const [isLoadingBundledScala, setIsLoadingBundledScala] = React.useState(false);
+  const [scalaReferenceA4, setScalaReferenceA4] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     if (!isOpen || bundledScalaAssets.length > 0) return;
@@ -139,6 +144,7 @@ export const BBSettingsModal: React.FC<Props> = ({
     const asset = bundledScalaAssets.find((item) => item.path === selectedBundledScalaPath);
     if (!asset) return;
     setIsLoadingBundledScala(true);
+    setScalaReferenceA4(null);
     try {
       const response = await fetch(asset.path);
       if (!response.ok) throw new Error('Scala asset unavailable');
@@ -153,8 +159,10 @@ export const BBSettingsModal: React.FC<Props> = ({
       }
       setCustomScaleNameDraft(asset.name);
       setCustomScaleTextDraft(converted);
+      setScalaReferenceA4(parsed ? getScalaReferenceA4(parsed) : null);
       setCustomScaleMessage(scalaImportSuccessMessage(parsed, 'A beépített skála betöltve. Ellenőrizd, majd alkalmazd az egyedi hangmezőt.'));
     } catch {
+      setScalaReferenceA4(null);
       setCustomScaleMessage('A beépített Scala-fájl nem olvasható.');
     } finally {
       setIsLoadingBundledScala(false);
@@ -482,6 +490,7 @@ export const BBSettingsModal: React.FC<Props> = ({
                 onChange={async (event) => {
                   const file = event.target.files?.[0];
                   if (!file) return;
+                  setScalaReferenceA4(null);
                   try {
                     const parsed = parseScalaScl(await file.text(), { preserveSourceOrder: true });
                     const converted = parsed
@@ -493,8 +502,10 @@ export const BBSettingsModal: React.FC<Props> = ({
                     }
                     setCustomScaleNameDraft(file.name.replace(/\.scl$/i, ''));
                     setCustomScaleTextDraft(converted);
+                    setScalaReferenceA4(parsed ? getScalaReferenceA4(parsed) : null);
                     setCustomScaleMessage(scalaImportSuccessMessage(parsed, 'A Scala-skála beolvasva. Ellenőrizd a hanglistát, majd alkalmazd az egyedi hangmezőt.'));
                   } catch {
+                    setScalaReferenceA4(null);
                     setCustomScaleMessage('A Scala-fájl nem olvasható.');
                   } finally {
                     event.target.value = '';
@@ -539,6 +550,18 @@ export const BBSettingsModal: React.FC<Props> = ({
               <p role="status" className={(['Az egyedi', 'A beépített skála betöltve', 'A Scala-skála beolvasva'].some((prefix) => customScaleMessage.startsWith(prefix))) ? 'text-[10px] text-emerald-300' : 'text-[10px] text-amber-300'}>
                 {customScaleMessage}
               </p>
+            )}
+            {scalaReferenceA4 !== null && (
+              <button
+                type="button"
+                onClick={() => {
+                  onChangeA4(scalaReferenceA4);
+                  setCustomScaleMessage(`A Scala referencia alkalmazva: A4 = ${scalaReferenceA4.toFixed(3)} Hz. A hangszerprofil frissült.`);
+                }}
+                className="w-full rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[10px] font-bold text-emerald-200 hover:bg-emerald-500/15"
+              >
+                Scala referencia alkalmazása · A4 = {scalaReferenceA4.toFixed(3)} Hz
+              </button>
             )}
           </section>
 

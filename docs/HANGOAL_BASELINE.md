@@ -37,3 +37,6 @@ This document defines the functional baseline for the Hangoal handpan tuner from
 6. Physical-device acceptance covers iPhone Safari/PWA and desktop browsers.
 
 Bundling scale data is only one part of the baseline. Do not describe the application as production-validated until the feature checklist and acoustic/device acceptance tests pass.
+
+
+Scala reference pitch metadata is preserved and can be explicitly applied as an A4 calibration when the `.scl` reference note label, octave and explicit frequency are all present. The resulting A4 value must be within 420–450 Hz; imports never alter A4 without a user action. Missing or unsupported metadata remains informational only.

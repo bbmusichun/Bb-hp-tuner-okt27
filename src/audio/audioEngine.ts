@@ -12,7 +12,7 @@ import { estimatePitchYin } from './yinPitch';
 import { isNearDigitalClipPeak } from './inputClipping';
 import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
-import { findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
+import { analyzeSpectralPeakInWindow, findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
@@ -455,7 +455,8 @@ export class BBAudioEngine {
 
     // Search for the 3 resonances:
     // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const rawFundamentalPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);
+    const fundamentalAnalysis = transientHoldoff ? null : analyzeSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);
+    const rawFundamentalPeak = fundamentalAnalysis?.peak ?? null;
     // Refine the fundamental only when the independent periodicity estimate strongly agrees
     // with the FFT peak. The FFT remains the primary reference; YIN cannot pull it to an octave.
     const fPeak = rawFundamentalPeak && yinEstimate.frequencyHz !== null
@@ -469,8 +470,10 @@ export class BBAudioEngine {
         }
       : rawFundamentalPeak;
     // Search each resonance independently to reduce masking by a dominant fundamental.
-    const qPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
-    const oPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
+    const fifthAnalysis = transientHoldoff ? null : analyzeSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
+    const octaveAnalysis = transientHoldoff ? null : analyzeSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
+    const qPeak = fifthAnalysis?.peak ?? null;
+    const oPeak = octaveAnalysis?.peak ?? null;
 
     // Construct measurements
     const alap = this.buildResonanceMeasurement(
@@ -480,7 +483,8 @@ export class BBAudioEngine {
       fPeak,
       targetFundamentalHz,
       now,
-      hasSignal
+      hasSignal,
+      fundamentalAnalysis?.ambiguous ?? false
     );
 
     const kvint = this.buildResonanceMeasurement(
@@ -490,7 +494,8 @@ export class BBAudioEngine {
       qPeak,
       targetFifthHz,
       now,
-      hasSignal
+      hasSignal,
+      fifthAnalysis?.ambiguous ?? false
     );
 
     const oktav = this.buildResonanceMeasurement(
@@ -500,7 +505,8 @@ export class BBAudioEngine {
       oPeak,
       targetOctaveHz,
       now,
-      hasSignal
+      hasSignal,
+      octaveAnalysis?.ambiguous ?? false
     );
 
     // Stability history follows the currently displayed resonance. Exclude transient and
@@ -566,7 +572,8 @@ export class BBAudioEngine {
     peak: { freq: number; magDb: number } | null,
     targetHz: number,
     now: number,
-    hasSignal: boolean
+    hasSignal: boolean,
+    peakAmbiguous = false
   ): ResonanceMeasurement {
     // Never accept a spectral peak when the time-domain gate says there is no usable signal.
     const rawPeak = hasSignal ? peak : null;
@@ -592,7 +599,7 @@ export class BBAudioEngine {
     // than live. This gives the player time to read the value after a strike while
     // preserving a clear distinction between a live measurement and a retained result.
     const status = currentPeak && hasSignal
-      ? stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      ? !peakAmbiguous && stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
       : 'no-signal';
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
@@ -619,6 +626,7 @@ export class BBAudioEngine {
       deviationCents: cents !== null ? cents : cachedIsFresh ? cached!.cents : null,
       amplitudeDb: currentPeak ? currentPeak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
       confidence: currentPeak ? confidence : cachedIsFresh ? cached!.confidence : 0,
+      peakAmbiguous: Boolean(currentPeak && peakAmbiguous),
       timestampMs: currentPeak ? now : cachedIsFresh ? cached!.timestampMs : now,
       status: !currentPeak && cachedIsFresh ? 'held' : status,
     };
@@ -639,6 +647,7 @@ export class BBAudioEngine {
       deviationCents: null,
       amplitudeDb: null,
       confidence: 0,
+      peakAmbiguous: false,
       timestampMs: Date.now(),
       status: 'no-signal',
     };

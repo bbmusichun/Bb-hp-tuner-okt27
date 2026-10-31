@@ -18,6 +18,8 @@ export interface ResonanceMeasurement {
   deviationCents: number | null;
   amplitudeDb: number | null;
   confidence: number | null; // 0 to 1
+  /** True when a second similarly strong, separated FFT peak competes in the target window. */
+  peakAmbiguous?: boolean;
   timestampMs: number;
   status: MeasurementStatus;
 }
