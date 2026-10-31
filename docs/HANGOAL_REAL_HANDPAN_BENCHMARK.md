@@ -79,3 +79,15 @@ These values are comfortably above the initial 8 dB software gate for this recor
 4. Keep the raw measured frequency, target frequency, cents deviation, and confidence/status tied to the same analysis frame.
 5. Keep the live RMS presence gate at −72 dBFS so the 3.75 s frame (about −70.7 dBFS RMS) can still contribute its D4 and 3× readings; the 4.00 s frame (about −81.4 dBFS RMS) remains below the gate. Per-channel peak confidence and four-frame stability checks still determine whether a reading is valid.
 6. Validate the same recording through Hangoal's browser audio-file input, then compare against microphone input and an external reference tuner. The offline numbers above are a benchmark baseline, not a claim of full reference-tuner parity.
+
+## Live-engine FFT-size offline check (16,384 samples)
+
+The production audio engine currently uses a 16,384-sample analyser FFT, so the Yishama sample was also evaluated at that exact FFT size. This check used a Blackman window, 2,048-sample hop, parabolic interpolation in log-magnitude space, and the same ±150-cent target windows and ±2-bin exclusion used by the application prominence calculation. The 52 overlapping frame centres between 0.60 s and 3.00 s produced:
+
+| Resonance | Median measured | Median deviation | 10th–90th percentile deviation | Median prominence | 10th percentile prominence |
+|---|---:|---:|---:|---:|---:|
+| D3 fundamental (1×) | 147.043 Hz | +2.48 cents | +1.23 to +3.84 cents | 41.4 dB | 29.3 dB |
+| D4 octave resonance (2×) | 292.371 Hz | −7.64 cents | −11.04 to −0.31 cents | 42.0 dB | 33.2 dB |
+| D3 third partial (3×) | 441.253 Hz | +2.97 cents | +1.81 to +6.16 cents | 56.6 dB | 51.9 dB |
+
+No frame in this stable section was flagged as ambiguous by the competing-peak rule. The early attack is deliberately excluded: the 16,384-sample window spans about 371 ms at 44.1 kHz, and frames centred in the first 0.6 s still contain substantial transient motion. This is an offline signal-processing check aligned to the engine's FFT size, not a browser/phone microphone acceptance test. In particular, it does not certify the absolute dBFS gate or the 8 dB prominence threshold across devices; those still require live validation.
