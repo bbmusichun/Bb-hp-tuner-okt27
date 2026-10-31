@@ -27,6 +27,7 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 
 - [ ] A handpantól és a háttérzajtól függő, érvényes mérési ablakot használjuk; ütés után megvárjuk a tranziensvédelmi jelzés végét.
 - [ ] A kiválasztott hang alaphangja, oktávja (2×) és harmadik parciálisa (3×) külön-külön követhető.
+- [ ] Auto módban a tűrés legfeljebb ±3 cent; a stroboszkóp csak érvényes, folyamatosan tűrésen belüli mérés legalább 1 másodperce után válik zölddé. A kézzel választott tűrésmód a felhasználó által megadott küszöböt követi.
 - [ ] A frekvencia (Hz), a céltól való eltérés (cent), a spektrum és a stabilitási grafikon konzisztens.
 - [ ] A spektrumkurzor a mutatott pontnál helyes Hz, alaphanghoz viszonyított arány/cent és dBFS értéket ad.
 - [ ] A Teljes, 1×, 2× és 3× spektrum-nézetben a frekvenciatengely, a csúcsjelölők és a kurzor-leolvasás ugyanahhoz a célfrekvenciához igazodik; a zoom nem változtat mérési célt.
