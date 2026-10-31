@@ -90,3 +90,17 @@ The Yishama recording's useful signal decays gradually across several seconds. T
 3. Do not force the D4 result to equal exactly 2× the fundamental or the third partial to equal exactly 3× the fundamental.
 4. Preserve genuine inharmonicity and instrument-specific resonance differences rather than smoothing them away.
 5. Compare offline and browser measurements over the same time windows before using either sample as a calibration truth.
+
+
+## Deterministic regression coverage for independent resonances
+
+The spectral peak test suite now includes composite, Blackman-windowed signals containing all three resonances at once. It uses the measured cent offsets from both instrument baselines:
+
+| Synthetic composite | D3 (1×) | D4 (2×) | Third partial (3×) |
+|---|---:|---:|---:|
+| First D3 instrument | −1.86 c | −0.94 c | +3.33 c |
+| Yishama D3 instrument | +3.18 c | −7.70 c | +3.91 c |
+
+Each component is generated at its own frequency and amplitude, then all three are mixed into one signal before the FFT. The test verifies that each target window recovers its own resonance to within 1 cent and that the Yishama D4 result remains distinct from exactly twice its D3 fundamental.
+
+This is a deterministic regression test of the production peak-selection/interpolation helper, not a substitute for replaying the original WAV files through a browser's Web Audio analyser. The real-recording browser comparison remains an outstanding validation step.

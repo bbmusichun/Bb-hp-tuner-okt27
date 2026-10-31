@@ -70,6 +70,70 @@ function sineReferenceSpectrum(
   return spectrum;
 }
 
+
+interface CompositeTone {
+  targetHz: number;
+  measuredCents: number;
+  amplitude: number;
+}
+
+/**
+ * Build one composite Blackman-windowed spectrum containing three independent
+ * resonances. Each component is deliberately detuned separately; this catches
+ * accidental octave/partial derivation from the fundamental.
+ */
+function compositeResonanceSpectrum(
+  components: CompositeTone[],
+  sampleRate = SAMPLE_RATE,
+  fftSize = FFT_SIZE,
+): Float32Array {
+  const spectrum = new Float32Array(fftSize / 2);
+  spectrum.fill(-100);
+  const samples = new Float64Array(fftSize);
+
+  for (let n = 0; n < fftSize; n++) {
+    const blackman = 0.42
+      - 0.5 * Math.cos((2 * Math.PI * n) / (fftSize - 1))
+      + 0.08 * Math.cos((4 * Math.PI * n) / (fftSize - 1));
+    let signal = 0;
+    for (const component of components) {
+      const frequencyHz = component.targetHz * Math.pow(2, component.measuredCents / 1200);
+      signal += component.amplitude * Math.sin((2 * Math.PI * frequencyHz * n) / sampleRate);
+    }
+    samples[n] = signal * blackman;
+  }
+
+  const binWidth = sampleRate / fftSize;
+  const bins = new Set<number>();
+  for (const component of components) {
+    const lowHz = component.targetHz * Math.pow(2, -WINDOW_CENTS / 1200);
+    const highHz = component.targetHz * Math.pow(2, WINDOW_CENTS / 1200);
+    const lowBin = Math.max(1, Math.floor(lowHz / binWidth) - 3);
+    const highBin = Math.min(fftSize / 2 - 2, Math.ceil(highHz / binWidth) + 3);
+    for (let bin = lowBin; bin <= highBin; bin++) bins.add(bin);
+  }
+
+  for (const bin of bins) {
+    const phaseStep = (2 * Math.PI * bin) / fftSize;
+    const cosStep = Math.cos(phaseStep);
+    const sinStep = Math.sin(phaseStep);
+    let cosPhase = 1;
+    let sinPhase = 0;
+    let real = 0;
+    let imaginary = 0;
+    for (let n = 0; n < fftSize; n++) {
+      real += samples[n] * cosPhase;
+      imaginary -= samples[n] * sinPhase;
+      const nextCos = cosPhase * cosStep - sinPhase * sinStep;
+      sinPhase = sinPhase * cosStep + cosPhase * sinStep;
+      cosPhase = nextCos;
+    }
+    const magnitude = (2 * Math.hypot(real, imaginary)) / (fftSize * 0.42);
+    spectrum[bin] = 20 * Math.log10(Math.max(magnitude, 1e-12));
+  }
+  return spectrum;
+}
+
 describe('sine-reference validation of the live spectral peak algorithm', () => {
   const sampleRates = [44100, 48000];
   const fftSizes = [8192, 16384, 32768];
@@ -161,6 +225,52 @@ describe('sine-reference validation of the live spectral peak algorithm', () => 
   it('returns no measurement when the spectrum is too short to contain a valid local peak', () => {
     assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, new Float32Array([0, -10]), SAMPLE_RATE), null);
   });
+  it('measures three independently detuned resonances in one composite spectrum', () => {
+    const cases = [
+      {
+        name: 'first D3 instrument',
+        cents: [-1.86, -0.94, 3.33],
+      },
+      {
+        name: 'Yishama D3 instrument',
+        cents: [3.18, -7.70, 3.91],
+      },
+    ];
+    const targets = [146.832384, 293.664768, 440.497152];
+
+    for (const reference of cases) {
+      const components = targets.map((targetHz, index) => ({
+        targetHz,
+        measuredCents: reference.cents[index],
+        amplitude: index === 0 ? 0.55 : index === 1 ? 0.32 : 0.22,
+      }));
+      const spectrum = compositeResonanceSpectrum(components);
+
+      const measured = targets.map((targetHz) =>
+        analyzeSpectralPeakInWindow(targetHz, WINDOW_CENTS, spectrum, SAMPLE_RATE)
+      );
+      for (let index = 0; index < measured.length; index++) {
+        assert.ok(measured[index].peak, `${reference.name}: expected resonance ${index + 1}`);
+        assert.equal(measured[index].ambiguous, false);
+        const error = centsError(measured[index].peak!.freq, targets[index]) - reference.cents[index];
+        assert.ok(
+          Math.abs(error) < 1,
+          `${reference.name}, resonance ${index + 1}: expected ${reference.cents[index]} cents; error ${error.toFixed(3)} cents`,
+        );
+      }
+
+      // The Yishama octave is not the exact 2× of its measured fundamental.
+      const fundamentalHz = measured[0].peak!.freq;
+      const octaveHz = measured[1].peak!.freq;
+      const octaveVsDoubleFundamental = centsError(octaveHz, fundamentalHz * 2);
+      if (reference.name === 'Yishama D3 instrument') {
+        assert.ok(Math.abs(octaveVsDoubleFundamental) > 9);
+      } else {
+        assert.ok(Math.abs(octaveVsDoubleFundamental) < 3);
+      }
+    }
+  });
+
 });
 
 describe('ambiguous spectral peak diagnostics', () => {
