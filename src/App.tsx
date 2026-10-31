@@ -297,9 +297,15 @@ export default function App() {
   const [ownDVolume, setOwnDVolume] = useState<number>(loadOwnDVolumePreference);
   const [ownDAudioCurrentTime, setOwnDAudioCurrentTime] = useState(0);
   const [ownDAudioDuration, setOwnDAudioDuration] = useState(0);
+  const [ownDAudioSrc, setOwnDAudioSrc] = useState('/audio/sajat-d-handpan.mp3');
+  const [ownDAudioName, setOwnDAudioName] = useState('Saját D handpan felvétel');
+  const ownDAudioObjectUrlRef = useRef<string | null>(null);
   useEffect(() => {
     if (ownDPlayerRef.current) ownDPlayerRef.current.volume = ownDVolume;
   }, [ownDVolume]);
+  useEffect(() => () => {
+    if (ownDAudioObjectUrlRef.current) URL.revokeObjectURL(ownDAudioObjectUrlRef.current);
+  }, []);
 
   const strikeToneTimerRef = useRef<number | null>(null);
   const previousTransientHoldoffRef = useRef(false);
@@ -1350,35 +1356,18 @@ export default function App() {
                 className="hidden"
                 aria-hidden="true"
                 ref={ownDPlayerRef}
-                src="/audio/sajat-d-handpan.mp3"
-                loop={false}
+                src={ownDAudioSrc}
+                loop={ownDLoop}
                 preload="metadata"
                 onLoadedMetadata={(event) => {
                   const duration = event.currentTarget.duration;
-                  setOwnDAudioDuration(Number.isFinite(duration) ? Math.min(duration, 3) : 0);
+                  setOwnDAudioDuration(Number.isFinite(duration) ? duration : 0);
                 }}
                 onDurationChange={(event) => {
                   const duration = event.currentTarget.duration;
-                  setOwnDAudioDuration(Number.isFinite(duration) ? Math.min(duration, 3) : 0);
+                  setOwnDAudioDuration(Number.isFinite(duration) ? duration : 0);
                 }}
-                onTimeUpdate={(event) => {
-                  const player = event.currentTarget;
-                  if (player.currentTime >= 3) {
-                    if (ownDLoop) {
-                      player.currentTime = 0;
-                      setOwnDAudioCurrentTime(0);
-                    } else {
-                      player.pause();
-                      player.currentTime = 0;
-                      bbAudioEngine.stopAudioElementInput();
-                      setIsFileInputActive(false);
-                      setIsOwnDPlaying(false);
-                      setOwnDAudioCurrentTime(0);
-                    }
-                  } else {
-                    setOwnDAudioCurrentTime(player.currentTime);
-                  }
-                }}
+                onTimeUpdate={(event) => setOwnDAudioCurrentTime(event.currentTarget.currentTime)}
                 onCanPlay={() => setOwnDAudioError('')}
                 onError={() => {
                   bbAudioEngine.stopAudioElementInput();
@@ -1387,9 +1376,14 @@ export default function App() {
                   setIsOwnDPlaying(false);
                   setOwnDAudioDuration(0);
                   setOwnDAudioCurrentTime(0);
-                  setOwnDAudioError('A saját D-felvétel nem tölthető be. Frissítsd az oldalt, és próbáld újra.');
+                  setOwnDAudioError('A kiválasztott hangfelvétel nem tölthető be ebben a böngészőben.');
                 }}
-                onEnded={() => { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); setOwnDAudioCurrentTime(0); }}
+                onEnded={() => {
+                  bbAudioEngine.stopAudioElementInput();
+                  setIsFileInputActive(false);
+                  setIsOwnDPlaying(false);
+                  setOwnDAudioCurrentTime(0);
+                }}
                 onPause={(event) => { if (event.currentTarget.paused) { bbAudioEngine.stopAudioElementInput(); setIsFileInputActive(false); setIsOwnDPlaying(false); setHasSignal(false); setInputLevelDb(-100); setTransientHoldoff(false); } }}
                 onPlay={() => { setOwnDAudioError(''); setIsOwnDPlaying(true); }}
               />
@@ -1401,8 +1395,9 @@ export default function App() {
 
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-white">Saját D lejátszása</div>
-                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">A saját D Kurd handpan-felvétel első 3 másodperce fut át a teljes hangolóelemzésen.</p>
+                  <div className="text-sm font-semibold text-white">Valódi handpanfelvétel elemzése</div>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-400">A teljes hangfájl lejátszása közben ugyanaz a mérőlánc dolgozik, mint a mikrofonos hangolásnál.</p>
+                  <p className="mt-1 truncate text-[10px] text-amber-200" title={ownDAudioName}>{ownDAudioName}</p>
                 </div>
                 <button
                   type="button"
@@ -1448,6 +1443,48 @@ export default function App() {
                   {isOwnDPlaying ? "Leállítás" : "Lejátszás"}
                 </button>
               </div>
+              <label className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                <span className="rounded-md border border-white/15 bg-white/5 px-2.5 py-2 font-semibold text-slate-200">Hangfájl kiválasztása</span>
+                <input
+                  type="file"
+                  accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.flac"
+                  aria-label="Saját handpan hangfájl kiválasztása"
+                  className="min-w-0 flex-1 text-[10px] file:sr-only"
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    if (!file) return;
+                    const hasAudioType = file.type.startsWith('audio/');
+                    const hasAudioExtension = /\\.(wav|mp3|m4a|aac|ogg|flac)$/i.test(file.name);
+                    if (!hasAudioType && !hasAudioExtension) {
+                      setOwnDAudioError('Válassz WAV, MP3, M4A, AAC, OGG vagy FLAC hangfájlt.');
+                      event.currentTarget.value = '';
+                      return;
+                    }
+                    if (file.size > 50 * 1024 * 1024) {
+                      setOwnDAudioError('A hangfájl legfeljebb 50 MB lehet.');
+                      event.currentTarget.value = '';
+                      return;
+                    }
+                    const player = ownDPlayerRef.current;
+                    player?.pause();
+                    if (player) player.currentTime = 0;
+                    bbAudioEngine.stopAudioElementInput();
+                    setIsFileInputActive(false);
+                    setIsOwnDPlaying(false);
+                    if (ownDAudioObjectUrlRef.current) URL.revokeObjectURL(ownDAudioObjectUrlRef.current);
+                    const nextUrl = URL.createObjectURL(file);
+                    ownDAudioObjectUrlRef.current = nextUrl;
+                    setOwnDAudioSrc(nextUrl);
+                    setOwnDAudioName(file.name);
+                    setOwnDAudioError('');
+                    setOwnDAudioDuration(0);
+                    setOwnDAudioCurrentTime(0);
+                    setHasSignal(false);
+                    event.currentTarget.value = '';
+                  }}
+                />
+                <span className="text-slate-500">WAV / MP3 / M4A · legfeljebb 50 MB · csak ezen az eszközön</span>
+              </label>
               <div className="mt-3">
                 <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-slate-400">
                   <label htmlFor="hangoal-own-d-position">Felvétel pozíciója</label>
