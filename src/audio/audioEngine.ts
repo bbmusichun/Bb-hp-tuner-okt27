@@ -342,7 +342,7 @@ export class BBAudioEngine {
   public detectNote(candidates: NoteCandidate[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
     if (!this.analyser || this.micState !== 'active' || candidates.length === 0) return null;
     this.analyser.getFloatFrequencyData(this.freqData as any);
-    const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number; ambiguous?: boolean } | null => {
+    const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number; ambiguous?: boolean; prominenceDb?: number } | null => {
       const analysis = analyzeSpectralPeakInWindow(
         targetHz,
         centsWindow,
