@@ -43,6 +43,71 @@ export function interpolateSpectralPeak(
 }
 
 /**
+ * Inspect all local maxima in a target window. A second similarly strong peak
+ * can indicate a split mode, beating, or a neighbouring resonance; in that case
+ * the tuner must not present the strongest peak as an unambiguously valid pitch.
+ */
+export interface SpectralPeakWindowAnalysis {
+  peak: SpectralPeakMeasurement | null;
+  competingPeak: SpectralPeakMeasurement | null;
+  ambiguous: boolean;
+}
+
+export function analyzeSpectralPeakInWindow(
+  targetFreq: number,
+  windowCents: number,
+  spectrum: Float32Array,
+  sampleRate: number,
+  minimumPeakDb = -82,
+  ambiguityThresholdDb = 4,
+  minimumSeparationBins = 2,
+): SpectralPeakWindowAnalysis {
+  const empty: SpectralPeakWindowAnalysis = { peak: null, competingPeak: null, ambiguous: false };
+  if (
+    !Number.isFinite(targetFreq) || targetFreq <= 0 ||
+    !Number.isFinite(windowCents) || windowCents < 0 ||
+    !Number.isFinite(sampleRate) || sampleRate <= 0 ||
+    !Number.isFinite(minimumPeakDb) ||
+    !Number.isFinite(ambiguityThresholdDb) || ambiguityThresholdDb < 0 ||
+    !Number.isFinite(minimumSeparationBins) || minimumSeparationBins < 1 ||
+    spectrum.length < 3
+  ) return empty;
+
+  const minFreq = targetFreq * Math.pow(2, -windowCents / 1200);
+  const maxFreq = targetFreq * Math.pow(2, windowCents / 1200);
+  const binWidth = sampleRate / (spectrum.length * 2);
+  const minBin = Math.max(1, Math.floor(minFreq / binWidth));
+  const maxBin = Math.min(spectrum.length - 2, Math.ceil(maxFreq / binWidth));
+  if (minBin >= maxBin) return empty;
+
+  const candidates: SpectralPeakMeasurement[] = [];
+  for (let i = minBin; i <= maxBin; i++) {
+    const value = spectrum[i];
+    if (
+      Number.isFinite(value) &&
+      value >= minimumPeakDb &&
+      Number.isFinite(spectrum[i - 1]) &&
+      Number.isFinite(spectrum[i + 1]) &&
+      value > spectrum[i - 1] &&
+      value > spectrum[i + 1]
+    ) {
+      candidates.push(interpolateSpectralPeak(i, spectrum, sampleRate));
+    }
+  }
+
+  if (!candidates.length) return empty;
+  candidates.sort((a, b) => b.magDb - a.magDb);
+  const peak = candidates[0];
+  const competingPeak = candidates.find((candidate) =>
+    Math.abs(candidate.bin - peak.bin) >= minimumSeparationBins
+  ) ?? null;
+  const ambiguous = competingPeak !== null &&
+    peak.magDb - competingPeak.magDb <= ambiguityThresholdDb;
+
+  return { peak, competingPeak, ambiguous };
+}
+
+/**
  * Find the strongest local spectral peak in a cents window around the target.
  * Returns null rather than fabricating a measurement when the spectrum is unusable.
  */
@@ -53,39 +118,7 @@ export function findSpectralPeakInWindow(
   sampleRate: number,
   minimumPeakDb = -82,
 ): SpectralPeakMeasurement | null {
-  if (
-    !Number.isFinite(targetFreq) || targetFreq <= 0 ||
-    !Number.isFinite(windowCents) || windowCents < 0 ||
-    !Number.isFinite(sampleRate) || sampleRate <= 0 ||
-    !Number.isFinite(minimumPeakDb) ||
-    spectrum.length < 3
-  ) {
-    return null;
-  }
-
-  const minFreq = targetFreq * Math.pow(2, -windowCents / 1200);
-  const maxFreq = targetFreq * Math.pow(2, windowCents / 1200);
-  const binWidth = sampleRate / (spectrum.length * 2);
-  const minBin = Math.max(1, Math.floor(minFreq / binWidth));
-  const maxBin = Math.min(spectrum.length - 2, Math.ceil(maxFreq / binWidth));
-
-  if (minBin >= maxBin) return null;
-
-  let maxVal = -Infinity;
-  let bestBin = -1;
-
-  for (let i = minBin; i <= maxBin; i++) {
-    if (
-      Number.isFinite(spectrum[i]) &&
-      spectrum[i] > maxVal &&
-      spectrum[i] > spectrum[i - 1] &&
-      spectrum[i] > spectrum[i + 1]
-    ) {
-      maxVal = spectrum[i];
-      bestBin = i;
-    }
-  }
-
-  if (bestBin === -1 || maxVal < minimumPeakDb) return null;
-  return interpolateSpectralPeak(bestBin, spectrum, sampleRate);
+  return analyzeSpectralPeakInWindow(
+    targetFreq, windowCents, spectrum, sampleRate, minimumPeakDb,
+  ).peak;
 }
