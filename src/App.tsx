@@ -1454,7 +1454,7 @@ export default function App() {
                     const file = event.currentTarget.files?.[0];
                     if (!file) return;
                     const hasAudioType = file.type.startsWith('audio/');
-                    const hasAudioExtension = /\\.(wav|mp3|m4a|aac|ogg|flac)$/i.test(file.name);
+                    const hasAudioExtension = /\.(wav|mp3|m4a|aac|ogg|flac)$/i.test(file.name);
                     if (!hasAudioType && !hasAudioExtension) {
                       setOwnDAudioError('Válassz WAV, MP3, M4A, AAC, OGG vagy FLAC hangfájlt.');
                       event.currentTarget.value = '';
