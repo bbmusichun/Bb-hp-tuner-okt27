@@ -17,6 +17,7 @@ import { analyzeSpectralPeakInWindow } from './spectralPeak';
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
+import { createMicrophoneAudioConstraints } from './microphoneConstraints';
 
 export class BBAudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -82,20 +83,13 @@ export class BBAudioEngine {
 
       this.sampleRate = this.audioCtx.sampleRate;
 
-      // Request raw microphone audio without telecom filtering. A selected device is
-      // requested with an exact ID; if it has disappeared, retry the default device.
+      // Request the least-processed microphone signal available. Browser/device DSP
+      // may still override these preferences; inspect the actual track settings below.
       this.lastInputDeviceFallback = false;
-      const baseAudioConstraints: MediaTrackConstraints = {
-        echoCancellation: false,
-        noiseSuppression: false,
-        // Ask the browser/OS to normalize microphone level for quiet strikes.
-        // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
-        autoGainControl: true,
-      };
       if (preferredDeviceId) {
         try {
           this.microphoneStream = await navigator.mediaDevices.getUserMedia({
-            audio: { ...baseAudioConstraints, deviceId: { exact: preferredDeviceId } },
+            audio: createMicrophoneAudioConstraints(preferredDeviceId),
           });
         } catch (deviceError: unknown) {
           const errorName = deviceError instanceof DOMException
@@ -105,10 +99,10 @@ export class BBAudioEngine {
               : '';
           if (!shouldRetryDefaultAudioInput(errorName, preferredDeviceId)) throw deviceError;
           this.lastInputDeviceFallback = true;
-          this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: baseAudioConstraints });
+          this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: createMicrophoneAudioConstraints() });
         }
       } else {
-        this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: baseAudioConstraints });
+        this.microphoneStream = await navigator.mediaDevices.getUserMedia({ audio: createMicrophoneAudioConstraints() });
       }
       const microphoneTrack = this.microphoneStream.getAudioTracks()[0];
       const trackSettings = typeof microphoneTrack?.getSettings === 'function'
