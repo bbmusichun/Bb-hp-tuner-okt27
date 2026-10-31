@@ -73,6 +73,7 @@ export function analyzeSpectralPeakInWindow(
   minimumPeakDb = -82,
   ambiguityThresholdDb = 4,
   minimumSeparationBins = 2,
+  prominenceWindowCents = windowCents,
 ): SpectralPeakWindowAnalysis {
   const empty: SpectralPeakWindowAnalysis = {
     peak: null,
@@ -88,6 +89,7 @@ export function analyzeSpectralPeakInWindow(
     !Number.isFinite(minimumPeakDb) ||
     !Number.isFinite(ambiguityThresholdDb) || ambiguityThresholdDb < 0 ||
     !Number.isFinite(minimumSeparationBins) || minimumSeparationBins < 1 ||
+    !Number.isFinite(prominenceWindowCents) || prominenceWindowCents < 0 ||
     spectrum.length < 3
   ) return empty;
 
@@ -124,8 +126,13 @@ export function analyzeSpectralPeakInWindow(
 
   // Estimate the local spectral floor without allowing the main peak's central
   // bins to inflate the baseline. The median is robust to a few nearby partials.
+  const floorWindowCents = Math.max(windowCents, prominenceWindowCents);
+  const floorMinFreq = targetFreq * Math.pow(2, -floorWindowCents / 1200);
+  const floorMaxFreq = targetFreq * Math.pow(2, floorWindowCents / 1200);
+  const floorMinBin = Math.max(1, Math.floor(floorMinFreq / binWidth));
+  const floorMaxBin = Math.min(spectrum.length - 2, Math.ceil(floorMaxFreq / binWidth));
   const noiseBins: number[] = [];
-  for (let i = minBin; i <= maxBin; i++) {
+  for (let i = floorMinBin; i <= floorMaxBin; i++) {
     if (Math.abs(i - peak.bin) <= 2) continue;
     if (Number.isFinite(spectrum[i])) noiseBins.push(spectrum[i]);
   }
