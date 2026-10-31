@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  calibratePartialTargetOffset,
   clampPartialTargetOffset,
   normalizePartialTargetOffsets,
   partialTargetFrequency,
@@ -38,13 +39,46 @@ describe('custom handpan partial targets', () => {
   it('sanitizes persisted values and omits zero-offset entries', () => {
     assert.deepEqual(normalizePartialTargetOffsets(null), {});
     assert.deepEqual(normalizePartialTargetOffsets({
-      'd-kurd-9:D3': { octaveCents: 12, thirdPartialCents: -4 },
+      'd-kurd-9:D3': { fundamentalCents: 0, octaveCents: 12, thirdPartialCents: -4 },
       'd-kurd-9:A3': { octaveCents: 0, thirdPartialCents: 0 },
       'd-kurd-9:Bad': { octaveCents: Number.NaN, thirdPartialCents: 200 },
       '': { octaveCents: 3, thirdPartialCents: 0 },
     }), {
-      'd-kurd-9:D3': { octaveCents: 12, thirdPartialCents: -4 },
-      'd-kurd-9:Bad': { octaveCents: 0, thirdPartialCents: 50 },
+      'd-kurd-9:D3': { fundamentalCents: 0, octaveCents: 12, thirdPartialCents: -4 },
+      'd-kurd-9:Bad': { fundamentalCents: 0, octaveCents: 0, thirdPartialCents: 50 },
     });
+  });
+});
+
+
+describe('core resonance calibration', () => {
+  const defaults = { fundamentalCents: 0, octaveCents: 0, thirdPartialCents: 0 } as const;
+
+  it('calibrates each core resonance independently to the measured frequency', () => {
+    const root = calibratePartialTargetOffset(defaults, 'fundamentalCents', 147, 146.832384);
+    assert.ok(root);
+    assert.ok(Math.abs(partialTargetFrequency(146.832384, 1, root.fundamentalCents) - 147) < 1e-8);
+    const octave = calibratePartialTargetOffset(defaults, 'octaveCents', 294.5, 293.664768);
+    assert.ok(octave);
+    assert.ok(Math.abs(partialTargetFrequency(146.832384, 2, octave.octaveCents) - 294.5) < 1e-8);
+    const third = calibratePartialTargetOffset(defaults, 'thirdPartialCents', 441.5, 440.497152);
+    assert.ok(third);
+    assert.ok(Math.abs(partialTargetFrequency(146.832384, 3, third.thirdPartialCents) - 441.5) < 1e-8);
+  });
+
+  it('adds calibration to the current offset and preserves the other resonance offsets', () => {
+    const current = { fundamentalCents: 2, octaveCents: -3, thirdPartialCents: 5 };
+    const calibrated = calibratePartialTargetOffset(current, 'octaveCents', 294, 293.5);
+    assert.ok(calibrated);
+    assert.equal(calibrated.fundamentalCents, 2);
+    assert.equal(calibrated.thirdPartialCents, 5);
+    assert.ok(calibrated.octaveCents > -3);
+  });
+
+  it('rejects invalid measurements and corrections beyond the ±50 cent profile range', () => {
+    assert.equal(calibratePartialTargetOffset(defaults, 'fundamentalCents', null, 146), null);
+    assert.equal(calibratePartialTargetOffset(defaults, 'octaveCents', Number.NaN, 293), null);
+    assert.equal(calibratePartialTargetOffset(defaults, 'thirdPartialCents', 1000, 440), null);
+    assert.equal(calibratePartialTargetOffset({ ...defaults, octaveCents: 49 }, 'octaveCents', 300, 293), null);
   });
 });

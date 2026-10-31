@@ -161,13 +161,15 @@ export const BBSettingsModal: React.FC<Props> = ({
     }
   };
   const [backupMessage, setBackupMessage] = React.useState('');
+  const [fundamentalDraft, setFundamentalDraft] = React.useState(String(partialTargetOffsets.fundamentalCents));
   const [octaveDraft, setOctaveDraft] = React.useState(String(partialTargetOffsets.octaveCents));
   const [thirdPartialDraft, setThirdPartialDraft] = React.useState(String(partialTargetOffsets.thirdPartialCents));
 
   React.useEffect(() => {
+    setFundamentalDraft(String(partialTargetOffsets.fundamentalCents));
     setOctaveDraft(String(partialTargetOffsets.octaveCents));
     setThirdPartialDraft(String(partialTargetOffsets.thirdPartialCents));
-  }, [selectedNoteName, partialTargetOffsets.octaveCents, partialTargetOffsets.thirdPartialCents]);
+  }, [selectedNoteName, partialTargetOffsets.fundamentalCents, partialTargetOffsets.octaveCents, partialTargetOffsets.thirdPartialCents]);
 
   React.useEffect(() => {
     setRenameProfileDraft(activeProfile?.name ?? '');
@@ -183,10 +185,12 @@ export const BBSettingsModal: React.FC<Props> = ({
     if (Number.isFinite(parsed)) {
       const value = Math.max(-MAX_PARTIAL_TARGET_OFFSET_CENTS, Math.min(MAX_PARTIAL_TARGET_OFFSET_CENTS, parsed));
       onChangePartialTargetOffset(field, value);
-      if (field === 'octaveCents') setOctaveDraft(String(value));
+      if (field === 'fundamentalCents') setFundamentalDraft(String(value));
+      else if (field === 'octaveCents') setOctaveDraft(String(value));
       else setThirdPartialDraft(String(value));
     } else {
-      if (field === 'octaveCents') setOctaveDraft(String(partialTargetOffsets.octaveCents));
+      if (field === 'fundamentalCents') setFundamentalDraft(String(partialTargetOffsets.fundamentalCents));
+      else if (field === 'octaveCents') setOctaveDraft(String(partialTargetOffsets.octaveCents));
       else setThirdPartialDraft(String(partialTargetOffsets.thirdPartialCents));
     }
   };
@@ -543,16 +547,21 @@ export const BBSettingsModal: React.FC<Props> = ({
             <div>
               <div className="font-semibold text-slate-300">Egyedi felhangcélok</div>
               <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-                A(z) {selectedNoteName} hang mezőjének felhangjai külön is hangolhatók.
-                Az eltérések az ideális 2× és 3× frekvenciához képest értendők, és csak erre a hangra érvényesek.
+                A(z) {selectedNoteName} hang 1×, 2× és 3× rezonanciája külön kalibrálható. Az értékek kizárólag erre a hangra és az aktív hangszerprofilra érvényesek.
               </p>
             </div>
             {([
+              { field: 'fundamentalCents', label: 'Alaphang (1×)', multiplier: 1 as const },
               { field: 'octaveCents', label: 'Oktáv (2×)', multiplier: 2 as const },
               { field: 'thirdPartialCents', label: '3. parciális (3×)', multiplier: 3 as const },
             ] as const).map(({ field, label, multiplier }) => {
               const offset = partialTargetOffsets[field];
-              const targetHz = partialTargetFrequency(selectedNoteFundamentalHz, multiplier, offset);
+              const targetHz = multiplier === 1
+                ? selectedNoteFundamentalHz
+                : partialTargetFrequency(selectedNoteFundamentalHz, multiplier, offset);
+              const draft = field === 'fundamentalCents'
+                ? fundamentalDraft
+                : field === 'octaveCents' ? octaveDraft : thirdPartialDraft;
               return (
                 <div key={field} className="grid grid-cols-[1fr_88px] gap-2 items-center">
                   <div>
@@ -566,10 +575,12 @@ export const BBSettingsModal: React.FC<Props> = ({
                       min={-MAX_PARTIAL_TARGET_OFFSET_CENTS}
                       max={MAX_PARTIAL_TARGET_OFFSET_CENTS}
                       step="0.1"
-                      value={field === 'octaveCents' ? octaveDraft : thirdPartialDraft}
+                      value={draft}
                       onChange={(event) => {
-                        if (field === 'octaveCents') setOctaveDraft(event.target.value);
-                        else setThirdPartialDraft(event.target.value);
+                        const value = event.target.value;
+                        if (field === 'fundamentalCents') setFundamentalDraft(value);
+                        else if (field === 'octaveCents') setOctaveDraft(value);
+                        else setThirdPartialDraft(value);
                       }}
                       onBlur={(event) => commitOffset(field, event.target.value)}
                       className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-right font-mono text-xs text-white"
@@ -584,7 +595,7 @@ export const BBSettingsModal: React.FC<Props> = ({
               onClick={onResetPartialTargetOffsets}
               className="w-full rounded-lg border border-white/10 bg-slate-900/70 px-3 py-2 text-[11px] text-slate-300 hover:bg-slate-800"
             >
-              Felhangcélok visszaállítása (2× / 3×)
+              Mindhárom cél visszaállítása (1× / 2× / 3×)
             </button>
           </div>
 
