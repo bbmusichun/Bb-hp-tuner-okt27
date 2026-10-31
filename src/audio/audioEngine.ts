@@ -342,18 +342,20 @@ export class BBAudioEngine {
   public detectNote(candidates: NoteCandidate[]): { id: string; noteName: string; frequency: number; confidence: number } | null {
     if (!this.analyser || this.micState !== 'active' || candidates.length === 0) return null;
     this.analyser.getFloatFrequencyData(this.freqData as any);
-    const binWidth = this.sampleRate / (this.freqData.length * 2);
-    const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number } | null => {
-      const minHz = targetHz * Math.pow(2, -centsWindow / 1200);
-      const maxHz = targetHz * Math.pow(2, centsWindow / 1200);
-      const lo = Math.max(1, Math.floor(minHz / binWidth));
-      const hi = Math.min(this.freqData.length - 2, Math.ceil(maxHz / binWidth));
-      let best = -1;
-      for (let i = lo; i <= hi; i++) {
-        if (this.freqData[i] > this.freqData[i - 1] && this.freqData[i] >= this.freqData[i + 1] && (best < 0 || this.freqData[i] > this.freqData[best])) best = i;
-      }
-      if (best < 0 || this.freqData[best] < -78) return null;
-      return { db: this.freqData[best], hz: interpolateSpectralPeak(best, this.freqData, this.sampleRate).freq };
+    const peakNear = (targetHz: number, centsWindow = 45): { db: number; hz: number; ambiguous?: boolean } | null => {
+      const analysis = analyzeSpectralPeakInWindow(
+        targetHz,
+        centsWindow,
+        this.freqData,
+        this.sampleRate,
+        -78,
+      );
+      if (!analysis.peak) return null;
+      return {
+        db: analysis.peak.magDb,
+        hz: analysis.peak.freq,
+        ambiguous: analysis.ambiguous,
+      };
     };
     return chooseNoteCandidate(candidates, peakNear);
   }
