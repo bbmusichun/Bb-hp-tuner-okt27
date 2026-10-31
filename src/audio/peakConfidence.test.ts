@@ -27,3 +27,11 @@ test('only sufficiently strong unambiguous peaks enter temporal tracking', () =>
   assert.equal(isTrackableResonancePeak(false, resonanceConfidenceFromDb(-80)), false);
   assert.equal(isTrackableResonancePeak(false, Number.NaN), false);
 });
+
+
+test('strong but locally flat peaks are excluded from temporal tracking', () => {
+  const confidence = resonanceConfidenceFromDb(-35);
+  assert.equal(isTrackableResonancePeak(false, confidence, 4), false);
+  assert.equal(isTrackableResonancePeak(false, confidence, 8), true);
+  assert.equal(isTrackableResonancePeak(false, confidence, 20), true);
+});
