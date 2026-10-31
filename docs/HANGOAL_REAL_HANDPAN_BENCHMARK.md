@@ -101,3 +101,8 @@ The same recording was also resampled from 44.1 kHz to 48 kHz before applying th
 | D3 third partial (3×) | 441.240 Hz | +2.92 cents | +1.84 to +6.06 cents | 56.4 dB | 51.6 dB |
 
 The 44.1 kHz and resampled 48 kHz results are close, especially for the independently measured D4 resonance. Resampling here is an offline approximation of the common 48 kHz audio-context path; it is not a measurement from Safari or an iPhone microphone.
+
+
+## Microphone capture policy
+
+The live microphone request disables echo cancellation, noise suppression, and automatic gain control. This asks the browser for the least-processed signal so that browser-managed dynamics processing does not compress quiet handpan decay or raise the background noise floor. Hangoal inspects the actual audio-track setting after capture; if the browser or device reports AGC as enabled despite the request, the interface warns that decay-level comparisons may be less reliable. An unavailable setting is reported as unknown, not as proof that AGC is disabled. These constraints cannot disable all operating-system or microphone-firmware DSP.
