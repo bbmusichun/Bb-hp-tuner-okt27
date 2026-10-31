@@ -27,6 +27,9 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 
 - [ ] A handpantól és a háttérzajtól függő, érvényes mérési ablakot használjuk; ütés után megvárjuk a tranziensvédelmi jelzés végét.
 - [ ] A kiválasztott hang alaphangja, oktávja (2×) és harmadik parciálisa (3×) külön-külön követhető.
+- [ ] A stroboszkóp Szünet módja befagyasztja a képet, de a mikrofonbemenet, az FFT-elemzés, a Hz/cent-leolvasás és a mérési napló tovább frissül.
+- [ ] Szünet alatt a megjelenített stroboszkóp-kép és a legutóbbi egyedi sávértékek változatlanok maradnak; a Folytatás újraindítja az animációt.
+- [ ] Új hang/alapfrekvencia cél kiválasztásakor a fagyasztott kép automatikusan élő módba tér vissza.
 - [ ] Auto módban a tűrés legfeljebb ±3 cent; a stroboszkóp csak érvényes, folyamatosan tűrésen belüli mérés legalább 1 másodperce után válik zölddé. A kézzel választott tűrésmód a felhasználó által megadott küszöböt követi.
 - [ ] A frekvencia (Hz), a céltól való eltérés (cent), a spektrum és a stabilitási grafikon konzisztens.
 - [ ] A spektrumkurzor a mutatott pontnál helyes Hz, alaphanghoz viszonyított arány/cent és dBFS értéket ad.
