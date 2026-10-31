@@ -13,7 +13,7 @@ import { isNearDigitalClipPeak } from './inputClipping';
 import { isUsableSignalLevel } from './signalLevel';
 import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, isTrackableResonancePeak, resonanceConfidenceFromDb } from './peakConfidence';
-import { analyzeSpectralPeakInWindow, findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
+import { analyzeSpectralPeakInWindow } from './spectralPeak';
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
