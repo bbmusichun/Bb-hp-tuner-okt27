@@ -3,7 +3,7 @@ import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
 import { formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
 import { isWithinTuningTolerance, type TuningToleranceSetting } from '../audio/tuningTolerance';
-import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
+import { hasStrobeBeenStable, strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
 import { calibratePartialTargetOffset, type PartialTargetOffset, type PartialTargetOffsetField } from '../audio/partialTargets';
 import type { ResonanceMeasurement } from '../types/tuner';
