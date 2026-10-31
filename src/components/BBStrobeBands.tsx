@@ -206,6 +206,12 @@ export const BBStrobeBands: React.FC<Props> = ({
     setReadings((previous) => { const next = { ...previous }; delete next[id]; return next; });
   };
 
+  const ambiguousCoreLabels = [
+    alap.peakAmbiguous ? 'Alaphang' : null,
+    oktav.peakAmbiguous ? 'Oktáv' : null,
+    kvint.peakAmbiguous ? '3. parciális' : null,
+  ].filter((label): label is string => label !== null);
+
   const builtInLabels = [
     { id: 'fifth', name: 'Kvint · 3×', note: kvint.noteName || 'A4', color: '#c084fc', role: 'fifth' as const },
     { id: 'octave', name: 'Oktáv · 2×', note: oktav.noteName || 'D4', color: '#38bdf8', role: 'octave' as const },
@@ -253,6 +259,12 @@ export const BBStrobeBands: React.FC<Props> = ({
             className="block w-full" style={{ height: canvasHeight }} />
         </div>
       </div>
+
+      {ambiguousCoreLabels.length > 0 && (
+        <div role="status" className="mt-2 rounded-lg border border-amber-400/30 bg-amber-400/[0.06] px-3 py-2 text-[10px] leading-relaxed text-amber-200">
+          Több hasonló spektrumcsúcs verseng: {ambiguousCoreLabels.join(', ')}. Ezeket a csatornákat a hangoló bizonytalanként jelöli; ne kalibráld őket ebből a pillanatnyi mérésből.
+        </div>
+      )}
 
       {customBands.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500">

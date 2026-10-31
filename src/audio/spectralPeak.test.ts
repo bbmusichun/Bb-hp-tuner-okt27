@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { findSpectralPeakInWindow } from './spectralPeak';
+import { analyzeSpectralPeakInWindow, findSpectralPeakInWindow } from './spectralPeak';
 
 const SAMPLE_RATE = 48000;
 const FFT_SIZE = 16384;
@@ -160,5 +160,55 @@ describe('sine-reference validation of the live spectral peak algorithm', () => 
 
   it('returns no measurement when the spectrum is too short to contain a valid local peak', () => {
     assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, new Float32Array([0, -10]), SAMPLE_RATE), null);
+  });
+});
+
+describe('ambiguous spectral peak diagnostics', () => {
+  it('flags two similarly strong, separated peaks instead of implying a unique resonance', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-100);
+    spectrum[48] = -40;
+    spectrum[49] = -24;
+    spectrum[50] = -40;
+    spectrum[53] = -41;
+    spectrum[54] = -26;
+    spectrum[55] = -41;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.ok(result.competingPeak);
+    assert.equal(result.ambiguous, true);
+    assert.equal(result.peak.bin, 49);
+    assert.equal(result.competingPeak.bin, 54);
+  });
+
+  it('does not flag a clearly dominant peak when a weaker neighbour is present', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-100);
+    spectrum[48] = -40;
+    spectrum[49] = -15;
+    spectrum[50] = -40;
+    spectrum[53] = -45;
+    spectrum[54] = -32;
+    spectrum[55] = -45;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.ok(result.competingPeak);
+    assert.equal(result.ambiguous, false);
+  });
+
+  it('keeps a single peak unambiguous and preserves the legacy strongest-peak API', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-100);
+    spectrum[49] = -35;
+    spectrum[50] = -10;
+    spectrum[51] = -35;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.equal(result.competingPeak, null);
+    assert.equal(result.ambiguous, false);
+    assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE)?.bin, 50);
   });
 });
