@@ -355,6 +355,7 @@ export class BBAudioEngine {
         db: analysis.peak.magDb,
         hz: analysis.peak.freq,
         ambiguous: analysis.ambiguous,
+        prominenceDb: analysis.prominenceDb,
       };
     };
     return chooseNoteCandidate(candidates, peakNear);
@@ -469,6 +470,7 @@ export class BBAudioEngine {
       isTrackableResonancePeak(
         fundamentalAnalysis?.ambiguous ?? false,
         resonanceConfidenceFromDb(rawFundamentalPeak.magDb),
+        fundamentalAnalysis?.prominenceDb ?? 0,
       );
     const fPeak = fundamentalPeakIsTrackable && rawFundamentalPeak && yinEstimate.frequencyHz !== null
       ? {
@@ -495,7 +497,8 @@ export class BBAudioEngine {
       targetFundamentalHz,
       now,
       hasSignal,
-      fundamentalAnalysis?.ambiguous ?? false
+      fundamentalAnalysis?.ambiguous ?? false,
+      fundamentalAnalysis?.prominenceDb ?? 0
     );
 
     const kvint = this.buildResonanceMeasurement(
@@ -506,7 +509,8 @@ export class BBAudioEngine {
       targetFifthHz,
       now,
       hasSignal,
-      fifthAnalysis?.ambiguous ?? false
+      fifthAnalysis?.ambiguous ?? false,
+      fifthAnalysis?.prominenceDb ?? 0
     );
 
     const oktav = this.buildResonanceMeasurement(
@@ -517,7 +521,8 @@ export class BBAudioEngine {
       targetOctaveHz,
       now,
       hasSignal,
-      octaveAnalysis?.ambiguous ?? false
+      octaveAnalysis?.ambiguous ?? false,
+      octaveAnalysis?.prominenceDb ?? 0
     );
 
     // Stability history follows the currently displayed resonance. Exclude transient and
@@ -584,12 +589,14 @@ export class BBAudioEngine {
     targetHz: number,
     now: number,
     hasSignal: boolean,
-    peakAmbiguous = false
+    peakAmbiguous = false,
+    peakProminenceDb = 0
   ): ResonanceMeasurement {
     // Never accept a spectral peak when the time-domain gate says there is no usable signal.
     const rawPeak = hasSignal ? peak : null;
     const confidence = rawPeak ? resonanceConfidenceFromDb(rawPeak.magDb) : 0;
-    const trackable = rawPeak !== null && isTrackableResonancePeak(peakAmbiguous, confidence);
+    const trackable = rawPeak !== null &&
+      isTrackableResonancePeak(peakAmbiguous, confidence, peakProminenceDb);
     let currentPeak = rawPeak;
 
     if (trackable && rawPeak) {
