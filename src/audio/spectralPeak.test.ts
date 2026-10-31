@@ -161,6 +161,20 @@ describe('sine-reference validation of the live spectral peak algorithm', () => 
   it('returns no measurement when the spectrum is too short to contain a valid local peak', () => {
     assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, new Float32Array([0, -10]), SAMPLE_RATE), null);
   });
+
+  it('uses a wider local-floor window while keeping the peak search narrow', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-70);
+    spectrum[49] = -50;
+    spectrum[50] = -30;
+    spectrum[51] = -50;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, 45, spectrum, SAMPLE_RATE, -82, 4, 2, 150);
+    assert.ok(result.peak);
+    assert.equal(result.peak.bin, 50);
+    assert.equal(result.noiseFloorDb, -70);
+    assert.equal(result.prominenceDb, 40);
+  });
 });
 
 describe('ambiguous spectral peak diagnostics', () => {
@@ -210,5 +224,59 @@ describe('ambiguous spectral peak diagnostics', () => {
     assert.equal(result.competingPeak, null);
     assert.equal(result.ambiguous, false);
     assert.equal(findSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE)?.bin, 50);
+  });
+});
+
+
+describe('local spectral prominence', () => {
+  it('measures a peak against the median floor in its target window', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-70);
+    spectrum[49] = -50;
+    spectrum[50] = -30;
+    spectrum[51] = -50;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.equal(result.noiseFloorDb, -70);
+    assert.equal(result.prominenceDb, 40);
+  });
+
+  it('reports only a small prominence when a peak barely rises above the local floor', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-20);
+    spectrum[49] = -16;
+    spectrum[50] = -15;
+    spectrum[51] = -16;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.equal(result.noiseFloorDb, -20);
+    assert.equal(result.prominenceDb, 5);
+  });
+
+  it('reports the peak-to-local-median difference', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-20);
+    spectrum[49] = -20;
+    spectrum[50] = -10;
+    spectrum[51] = -20;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.equal(result.prominenceDb, 10);
+  });
+
+  it('does not invent high prominence when both search and floor windows are too narrow', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-70);
+    spectrum[49] = -50;
+    spectrum[50] = -30;
+    spectrum[51] = -50;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, 15, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.equal(result.noiseFloorDb, result.peak.magDb);
+    assert.equal(result.prominenceDb, 0);
   });
 });

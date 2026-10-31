@@ -1,4 +1,4 @@
-import { findSpectralPeakInWindow } from './spectralPeak';
+import { analyzeSpectralPeakInWindow } from './spectralPeak';
 import { chooseNoteCandidate, type DetectedNote, type NoteCandidate } from './noteDetection';
 import { assessFundamentalIdentifiability, IdentifiabilityAssessment } from './fundamentalIdentifiability';
 
@@ -37,38 +37,6 @@ function nextPowerOfTwo(value: number): number {
   let result = 1;
   while (result < value) result *= 2;
   return result;
-}
-
-function median(values: number[]): number | null {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-/**
- * Estimate peak prominence against the median spectrum level in the target band.
- * This is a diagnostic contrast metric, not a calibrated confidence score.
- */
-function estimatePeakProminence(
-  targetHz: number,
-  peakBin: number,
-  spectrum: Float32Array,
-  sampleRate: number,
-  windowCents = 150,
-): number | null {
-  const binWidth = sampleRate / (spectrum.length * 2);
-  const minBin = Math.max(1, Math.floor(targetHz * Math.pow(2, -windowCents / 1200) / binWidth));
-  const maxBin = Math.min(spectrum.length - 2, Math.ceil(targetHz * Math.pow(2, windowCents / 1200) / binWidth));
-  const surrounding: number[] = [];
-  for (let bin = minBin; bin <= maxBin; bin++) {
-    // Exclude the peak and its immediate Blackman-window main lobe.
-    if (Math.abs(bin - peakBin) <= 2) continue;
-    if (Number.isFinite(spectrum[bin])) surrounding.push(spectrum[bin]);
-  }
-  const background = median(surrounding);
-  if (background === null) return null;
-  return spectrum[peakBin] - background;
 }
 
 /** Radix-2 in-place complex FFT. Arrays are expected to have equal power-of-two lengths. */
@@ -152,8 +120,13 @@ export function analyzeWavWindow(
 
   const detectedNote = options.noteCandidates?.length
     ? chooseNoteCandidate(options.noteCandidates, (candidateHz, centsWindow = 45) => {
-        const peak = findSpectralPeakInWindow(candidateHz, centsWindow, spectrum, sampleRate, peakFloorDb);
-        return peak ? { hz: peak.freq, db: peak.magDb } : null;
+        const analysis = analyzeSpectralPeakInWindow(candidateHz, centsWindow, spectrum, sampleRate, peakFloorDb, 4, 2, 150);
+        return analysis.peak ? {
+          hz: analysis.peak.freq,
+          db: analysis.peak.magDb,
+          ambiguous: analysis.ambiguous,
+          prominenceDb: analysis.prominenceDb,
+        } : null;
       })
     : null;
   // When a note is identified, measure its own 1x/2x/3x resonances instead of staying
@@ -161,15 +134,14 @@ export function analyzeWavWindow(
   const effectiveTargetHz = detectedNote?.frequency ?? targetHz;
   const targets = [effectiveTargetHz, effectiveTargetHz * 2, effectiveTargetHz * 3];
   const resonances = targets.map((target) => {
-    const peak = findSpectralPeakInWindow(target, 150, spectrum, sampleRate, peakFloorDb);
+    const analysis = analyzeSpectralPeakInWindow(target, 150, spectrum, sampleRate, peakFloorDb);
+    const peak = analysis.peak;
     return {
       targetHz: target,
       measuredHz: peak?.freq ?? null,
       cents: peak ? 1200 * Math.log2(peak.freq / target) : null,
       peakDb: peak?.magDb ?? null,
-      prominenceDb: peak
-        ? estimatePeakProminence(target, peak.bin, spectrum, sampleRate)
-        : null,
+      prominenceDb: peak ? analysis.prominenceDb : null,
     };
   });
   return {
