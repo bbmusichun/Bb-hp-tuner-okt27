@@ -10,6 +10,7 @@ import { detectTransientOnset, isTransientHoldoffActive, StablePitchTracker } fr
 import { PitchSample, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
 import { isNearDigitalClipPeak } from './inputClipping';
+import { isUsableSignalLevel } from './signalLevel';
 import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
 import { analyzeSpectralPeakInWindow, findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
@@ -417,7 +418,10 @@ export class BBAudioEngine {
     const db = rms > 1e-5 ? Math.max(-100, Math.min(0, 20 * Math.log10(rms))) : -100;
     this.inputLevelDb = Math.round(db);
 
-    const hasSignal = db > -58; // RMS gate for audio presence
+    // Retain quiet late-decay resonances; individual FFT peak strength and stable tracking
+    // still decide whether each channel is reliable. The real D3 reference remains measurable
+    // around -71 dBFS RMS, while its final noise-level tail falls below this gate.
+    const hasSignal = isUsableSignalLevel(db);
     const highInputLevel = db > -8; // Near-full-scale input can clip or distort transients.
 
     // Detect attacks with a short-time RMS window that overlaps adjacent analysis
