@@ -241,7 +241,7 @@ describe('local spectral prominence', () => {
     assert.equal(result.prominenceDb, 5);
   });
 
-  it('returns zero prominence when the local spectrum is flat at the peak level', () => {
+  it('reports the peak-to-local-median difference', () => {
     const spectrum = new Float32Array(FFT_SIZE / 2);
     spectrum.fill(-20);
     spectrum[49] = -20;
@@ -251,5 +251,18 @@ describe('local spectral prominence', () => {
     const result = analyzeSpectralPeakInWindow(146.832384, WINDOW_CENTS, spectrum, SAMPLE_RATE);
     assert.ok(result.peak);
     assert.equal(result.prominenceDb, 10);
+  });
+
+  it('does not invent high prominence when a narrow window has no local-floor bins', () => {
+    const spectrum = new Float32Array(FFT_SIZE / 2);
+    spectrum.fill(-70);
+    spectrum[49] = -50;
+    spectrum[50] = -30;
+    spectrum[51] = -50;
+
+    const result = analyzeSpectralPeakInWindow(146.832384, 15, spectrum, SAMPLE_RATE);
+    assert.ok(result.peak);
+    assert.equal(result.noiseFloorDb, result.peak.magDb);
+    assert.equal(result.prominenceDb, 0);
   });
 });
