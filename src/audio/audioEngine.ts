@@ -88,9 +88,9 @@ export class BBAudioEngine {
       const baseAudioConstraints: MediaTrackConstraints = {
         echoCancellation: false,
         noiseSuppression: false,
-        // Ask the browser/OS to normalize microphone level for quiet strikes.
-        // Some browsers/devices may ignore this constraint; clipping diagnostics remain active.
-        autoGainControl: true,
+        // Preserve the instrument's natural attack and decay envelope for tuning.
+        // Browser/OS AGC can compress quiet tails or raise the noise floor.
+        autoGainControl: false,
       };
       if (preferredDeviceId) {
         try {
