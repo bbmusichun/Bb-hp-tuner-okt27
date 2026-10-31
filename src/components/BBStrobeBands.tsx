@@ -146,7 +146,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         const inTolerance = row.valid && isWithinTuningTolerance(row.cents, row.targetHz, current.toleranceOverrideCents);
         if (inTolerance) greenSinceRef.current[key] ??= now;
         else greenSinceRef.current[key] = null;
-        const green = inTolerance && greenSinceRef.current[key] !== null && now - (greenSinceRef.current[key] ?? now) >= 1000;
+        const green = hasStrobeBeenStable(inTolerance, greenSinceRef.current[key], now);
         const near = inTolerance && !green;
         const stripeWidth = row.stripeWidth;
         const period = stripeWidth * 2;
