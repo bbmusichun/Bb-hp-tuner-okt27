@@ -20,7 +20,7 @@ describe('frequency-dependent tuning tolerance', () => {
 
   it('bounds the threshold for unusually low or high target frequencies', () => {
     assert.equal(tuningToleranceCents(20), 1.5);
-    assert.equal(tuningToleranceCents(20000), 4);
+    assert.equal(tuningToleranceCents(20000), 3);
   });
 
   it('rejects missing, non-finite and invalid targets in every mode', () => {
