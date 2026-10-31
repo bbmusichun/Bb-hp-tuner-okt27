@@ -14,6 +14,10 @@ Ez a lista a szoftver működését ellenőrzi a ténylegesen átadandó telefon
 - [ ] Nem támogatott böngészőn (különösen iOS Safari) egyértelmű jelzés jelenik meg, és az operációs rendszer hangútvonalát kell használni.
 - [ ] Bemeneti/kimeneti eszközbeállítás újratöltés és teljes konfigurációs export/import után megmarad; eltávolított eszköz visszaállításakor biztonságos alapértelmezett útvonal használatos.
 - [ ] Elutasított mikrofonengedélynél érthető hibaüzenet jelenik meg, az app nem fagy le.
+- [ ] A mikrofonkérés az echo cancellation, noise suppression és auto gain control kikapcsolását kéri; a kiválasztott mikrofonon és az alapértelmezett fallback bemeneten is.
+- [ ] A mikrofonengedély után a tényleges track-beállításból ellenőrizzük az AGC állapotát; ha aktív, figyelmeztetés jelenik meg, ha nem lekérdezhető, az állapot ismeretlen marad.
+- [ ] A valós handpan-lecsengés mikrofonos összehasonlításánál feljegyezzük az eszköz/böngésző által esetlegesen alkalmazott további DSP-feldolgozást.
+
 - [ ] A mikrofon leállítása után a mérési állapot visszatér várakozó módba.
 - [ ] A saját D-felvétel lejátszható, a hangerő és a pozíció csúszkával állítható.
 - [ ] A Loop beállítás újratöltés után is megmarad.
