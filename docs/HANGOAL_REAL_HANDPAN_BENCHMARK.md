@@ -44,4 +44,5 @@ The D3 fundamental varies more across the decay than the other two resonances. T
 2. Do not turn a changing or split peak into a confident single frequency through smoothing.
 3. Track 1×, 2×, and 3× independently; their decay envelopes and stability differ.
 4. Keep the raw measured frequency, target frequency, cents deviation, and confidence/status tied to the same analysis frame.
-5. Validate the same recording through Hangoal's browser audio-file input, then compare against microphone input and an external reference tuner. The offline numbers above are a benchmark baseline, not a claim of full reference-tuner parity.
+5. Keep the live RMS presence gate at −72 dBFS so the 3.75 s frame (about −70.7 dBFS RMS) can still contribute its D4 and 3× readings; the 4.00 s frame (about −81.4 dBFS RMS) remains below the gate. Per-channel peak confidence and four-frame stability checks still determine whether a reading is valid.
+6. Validate the same recording through Hangoal's browser audio-file input, then compare against microphone input and an external reference tuner. The offline numbers above are a benchmark baseline, not a claim of full reference-tuner parity.
