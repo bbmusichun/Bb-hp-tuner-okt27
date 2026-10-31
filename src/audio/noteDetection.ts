@@ -1,5 +1,5 @@
 export interface NoteCandidate { id: string; noteName: string; frequency: number; }
-export interface SpectralPeak { db: number; hz: number; }
+export interface SpectralPeak { db: number; hz: number; ambiguous?: boolean; }
 export interface DetectedNote extends NoteCandidate { confidence: number; }
 type PeakLookup = (targetHz: number, centsWindow?: number) => SpectralPeak | null;
 const centsDistance = (measured: SpectralPeak | null, targetHz: number): number =>
@@ -20,9 +20,9 @@ export function chooseNoteCandidate(candidates: NoteCandidate[], peakNear: PeakL
       const fundamental = peakNear(candidate.frequency, 150);
       const octave = peakNear(candidate.frequency * 2, 90);
       const third = peakNear(candidate.frequency * 3, 90);
-      const f = fundamental && Number.isFinite(fundamental.db) && Number.isFinite(fundamental.hz) ? fundamental : null;
-      const o = octave && Number.isFinite(octave.db) && Number.isFinite(octave.hz) ? octave : null;
-      const t = third && Number.isFinite(third.db) && Number.isFinite(third.hz) ? third : null;
+      const f = fundamental && !fundamental.ambiguous && Number.isFinite(fundamental.db) && Number.isFinite(fundamental.hz) ? fundamental : null;
+      const o = octave && !octave.ambiguous && Number.isFinite(octave.db) && Number.isFinite(octave.hz) ? octave : null;
+      const t = third && !third.ambiguous && Number.isFinite(third.db) && Number.isFinite(third.hz) ? third : null;
       const baseDb = f?.db ?? -96;
       const octaveEvidence = o ? Math.max(-24, o.db - baseDb) * 0.22 : -5;
       const thirdEvidence = t ? Math.max(-24, t.db - baseDb) * 0.18 : -5;

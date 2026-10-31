@@ -37,6 +37,17 @@ npm run preview
 
 A CI ugyanazt a TypeScript-ellenőrzést, tesztcsomagot és production buildet futtatja.
 
+## Netlify telepítés
+
+A projekt Netlify-on statikus Vite-alkalmazásként hosztolható. A gyökérkönyvtárban található `netlify.toml` rögzíti a következő beállításokat:
+
+- Build parancs: `npm run build`
+- Közzétett könyvtár: `dist`
+- Node.js verzió: 22
+- SPA fallback: a kliensoldali útvonalak közvetlen megnyitása és frissítése az `index.html`-re irányul.
+
+A telepítéshez importáld a GitHub-repozitóriumot Netlify-ban; a buildbeállításokat a konfigurációs fájl adja meg. A mikrofon használatához HTTPS szükséges, amit a Netlify alapértelmezett domainje biztosít. A hangszerprofilok és mérési naplók böngészőnként, helyben tárolódnak, ezért domainváltás előtt érdemes őket exportálni.
+
 ## Kiadás előtti átvétel
 
 A valós telefonos/mikrofonos ellenőrzéshez használd a [kiadás előtti átvételi ellenőrzőlistát](docs/RELEASE_ACCEPTANCE_CHECKLIST.md).
