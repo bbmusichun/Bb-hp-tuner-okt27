@@ -60,6 +60,7 @@ export const BBStrobeBands: React.FC<Props> = ({
 }) => {
   const [customBands, setCustomBands] = useState<StrobeBandConfig[]>(loadCustomBands);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isVisualPaused, setIsVisualPaused] = useState(false);
   const [readings, setReadings] = useState<Record<string, Reading>>({});
   const [targetDrafts, setTargetDrafts] = useState<Record<string, string>>({});
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -91,7 +92,9 @@ export const BBStrobeBands: React.FC<Props> = ({
   }, [customBands]);
 
   useEffect(() => {
+    if (isVisualPaused) return;
     let animationId = 0;
+    lastTickRef.current = performance.now();
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -187,7 +190,12 @@ export const BBStrobeBands: React.FC<Props> = ({
     };
     animationId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationId);
-  }, [canvasHeight]);
+  }, [canvasHeight, isVisualPaused]);
+
+  useEffect(() => {
+    // A new tuning target makes the frozen picture obsolete; return to live tracking.
+    setIsVisualPaused(false);
+  }, [baseFrequencyHz, alap.targetHz, kvint.targetHz, oktav.targetHz]);
 
   const updateBand = (id: string, patch: Partial<StrobeBandConfig>) => {
     setCustomBands((previous) => normalizeStrobeBands(previous.map((band) => band.id === id ? { ...band, ...patch } : band))
@@ -231,12 +239,36 @@ export const BBStrobeBands: React.FC<Props> = ({
           <h3 className="text-sm font-bold text-white">Stroboszkóp</h3>
           <p className="mt-0.5 text-[10px] text-slate-400">Felül kvint, középen oktáv, alul alap. A további sávok is ebben a nézetben jelennek meg.</p>
         </div>
-        <button type="button" onClick={() => setIsEditorOpen((open) => !open)} aria-expanded={isEditorOpen}
-          className="shrink-0 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-xs font-semibold text-amber-200">
-          {isEditorOpen ? 'Szerkesztés bezárása' : 'Sávok szerkesztése'}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (!isVisualPaused) setIsEditorOpen(false);
+              setIsVisualPaused(!isVisualPaused);
+            }}
+            aria-pressed={isVisualPaused}
+            aria-label={isVisualPaused ? 'Stroboszkóp élő megjelenítésének folytatása' : 'Stroboszkóp vizuális megjelenítésének szüneteltetése'}
+            className={`rounded-lg border px-2.5 py-2 text-xs font-semibold ${
+              isVisualPaused
+                ? 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200'
+                : 'border-slate-700 bg-slate-900/70 text-slate-300'
+            }`}
+          >
+            {isVisualPaused ? 'Folytatás' : 'Szünet'}
+          </button>
+          <button type="button" onClick={() => setIsEditorOpen((open) => !open)} aria-expanded={isEditorOpen}
+            disabled={isVisualPaused}
+            className="shrink-0 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-xs font-semibold text-amber-200 disabled:cursor-not-allowed disabled:opacity-40">
+            {isEditorOpen ? 'Szerkesztés bezárása' : 'Sávok szerkesztése'}
+          </button>
+        </div>
       </div>
 
+      {isVisualPaused && (
+        <div role="status" aria-live="polite" className="mb-2 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[10px] leading-relaxed text-amber-100">
+          A stroboszkóp képe rögzítve. A mikrofon és a háttérben futó hangmérés tovább működik. Új hangcél kiválasztásakor az élő megjelenítés automatikusan folytatódik.
+        </div>
+      )}
       <div className="flex w-full items-stretch gap-2">
         <div className="flex w-[78px] shrink-0 flex-col select-none" style={{ height: canvasHeight }}>
           {builtInLabels.map((row) => (
@@ -255,7 +287,7 @@ export const BBStrobeBands: React.FC<Props> = ({
         </div>
         <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-white/5 shadow-inner">
           <canvas ref={canvasRef} width={600} height={canvasHeight}
-            aria-label="A kvint, oktáv, alap és további frekvenciák egyetlen élő stroboszkópos nézetben"
+            aria-label={isVisualPaused ? 'Rögzített stroboszkóp-kép; a hangmérés tovább fut' : 'A kvint, oktáv, alap és további frekvenciák egyetlen élő stroboszkópos nézetben'}
             className="block w-full" style={{ height: canvasHeight }} />
         </div>
       </div>
@@ -270,7 +302,9 @@ export const BBStrobeBands: React.FC<Props> = ({
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500">
           {customBands.map((band, index) => {
             const reading = readings[band.id];
-            const valid = band.enabled && hasCustomSignal && reading?.deviationCents !== null && reading?.deviationCents !== undefined;
+            const valid = band.enabled && (isVisualPaused
+              ? reading?.deviationCents !== null && reading?.deviationCents !== undefined
+              : hasCustomSignal && reading?.deviationCents !== null && reading?.deviationCents !== undefined);
             return <span key={band.id} className="font-mono">
               <span style={{ color: BAND_COLORS[index % BAND_COLORS.length] }}>{band.name}: </span>
               {valid && reading?.measuredHz !== null && reading?.measuredHz !== undefined
