@@ -1329,13 +1329,13 @@ export default function App() {
             </div>
           </div>
         </div>
-        {isListening && autoGainControlStatus === false && (
+        {isListening && autoGainControlStatus === true && (
           <div
             role="status"
             aria-live="polite"
             className="mx-1 mb-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200"
           >
-            A böngésző nem aktiválta az automatikus mikrofonerősítést. Halk ütéseknél a hangfelismerés bizonytalanabb lehet.
+            A böngésző vagy az eszköz mégis bekapcsolta az automatikus mikrofonerősítést. Ez módosíthatja a lecsengés dinamikáját; a mérés folytatódik, de a halk lecsengés összehasonlítása kevésbé megbízható.
           </div>
         )}
         {isListening && (transientHoldoff || highInputLevel || inputNearClip) && (
