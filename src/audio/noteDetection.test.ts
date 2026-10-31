@@ -89,3 +89,53 @@ describe('robust note recognition for detuned handpan notes', () => {
     assert.equal(chooseNoteCandidate([d3, a3], detect)?.id, 'd3');
   });
 });
+
+
+describe('ambiguous resonance handling during automatic note detection', () => {
+  it('does not count an ambiguous fundamental as valid note evidence', () => {
+    const detect = (targetHz: number): SpectralPeak | null => {
+      if (Math.abs(targetHz - d3.frequency) < 0.1) {
+        return { hz: d3.frequency, db: -32, ambiguous: true };
+      }
+      if (Math.abs(targetHz - d3.frequency * 2) < 0.1) {
+        return { hz: d3.frequency * 2, db: -42 };
+      }
+      return null;
+    };
+    assert.equal(chooseNoteCandidate([d3], detect), null);
+  });
+
+  it('can use two clear partials when the fundamental is ambiguous', () => {
+    const detect = (targetHz: number): SpectralPeak | null => {
+      if (Math.abs(targetHz - d3.frequency) < 0.1) {
+        return { hz: d3.frequency, db: -32, ambiguous: true };
+      }
+      if (Math.abs(targetHz - d3.frequency * 2) < 0.1) {
+        return { hz: d3.frequency * 2, db: -42 };
+      }
+      if (Math.abs(targetHz - d3.frequency * 3) < 0.1) {
+        return { hz: d3.frequency * 3, db: -44 };
+      }
+      return null;
+    };
+    assert.equal(chooseNoteCandidate([d3, a3], detect)?.id, 'd3');
+  });
+
+  it('does not use an ambiguous partial as corroboration', () => {
+    const detect = (targetHz: number): SpectralPeak | null => {
+      if (Math.abs(targetHz - d3.frequency) < 0.1) {
+        return { hz: d3.frequency, db: -32 };
+      }
+      if (Math.abs(targetHz - d3.frequency * 2) < 0.1) {
+        return { hz: d3.frequency * 2, db: -40, ambiguous: true };
+      }
+      if (Math.abs(targetHz - d3.frequency * 3) < 0.1) {
+        return { hz: d3.frequency * 3, db: -44 };
+      }
+      return null;
+    };
+    const result = chooseNoteCandidate([d3], detect);
+    assert.equal(result?.id, 'd3');
+    assert.ok(result && result.confidence < 1);
+  });
+});
