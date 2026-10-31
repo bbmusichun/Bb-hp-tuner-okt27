@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { findSpectralPeakInWindow } from './spectralPeak';
+import { analyzeSpectralPeakInWindow, findSpectralPeakInWindow } from './spectralPeak';
 
 const SAMPLE_RATE = 48000;
 const FFT_SIZE = 16384;
@@ -164,8 +164,7 @@ describe('sine-reference validation of the live spectral peak algorithm', () => 
 });
 
 describe('ambiguous spectral peak diagnostics', () => {
-  it('flags two similarly strong, separated peaks instead of implying a unique resonance', async () => {
-    const { analyzeSpectralPeakInWindow } = await import('./spectralPeak');
+  it('flags two similarly strong, separated peaks instead of implying a unique resonance', () => {
     const spectrum = new Float32Array(FFT_SIZE / 2);
     spectrum.fill(-100);
     spectrum[48] = -40;
@@ -183,8 +182,7 @@ describe('ambiguous spectral peak diagnostics', () => {
     assert.equal(result.competingPeak.bin, 54);
   });
 
-  it('does not flag a clearly dominant peak when a weaker neighbour is present', async () => {
-    const { analyzeSpectralPeakInWindow } = await import('./spectralPeak');
+  it('does not flag a clearly dominant peak when a weaker neighbour is present', () => {
     const spectrum = new Float32Array(FFT_SIZE / 2);
     spectrum.fill(-100);
     spectrum[48] = -40;
@@ -200,8 +198,7 @@ describe('ambiguous spectral peak diagnostics', () => {
     assert.equal(result.ambiguous, false);
   });
 
-  it('keeps a single peak unambiguous and preserves the legacy strongest-peak API', async () => {
-    const { analyzeSpectralPeakInWindow } = await import('./spectralPeak');
+  it('keeps a single peak unambiguous and preserves the legacy strongest-peak API', () => {
     const spectrum = new Float32Array(FFT_SIZE / 2);
     spectrum.fill(-100);
     spectrum[49] = -35;
