@@ -5,6 +5,7 @@ import { formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBan
 import { isWithinTuningTolerance, type TuningToleranceSetting } from '../audio/tuningTolerance';
 import { strobeContrastFromDb, strobeSharpnessFromCents } from '../audio/strobeVisualMetrics';
 import { MAX_STROBE_SENSITIVITY, MIN_STROBE_SENSITIVITY } from '../audio/strobeSensitivity';
+import { calibratePartialTargetOffset, type PartialTargetOffset, type PartialTargetOffsetField } from '../audio/partialTargets';
 import type { ResonanceMeasurement } from '../types/tuner';
 
 const STORAGE_KEY = 'hangoal-custom-strobe-bands-v1';
@@ -23,6 +24,8 @@ interface Props {
   toleranceOverrideCents?: TuningToleranceSetting;
   selectedRole?: string;
   onSelectRole?: (role: 'fundamental' | 'fifth' | 'octave') => void;
+  partialTargetOffsets: PartialTargetOffset;
+  onCalibrateRole?: (role: 'fundamental' | 'fifth' | 'octave', measuredHz: number, targetHz: number) => void;
   strobeSensitivity?: number;
   onChangeStrobeSensitivity?: (value: number) => void;
 }
@@ -52,6 +55,7 @@ export const BBStrobeBands: React.FC<Props> = ({
   alap, kvint, oktav, hasSignal, active = false, transientHoldoff = false,
   baseFrequencyHz = 146.832384,
   toleranceOverrideCents = null, selectedRole, onSelectRole,
+  partialTargetOffsets, onCalibrateRole,
   strobeSensitivity = 1, onChangeStrobeSensitivity,
 }) => {
   const [customBands, setCustomBands] = useState<StrobeBandConfig[]>(loadCustomBands);
@@ -208,6 +212,12 @@ export const BBStrobeBands: React.FC<Props> = ({
     { id: 'fundamental', name: 'Alap · 1×', note: alap.noteName || 'D3', color: '#f59e0b', role: 'fundamental' as const },
   ];
 
+  const coreCalibrationRows = [
+    { role: 'fundamental' as const, label: 'Alaphang · 1×', field: 'fundamentalCents' as PartialTargetOffsetField, measurement: alap, color: '#f59e0b' },
+    { role: 'octave' as const, label: 'Oktáv · 2×', field: 'octaveCents' as PartialTargetOffsetField, measurement: oktav, color: '#38bdf8' },
+    { role: 'fifth' as const, label: '3. parciális · 3×', field: 'thirdPartialCents' as PartialTargetOffsetField, measurement: kvint, color: '#c084fc' },
+  ];
+
   return (
     <section className="my-2 rounded-2xl border border-white/10 bg-[#0b111b] p-3 shadow-lg">
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -269,6 +279,54 @@ export const BBStrobeBands: React.FC<Props> = ({
             <button type="button" onClick={addBand} disabled={customBands.length >= MAX_CUSTOM_BANDS}
               className="shrink-0 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-2 text-xs font-semibold text-amber-200 disabled:opacity-40">+ Új sáv</button>
           </div>
+
+          <section className="rounded-lg border border-amber-400/20 bg-amber-400/[0.04] p-2.5">
+            <div className="mb-2">
+              <h5 className="text-[11px] font-bold text-amber-100">A három fő rezonancia kalibrálása</h5>
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+                Érvényes, stabil élő mérésből a kiválasztott hang célfrekvenciáját a mért csúcshoz igazítja. Csak az adott hang adott rezonanciájának centkorrekciója változik.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {coreCalibrationRows.map(({ role, label, field, measurement, color }) => {
+                const measuredHz = measurement.measuredHz;
+                const targetHz = measurement.targetHz;
+                const valid = active && hasSignal && !transientHoldoff &&
+                  measurement.status === 'valid' &&
+                  Number.isFinite(measuredHz) && measuredHz !== null &&
+                  targetHz !== null && Number.isFinite(targetHz);
+                const calibrated = valid
+                  ? calibratePartialTargetOffset(partialTargetOffsets, field, measuredHz, targetHz)
+                  : null;
+                return (
+                  <div key={role} className="rounded-lg border border-white/10 bg-slate-950/70 p-2">
+                    <div className="text-[10px] font-semibold" style={{ color }}>{label}</div>
+                    <div className="mt-1 font-mono text-[10px] text-slate-300">
+                      {valid && measuredHz !== null ? measuredHz.toFixed(3) + ' Hz' : 'Nincs stabil mérés'}
+                    </div>
+                    <div className="font-mono text-[9px] text-slate-500">
+                      Cél: {targetHz !== null && Number.isFinite(targetHz) ? targetHz.toFixed(3) : '—'} Hz
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!calibrated}
+                      onClick={() => {
+                        if (valid && measuredHz !== null && targetHz !== null && Number.isFinite(targetHz)) {
+                          onCalibrateRole?.(role, measuredHz, targetHz);
+                        }
+                      }}
+                      className="mt-2 w-full rounded-md border border-amber-400/40 bg-amber-400/10 px-2 py-1.5 text-[10px] font-semibold text-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Cél nullázása
+                    </button>
+                    {!calibrated && valid && (
+                      <div className="mt-1 text-[9px] text-amber-300">A korrekció túllépné a ±50 cent profillimitet.</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
           {customBands.length === 0 ? (
             <p className="rounded-lg border border-dashed border-slate-700 px-3 py-3 text-center text-xs text-slate-400">Nincs további sáv. A három alap sáv használatra kész.</p>
           ) : customBands.map((band, index) => {

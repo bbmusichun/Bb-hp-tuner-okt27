@@ -11,11 +11,13 @@ test('builds a chromatic target with the expected fundamental and partials', () 
   assert.ok(Math.abs(target.fifthFreq - 1320) < 1e-8);
 });
 
-test('applies saved per-note octave and third-partial calibration offsets', () => {
+test('applies saved per-note fundamental, octave and third-partial calibration offsets', () => {
   const target = buildChromaticTargetNote(60, 440, 'd-kurd-9', {
-    'd-kurd-9:C4': { octaveCents: -10, thirdPartialCents: 15 },
+    'd-kurd-9:C4': { fundamentalCents: 9, octaveCents: -10, thirdPartialCents: 15 },
   });
   assert.ok(target);
+  const equalTemperedC4 = 440 * Math.pow(2, (60 - 69) / 12);
+  assert.ok(Math.abs(target.frequency - equalTemperedC4 * Math.pow(2, 9 / 1200)) < 1e-8);
   assert.ok(Math.abs(target.octaveFreq - target.frequency * 2 * Math.pow(2, -10 / 1200)) < 1e-8);
   assert.ok(Math.abs(target.fifthFreq - target.frequency * 3 * Math.pow(2, 15 / 1200)) < 1e-8);
 });

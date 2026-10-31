@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { bbAudioEngine } from '../audio/audioEngine';
 import { findSpectralPeakInWindow } from '../audio/spectralPeak';
-import { formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
+import { calibrateStrobeBandToMeasuredFrequency, formatStrobeTargetExpression, getStrobeBandTargetHz, normalizeStrobeBands, parseStrobeTargetExpression, parseStrobeTargetExpressionParts, type StrobeBandConfig } from '../audio/strobeBands';
 import { isWithinTuningTolerance, type TuningToleranceSetting } from '../audio/tuningTolerance';
 
 const STORAGE_KEY = 'hangoal-custom-strobe-bands-v1';
@@ -245,6 +245,9 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
               const cents = reading?.deviationCents ?? null;
               const valid = band.enabled && active && hasSignal && !transientHoldoff && cents !== null;
               const inTolerance = valid && isWithinTuningTolerance(cents, targetHz, toleranceOverrideCents);
+              const calibratedBand = valid && measured !== null
+                ? calibrateStrobeBandToMeasuredFrequency(band, measured, baseFrequencyHz)
+                : null;
               return (
                 <div key={band.id} className="rounded-xl border border-white/10 bg-slate-950/50 p-2.5">
                   <div className="mb-2 flex items-center gap-2">
@@ -340,6 +343,22 @@ export const BBConfigurableStrobeBands: React.FC<Props> = ({
                   {valid && reading?.amplitudeDb !== null && reading?.amplitudeDb !== undefined && (
                     <div className="mt-1 text-right text-[10px] text-slate-500">Csúcs: {reading.amplitudeDb.toFixed(1)} dB (FFT-becslés)</div>
                   )}
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      disabled={!calibratedBand}
+                      onClick={() => {
+                        if (!calibratedBand) return;
+                        updateBand(band.id, { centsOffset: calibratedBand.centsOffset });
+                      }}
+                      className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-1.5 text-[10px] font-semibold text-amber-200 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Cél nullázása a mért frekvenciához
+                    </button>
+                    <span className="text-[9px] text-slate-500">
+                      Csak a célkorrekció változik; a mért Hz és a korábbi napló nem íródik át.
+                    </span>
+                  </div>
                 </div>
               );
             })}
