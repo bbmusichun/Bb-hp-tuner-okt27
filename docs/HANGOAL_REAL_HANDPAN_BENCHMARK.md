@@ -91,3 +91,13 @@ The production audio engine currently uses a 16,384-sample analyser FFT, so the 
 | D3 third partial (3×) | 441.253 Hz | +2.97 cents | +1.81 to +6.16 cents | 56.6 dB | 51.9 dB |
 
 No frame in this stable section was flagged as ambiguous by the competing-peak rule. The early attack is deliberately excluded: the 16,384-sample window spans about 371 ms at 44.1 kHz, and frames centred in the first 0.6 s still contain substantial transient motion. This is an offline signal-processing check aligned to the engine's FFT size, not a browser/phone microphone acceptance test. In particular, it does not certify the absolute dBFS gate or the 8 dB prominence threshold across devices; those still require live validation.
+
+The same recording was also resampled from 44.1 kHz to 48 kHz before applying the 16,384-sample analysis, to check the other common Web Audio context rate. Across 56 frame centres from 0.60 s to 3.00 s:
+
+| Resonance | Median measured | Median deviation | 10th–90th percentile deviation | Median prominence | 10th percentile prominence |
+|---|---:|---:|---:|---:|---:|
+| D3 fundamental (1×) | 147.076 Hz | +2.87 cents | +0.94 to +4.82 cents | 42.2 dB | 31.9 dB |
+| D4 octave resonance (2×) | 292.374 Hz | −7.63 cents | −10.15 to −1.87 cents | 42.1 dB | 34.9 dB |
+| D3 third partial (3×) | 441.240 Hz | +2.92 cents | +1.84 to +6.06 cents | 56.4 dB | 51.6 dB |
+
+The 44.1 kHz and resampled 48 kHz results are close, especially for the independently measured D4 resonance. Resampling here is an offline approximation of the common 48 kHz audio-context path; it is not a measurement from Safari or an iPhone microphone.
