@@ -12,7 +12,7 @@ import { estimatePitchYin } from './yinPitch';
 import { isNearDigitalClipPeak } from './inputClipping';
 import { isUsableSignalLevel } from './signalLevel';
 import { isSameMeasurementTarget } from './measurementCache';
-import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
+import { isReliableResonanceConfidence, isTrackableResonancePeak, resonanceConfidenceFromDb } from './peakConfidence';
 import { analyzeSpectralPeakInWindow, findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
@@ -463,7 +463,12 @@ export class BBAudioEngine {
     const rawFundamentalPeak = fundamentalAnalysis?.peak ?? null;
     // Refine the fundamental only when the independent periodicity estimate strongly agrees
     // with the FFT peak. The FFT remains the primary reference; YIN cannot pull it to an octave.
-    const fPeak = rawFundamentalPeak && yinEstimate.frequencyHz !== null
+    const fundamentalPeakIsTrackable = rawFundamentalPeak !== null &&
+      isTrackableResonancePeak(
+        fundamentalAnalysis?.ambiguous ?? false,
+        resonanceConfidenceFromDb(rawFundamentalPeak.magDb),
+      );
+    const fPeak = fundamentalPeakIsTrackable && rawFundamentalPeak && yinEstimate.frequencyHz !== null
       ? {
           ...rawFundamentalPeak,
           freq: fuseAgreeingFrequencyEstimates(
@@ -581,16 +586,24 @@ export class BBAudioEngine {
   ): ResonanceMeasurement {
     // Never accept a spectral peak when the time-domain gate says there is no usable signal.
     const rawPeak = hasSignal ? peak : null;
+    const confidence = rawPeak ? resonanceConfidenceFromDb(rawPeak.magDb) : 0;
+    const trackable = rawPeak !== null && isTrackableResonancePeak(peakAmbiguous, confidence);
     let currentPeak = rawPeak;
-    if (rawPeak) {
+
+    if (trackable && rawPeak) {
       const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now);
       this.pitchHistory[role] = smoothed.history;
       currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
+    } else {
+      // A weak, ambiguous, or missing peak must not enter the median history or
+      // complete a stability run. Keep a visible raw reading where available.
+      this.pitchHistory[role] = [];
+      this.stablePitchTrackers[role].reset();
     }
-    const confidence = currentPeak ? resonanceConfidenceFromDb(currentPeak.magDb) : 0;
-    const stability = rawPeak
+
+    const stability = trackable && rawPeak
       ? this.stablePitchTrackers[role].observe({ frequencyHz: rawPeak.freq, confidence, timestampMs: now })
-      : (this.stablePitchTrackers[role].reset(), { stable: false, frequencyHz: null, count: 0 });
+      : { stable: false, frequencyHz: null, count: 0 };
     const finalized = finalizePeakReading(
       currentPeak,
       stability.stable ? stability.frequencyHz : null,
@@ -603,7 +616,7 @@ export class BBAudioEngine {
     // than live. This gives the player time to read the value after a strike while
     // preserving a clear distinction between a live measurement and a retained result.
     const status = currentPeak && hasSignal
-      ? !peakAmbiguous && stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      ? trackable && stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
       : 'no-signal';
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
