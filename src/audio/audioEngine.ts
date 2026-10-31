@@ -12,7 +12,7 @@ import { estimatePitchYin } from './yinPitch';
 import { isNearDigitalClipPeak } from './inputClipping';
 import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, resonanceConfidenceFromDb } from './peakConfidence';
-import { findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
+import { analyzeSpectralPeakInWindow, findSpectralPeakInWindow, interpolateSpectralPeak } from './spectralPeak';
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
@@ -455,7 +455,7 @@ export class BBAudioEngine {
 
     // Search for the 3 resonances:
     // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const rawFundamentalPeak = transientHoldoff ? null : findSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);
+    const fundamentalAnalysis = transientHoldoff ? null : analyzeSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);\n    const rawFundamentalPeak = fundamentalAnalysis?.peak ?? null;
     // Refine the fundamental only when the independent periodicity estimate strongly agrees
     // with the FFT peak. The FFT remains the primary reference; YIN cannot pull it to an octave.
     const fPeak = rawFundamentalPeak && yinEstimate.frequencyHz !== null
