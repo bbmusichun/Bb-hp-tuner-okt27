@@ -1436,8 +1436,8 @@ export default function App() {
                   }}
                   className="shrink-0 inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20"
                   aria-label={isOwnDPlaying ? "Saját D leállítása" : "Saját D lejátszása"}
-                  disabled={isListening || isReferenceTonePlaying}
-                  title={isListening ? 'A saját felvétel lejátszásához előbb állítsd le a mikrofonmérést.' : isReferenceTonePlaying ? 'Előbb állítsd le a szinuszreferenciát.' : undefined}
+                  disabled={isListening || isReferenceTonePlaying || !ownDAudioDuration}
+                  title={isListening ? 'A saját felvétel lejátszásához előbb állítsd le a mikrofonmérést.' : isReferenceTonePlaying ? 'Előbb állítsd le a szinuszreferenciát.' : !ownDAudioDuration ? 'A hangfájl betöltése folyamatban van.' : undefined}
                 >
                   <Volume2 className="h-4 w-4" />
                   {isOwnDPlaying ? "Leállítás" : "Lejátszás"}
@@ -1449,7 +1449,7 @@ export default function App() {
                   type="file"
                   accept="audio/*,.wav,.mp3,.m4a,.aac,.ogg,.flac"
                   aria-label="Saját handpan hangfájl kiválasztása"
-                  className="min-w-0 flex-1 text-[10px] file:sr-only"
+                  className="sr-only"
                   onChange={(event) => {
                     const file = event.currentTarget.files?.[0];
                     if (!file) return;
