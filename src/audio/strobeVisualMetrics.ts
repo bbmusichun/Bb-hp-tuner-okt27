@@ -30,3 +30,23 @@ export function strobeSharpnessFromCents(samples: readonly number[]): number {
   // A spread of 12 cents or more is rendered with the softest edges.
   return clamp01(1 - standardDeviation / 12);
 }
+
+/**
+ * A strobe may turn green only after a valid reading has remained inside the
+ * selected tuning tolerance continuously for the required duration.
+ */
+export function hasStrobeBeenStable(
+  inTolerance: boolean,
+  stableSinceMs: number | null,
+  nowMs: number,
+  requiredStableMs = 1000,
+): boolean {
+  if (!inTolerance ||
+      stableSinceMs === null ||
+      !Number.isFinite(stableSinceMs) ||
+      !Number.isFinite(nowMs) ||
+      !Number.isFinite(requiredStableMs) ||
+      requiredStableMs < 0 ||
+      nowMs < stableSinceMs) return false;
+  return nowMs - stableSinceMs >= requiredStableMs;
+}
