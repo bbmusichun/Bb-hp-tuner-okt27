@@ -3,9 +3,57 @@
  * Input is a recent time-domain window. The returned pitch is an independent
  * periodicity estimate, not a replacement for instrument-specific partial tracking.
  */
+
 export interface YinEstimate {
   frequencyHz: number | null;
   clarity: number;
+}
+
+/**
+ * Windowed-sinc low-pass before decimation. Plain sample skipping aliases strong
+ * upper partials and attack noise into the pitch-analysis band. A Blackman-windowed
+ * FIR keeps the passband flat enough for pitch work while suppressing those aliases.
+ */
+function decimateWithAntiAlias(
+  input: Float32Array,
+  factor: number,
+): Float32Array {
+  if (factor <= 1) return input;
+
+  const taps = 63;
+  const half = (taps - 1) / 2;
+  // Stay below the post-decimation Nyquist frequency with a modest transition band.
+  const cutoff = 0.45 / factor;
+  const coefficients = new Float64Array(taps);
+  let coefficientSum = 0;
+
+  for (let tap = 0; tap < taps; tap++) {
+    const offset = tap - half;
+    const ideal = offset === 0
+      ? 2 * cutoff
+      : Math.sin(2 * Math.PI * cutoff * offset) / (Math.PI * offset);
+    const window = 0.42
+      - 0.5 * Math.cos((2 * Math.PI * tap) / (taps - 1))
+      + 0.08 * Math.cos((4 * Math.PI * tap) / (taps - 1));
+    coefficients[tap] = ideal * window;
+    coefficientSum += coefficients[tap];
+  }
+
+  // Normalize DC gain to one.
+  for (let tap = 0; tap < taps; tap++) coefficients[tap] /= coefficientSum;
+
+  const outputLength = Math.floor(input.length / factor);
+  const output = new Float32Array(outputLength);
+  for (let outIndex = 0; outIndex < outputLength; outIndex++) {
+    const center = outIndex * factor;
+    let value = 0;
+    for (let tap = 0; tap < taps; tap++) {
+      const sourceIndex = Math.max(0, Math.min(input.length - 1, center + tap - half));
+      value += input[sourceIndex] * coefficients[tap];
+    }
+    output[outIndex] = value;
+  }
+  return output;
 }
 
 export function estimatePitchYin(
@@ -19,17 +67,19 @@ export function estimatePitchYin(
   const factor = Math.max(1, Math.floor(options.downsampleFactor ?? 4));
 
   if (!Number.isFinite(sampleRate) || sampleRate <= 0 || input.length < 256 ||
-      !Number.isFinite(minHz) || !Number.isFinite(maxHz) || minHz <= 0 || maxHz <= minHz) {
+      !Number.isFinite(minHz) || !Number.isFinite(maxHz) || minHz <= 0 || maxHz <= minHz ||
+      !Number.isFinite(threshold) || threshold <= 0 || threshold >= 1) {
     return { frequencyHz: null, clarity: 0 };
   }
 
-  const length = Math.floor(input.length / factor);
-  const signal = new Float32Array(length);
-  for (let i = 0; i < length; i++) signal[i] = input[i * factor] ?? 0;
+  // Anti-alias filtering is essential here: a handpan's bright upper partials can
+  // otherwise fold into false low-frequency periodicity after sample skipping.
+  const signal = decimateWithAntiAlias(input, factor);
+  const length = signal.length;
 
   let energy = 0;
   for (let i = 0; i < length; i++) energy += signal[i] * signal[i];
-  if (energy / length < 1e-8) return { frequencyHz: null, clarity: 0 };
+  if (length === 0 || energy / length < 1e-8) return { frequencyHz: null, clarity: 0 };
 
   const effectiveRate = sampleRate / factor;
   const minLag = Math.max(2, Math.floor(effectiveRate / maxHz));
