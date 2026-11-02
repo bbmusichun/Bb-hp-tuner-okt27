@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   assessPartialQuality,
   medianAbsoluteDeviation,
+  medianOrNull,
   summarizeWavPartial,
   QUALITY_THRESHOLDS,
 } from './measurementQuality';
@@ -150,6 +151,47 @@ describe('partial measurement quality', () => {
     assert.deepEqual(result.reasons, ['no-measurement']);
     assert.equal(result.coverage, 0);
   });
+
+  it('rejects impossible window counts instead of clamping them into full coverage', () => {
+    for (const [totalWindows, measuredWindows] of [
+      [4, 5],
+      [4, -1],
+      [4, 1.5],
+      [Number.NaN, 2],
+      [4, Number.POSITIVE_INFINITY],
+    ]) {
+      const result = assessPartialQuality({
+        totalWindows,
+        measuredWindows,
+        madCents: 0.2,
+        medianPeakDb: -45,
+        medianProminenceDb: 20,
+      });
+      assert.equal(result.status, 'insufficient');
+      assert.deepEqual(result.reasons, ['invalid-input']);
+      assert.equal(result.coverage, 0);
+    }
+  });
+
+  it('rejects physically impossible negative spread and prominence values', () => {
+    const negativeSpread = assessPartialQuality({
+      totalWindows: 5,
+      measuredWindows: 5,
+      madCents: -0.1,
+      medianPeakDb: -45,
+      medianProminenceDb: 20,
+    });
+    assert.deepEqual(negativeSpread.reasons, ['invalid-input']);
+
+    const negativeProminence = assessPartialQuality({
+      totalWindows: 5,
+      measuredWindows: 5,
+      madCents: 0.2,
+      medianPeakDb: -45,
+      medianProminenceDb: -0.1,
+    });
+    assert.deepEqual(negativeProminence.reasons, ['invalid-input']);
+  });
 });
 
 describe('partial summary aggregation', () => {
@@ -183,6 +225,12 @@ describe('partial summary aggregation', () => {
   it('computes a robust spread that ignores a single outlier', () => {
     assert.equal(medianAbsoluteDeviation([1, 1, 1, 1, 40]), 0);
     assert.equal(medianAbsoluteDeviation([]), null);
+  });
+
+  it('ignores non-finite values when calculating robust medians', () => {
+    assert.equal(medianOrNull([1, Number.NaN, 3, Number.POSITIVE_INFINITY]), 2);
+    assert.equal(medianOrNull([Number.NaN, Number.NEGATIVE_INFINITY]), null);
+    assert.equal(medianAbsoluteDeviation([1, Number.NaN, 3]), 1);
   });
 });
 
