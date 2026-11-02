@@ -58,6 +58,7 @@ const QUALITY_REASON_LABEL: Record<MeasurementQualityReason, string> = {
   unstable: 'instabil frekvencia',
   'weak-peak': 'gyenge csúcs',
   'low-prominence': 'alacsony helyi kiemelkedés',
+  'invalid-input': 'érvénytelen mérési adat',
 };
 
 const IDENTIFIABILITY_LABEL: Record<IdentifiabilityStatus, string> = {
