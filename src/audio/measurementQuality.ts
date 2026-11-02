@@ -23,7 +23,8 @@ export type MeasurementQualityReason =
   | 'low-coverage'
   | 'unstable'
   | 'weak-peak'
-  | 'low-prominence';
+  | 'low-prominence'
+  | 'invalid-input';
 
 export interface PartialQualityInput {
   /** Windows analysed for this recording. */
@@ -80,10 +81,26 @@ function isFiniteNumber(value: number | null): value is number {
 }
 
 export function assessPartialQuality(input: PartialQualityInput): PartialQualityAssessment {
-  const totalWindows = Number.isFinite(input.totalWindows) ? Math.max(0, input.totalWindows) : 0;
-  const measuredWindows = Number.isFinite(input.measuredWindows)
-    ? Math.max(0, Math.min(input.measuredWindows, totalWindows))
-    : 0;
+  // Window counts are discrete facts, not values to clamp. Clamping a corrupted
+  // measuredWindows count to totalWindows could otherwise turn invalid data into
+  // an apparently perfect 100% coverage result.
+  const validCounts =
+    Number.isInteger(input.totalWindows) &&
+    Number.isInteger(input.measuredWindows) &&
+    input.totalWindows >= 0 &&
+    input.measuredWindows >= 0 &&
+    input.measuredWindows <= input.totalWindows;
+  const validSpread = input.madCents === null ||
+    (Number.isFinite(input.madCents) && input.madCents >= 0);
+  const validProminence = input.medianProminenceDb === null ||
+    (Number.isFinite(input.medianProminenceDb) && input.medianProminenceDb >= 0);
+
+  if (!validCounts || !validSpread || !validProminence) {
+    return { status: 'insufficient', reasons: ['invalid-input'], coverage: 0 };
+  }
+
+  const totalWindows = input.totalWindows;
+  const measuredWindows = input.measuredWindows;
   const coverage = totalWindows > 0 ? measuredWindows / totalWindows : 0;
   const reasons: MeasurementQualityReason[] = [];
   let status: MeasurementQualityStatus = 'reliable';
@@ -132,8 +149,8 @@ export function assessPartialQuality(input: PartialQualityInput): PartialQuality
 
 /** Median with an explicit empty-result value; `null` means "not enough data". */
 export function medianOrNull(values: number[]): number | null {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
