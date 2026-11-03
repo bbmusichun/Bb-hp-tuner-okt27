@@ -116,7 +116,7 @@ export const BBCards: React.FC<Props> = ({
               {!hasSignal || c.data.status === 'no-signal'
                 ? 'Nincs jel'
                 : isHeld
-                  ? `Utolsó ütés · ${Math.max(0, (Date.now() - c.data.timestampMs) / 1000).toFixed(1)} s`
+                  ? `Utolsó ütés · ${Math.max(0, (Date.now() - c.data.timestampMs) / 1000).toFixed(1)} s · ${centsStr}`
                   : centsStr}
             </div>
 
