@@ -45,3 +45,26 @@ export function fuseAgreeingFrequencyEstimates(
     Math.log(periodicHz as number) * independentWeight,
   );
 }
+
+/**
+ * Independent periodicity must corroborate an FFT candidate before the more
+ * expensive time-domain sine fit is allowed to refine it. This prevents a
+ * locally strong but incorrectly selected spectral peak from being polished
+ * into a deceptively precise wrong answer.
+ */
+export function independentPitchConfirmsCandidate(
+  spectralHz: number,
+  periodicHz: number | null,
+  periodicClarity: number,
+  options: { minimumClarity?: number; maximumAgreementCents?: number } = {},
+): boolean {
+  const minimumClarity = options.minimumClarity ?? 0.82;
+  const maximumAgreementCents = options.maximumAgreementCents ?? 10;
+  if (!Number.isFinite(spectralHz) || spectralHz <= 0 ||
+      !Number.isFinite(periodicHz) || (periodicHz ?? 0) <= 0 ||
+      !Number.isFinite(periodicClarity) || periodicClarity < minimumClarity ||
+      !Number.isFinite(minimumClarity) || minimumClarity < 0 || minimumClarity > 1 ||
+      !Number.isFinite(maximumAgreementCents) || maximumAgreementCents <= 0) return false;
+  const agreement = Math.abs(1200 * Math.log2((periodicHz as number) / spectralHz));
+  return Number.isFinite(agreement) && agreement <= maximumAgreementCents;
+}
