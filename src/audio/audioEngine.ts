@@ -457,9 +457,12 @@ export class BBAudioEngine {
     this.transientDetected = transientDetected;
     this.transientHoldoff = transientHoldoff;
 
-    // Search for the 3 resonances:
+    // Search all 3 resonances even during transient holdoff. The FFT window already
+    // applies a Blackman taper; suppressing the entire 341 ms frame after a strike
+    // can hide a short-lived ding. Early readings remain visible as uncertain, but
+    // are quarantined from smoothing and stability until the holdoff ends.
     // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const fundamentalAnalysis = transientHoldoff ? null : analyzeSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);
+    const fundamentalAnalysis = analyzeSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);
     const rawFundamentalPeak = fundamentalAnalysis?.peak ?? null;
     // Refine the fundamental only when the independent periodicity estimate strongly agrees
     // with the FFT peak. The FFT remains the primary reference; YIN cannot pull it to an octave.
@@ -480,8 +483,8 @@ export class BBAudioEngine {
         }
       : rawFundamentalPeak;
     // Search each resonance independently to reduce masking by a dominant fundamental.
-    const fifthAnalysis = transientHoldoff ? null : analyzeSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
-    const octaveAnalysis = transientHoldoff ? null : analyzeSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
+    const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
+    const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
     const qPeak = fifthAnalysis?.peak ?? null;
     const oPeak = octaveAnalysis?.peak ?? null;
 
@@ -495,7 +498,8 @@ export class BBAudioEngine {
       now,
       hasSignal,
       fundamentalAnalysis?.ambiguous ?? false,
-      fundamentalAnalysis?.prominenceDb ?? 0
+      fundamentalAnalysis?.prominenceDb ?? 0,
+      transientHoldoff
     );
 
     const kvint = this.buildResonanceMeasurement(
@@ -507,7 +511,8 @@ export class BBAudioEngine {
       now,
       hasSignal,
       fifthAnalysis?.ambiguous ?? false,
-      fifthAnalysis?.prominenceDb ?? 0
+      fifthAnalysis?.prominenceDb ?? 0,
+      transientHoldoff
     );
 
     const oktav = this.buildResonanceMeasurement(
@@ -519,7 +524,8 @@ export class BBAudioEngine {
       now,
       hasSignal,
       octaveAnalysis?.ambiguous ?? false,
-      octaveAnalysis?.prominenceDb ?? 0
+      octaveAnalysis?.prominenceDb ?? 0,
+      transientHoldoff
     );
 
     // Stability history follows the currently displayed resonance. Exclude transient and
@@ -587,12 +593,13 @@ export class BBAudioEngine {
     now: number,
     hasSignal: boolean,
     peakAmbiguous = false,
-    peakProminenceDb = 0
+    peakProminenceDb = 0,
+    trackingSuppressed = false
   ): ResonanceMeasurement {
     // Never accept a spectral peak when the time-domain gate says there is no usable signal.
     const rawPeak = hasSignal ? peak : null;
     const confidence = rawPeak ? resonanceConfidenceFromDb(rawPeak.magDb) : 0;
-    const trackable = rawPeak !== null &&
+    const trackable = !trackingSuppressed && rawPeak !== null &&
       isTrackableResonancePeak(peakAmbiguous, confidence, peakProminenceDb);
     let currentPeak = rawPeak;
 
