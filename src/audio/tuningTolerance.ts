@@ -1,16 +1,12 @@
 /**
  * Product tuning tolerance policy.
  *
- * This is an explicit UI threshold for the tuner; it is not a claim about
- * psychoacoustic just-noticeable differences. It should be calibrated with
- * instrument recordings and listening tests before being marketed as a
- * perceptual model.
+ * The default acceptance band is ±3 cents, based on the practical handpan
+ * tuning criterion supplied for this project. The measured deviation itself
+ * is always retained and displayed; the tolerance only determines the status.
+ * This is an acceptance threshold, not a claim about measurement uncertainty.
  */
 
-/**
- * null = adaptive Auto, number = fixed cent threshold,
- * always = every valid reading is accepted, never = no reading is green.
- */
 export type TuningToleranceSetting = number | null | 'always' | 'never';
 
 export function isValidTuningToleranceSetting(value: unknown): value is TuningToleranceSetting {
@@ -34,14 +30,14 @@ export function formatTuningToleranceSetting(
   return `±${threshold.toFixed(1)} cent`;
 }
 
+/** Default to the same ±3-cent acceptance band across the handpan register. */
 export function tuningToleranceCents(targetHz: number, overrideCents?: number | null): number {
   if (typeof overrideCents === 'number' && Number.isFinite(overrideCents) && overrideCents >= 0.5 && overrideCents <= 20) {
     return overrideCents;
   }
-  if (!Number.isFinite(targetHz) || targetHz <= 0) return 1.5;
-  const referenceHz = 146.832384; // D3 at A4 = 440 Hz
-  const octaveSteps = Math.log2(targetHz / referenceHz);
-  return Math.max(1.5, Math.min(3, 1.5 + 0.75 * octaveSteps));
+  // A bad target must not widen acceptance; callers separately validate targets.
+  if (!Number.isFinite(targetHz) || targetHz <= 0) return 3;
+  return 3;
 }
 
 /**
