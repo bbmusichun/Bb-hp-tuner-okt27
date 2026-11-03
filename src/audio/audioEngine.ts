@@ -14,6 +14,7 @@ import { isUsableSignalLevel } from './signalLevel';
 import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, isTrackableResonancePeak, resonanceConfidenceFromDb } from './peakConfidence';
 import { analyzeSpectralPeakInWindow } from './spectralPeak';
+import { refineFrequencyBySineFit } from './sineFitRefinement';
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
@@ -472,16 +473,25 @@ export class BBAudioEngine {
         resonanceConfidenceFromDb(rawFundamentalPeak.magDb),
         fundamentalAnalysis?.prominenceDb ?? 0,
       );
-    const fPeak = fundamentalPeakIsTrackable && rawFundamentalPeak && yinEstimate.frequencyHz !== null
+    // Refine the FFT candidate against the original waveform. This is a narrow
+    // local fit (±8 cents), so it improves sub-bin precision without allowing
+    // the estimator to jump to a neighbouring note or a distant partial.
+    const sineFitHz = fundamentalPeakIsTrackable && rawFundamentalPeak
+      ? refineFrequencyBySineFit(this.timeData, this.sampleRate, rawFundamentalPeak.freq, 8)
+      : null;
+    const timeRefinedPeak = rawFundamentalPeak && sineFitHz !== null
+      ? { ...rawFundamentalPeak, freq: sineFitHz }
+      : rawFundamentalPeak;
+    const fPeak = fundamentalPeakIsTrackable && timeRefinedPeak && yinEstimate.frequencyHz !== null
       ? {
-          ...rawFundamentalPeak,
+          ...timeRefinedPeak,
           freq: fuseAgreeingFrequencyEstimates(
-            rawFundamentalPeak.freq,
+            timeRefinedPeak.freq,
             yinEstimate.frequencyHz,
             yinEstimate.clarity,
           ),
         }
-      : rawFundamentalPeak;
+      : timeRefinedPeak;
     // Search each resonance independently to reduce masking by a dominant fundamental.
     const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
     const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
