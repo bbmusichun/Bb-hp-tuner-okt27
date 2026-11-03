@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
+import { fuseAgreeingFrequencyEstimates, independentPitchConfirmsCandidate } from './frequencyFusion';
 
 const A4 = 440;
 const cents = (measured: number, target: number) => 1200 * Math.log2(measured / target);
@@ -36,5 +36,12 @@ describe('reference-frequency estimate fusion', () => {
     assert.equal(fuseAgreeingFrequencyEstimates(A4, null, 0), A4);
     assert.equal(fuseAgreeingFrequencyEstimates(A4, Number.NaN, 1), A4);
     assert.ok(Number.isNaN(fuseAgreeingFrequencyEstimates(Number.NaN, A4, 1)));
+  });
+  it('requires an independent, high-clarity pitch estimate to corroborate sine-fit refinement', () => {
+    assert.equal(independentPitchConfirmsCandidate(A4, A4 * 2 ** (9.9 / 1200), 0.82), true);
+    assert.equal(independentPitchConfirmsCandidate(A4, A4 * 2 ** (10.1 / 1200), 0.99), false);
+    assert.equal(independentPitchConfirmsCandidate(A4, A4, 0.819), false);
+    assert.equal(independentPitchConfirmsCandidate(A4, null, 1), false);
+    assert.equal(independentPitchConfirmsCandidate(Number.NaN, A4, 1), false);
   });
 });

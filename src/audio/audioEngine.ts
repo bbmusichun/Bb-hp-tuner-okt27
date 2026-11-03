@@ -16,7 +16,7 @@ import { isReliableResonanceConfidence, isTrackableResonancePeak, resonanceConfi
 import { analyzeSpectralPeakInWindow } from './spectralPeak';
 import { refineFrequencyBySineFit } from './sineFitRefinement';
 import { finalizePeakReading } from './resonanceMetrics';
-import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
+import { fuseAgreeingFrequencyEstimates, independentPitchConfirmsCandidate } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
 import { createMicrophoneAudioConstraints } from './microphoneConstraints';
 
@@ -476,7 +476,13 @@ export class BBAudioEngine {
     // Refine the FFT candidate against the original waveform. This is a narrow
     // local fit (±8 cents), so it improves sub-bin precision without allowing
     // the estimator to jump to a neighbouring note or a distant partial.
-    const sineFitHz = fundamentalPeakIsTrackable && rawFundamentalPeak
+    const independentPitchConfirmsPeak = rawFundamentalPeak !== null &&
+      independentPitchConfirmsCandidate(
+        rawFundamentalPeak.freq,
+        yinEstimate.frequencyHz,
+        yinEstimate.clarity,
+      );
+    const sineFitHz = fundamentalPeakIsTrackable && rawFundamentalPeak && independentPitchConfirmsPeak
       ? refineFrequencyBySineFit(this.timeData, this.sampleRate, rawFundamentalPeak.freq, 8)
       : null;
     const timeRefinedPeak = rawFundamentalPeak && sineFitHz !== null
