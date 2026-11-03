@@ -113,14 +113,12 @@ export const BBCards: React.FC<Props> = ({
                 inTune ? 'text-[#10b981]' : Math.abs(cents || 0) > 10 ? 'text-[#f43f5e]' : 'text-[#f59e0b]'
               }`}
             >
-              {isHeld
-                ? `Utolsó ütés · ${Math.max(0, (Date.now() - c.data.timestampMs) / 1000).toFixed(1)} s`
-                : !hasSignal || c.data.status === 'no-signal' ? 'Nincs jel'
-                : readoutMode === 'cents' ? (inTune ? 'Pontos' : 'Ellenőrizd az eltérést') : centsStr}
+              {!hasSignal || c.data.status === 'no-signal'
+                ? 'Nincs jel'
+                : isHeld
+                  ? `Utolsó ütés · ${Math.max(0, (Date.now() - c.data.timestampMs) / 1000).toFixed(1)} s`
+                  : centsStr}
             </div>
-            {isHeld && readoutMode !== 'cents' && (
-              <div className="text-[10px] font-mono text-slate-300/70">{centsStr}</div>
-            )}
 
             {/* Mini Sparkline Canvas */}
             <div className="w-full h-5 mt-1 overflow-hidden">
