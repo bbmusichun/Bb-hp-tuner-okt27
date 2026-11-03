@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { fuseAgreeingFrequencyEstimates } from './frequencyFusion';
+import { fuseAgreeingFrequencyEstimates, independentPitchConfirmsCandidate } from './frequencyFusion';
 
 const A4 = 440;
 const cents = (measured: number, target: number) => 1200 * Math.log2(measured / target);
