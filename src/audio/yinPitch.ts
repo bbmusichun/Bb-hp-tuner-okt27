@@ -9,45 +9,53 @@ export interface YinEstimate {
   clarity: number;
 }
 
+const ANTI_ALIAS_TAPS = 63;
+const antiAliasCoefficientCache = new Map<number, Float64Array>();
+
 /**
  * Windowed-sinc low-pass before decimation. Plain sample skipping aliases strong
  * upper partials and attack noise into the pitch-analysis band. A Blackman-windowed
  * FIR keeps the passband flat enough for pitch work while suppressing those aliases.
  */
-function decimateWithAntiAlias(
-  input: Float32Array,
-  factor: number,
-): Float32Array {
-  if (factor <= 1) return input;
+function getAntiAliasCoefficients(factor: number): Float64Array {
+  const cached = antiAliasCoefficientCache.get(factor);
+  if (cached) return cached;
 
-  const taps = 63;
-  const half = (taps - 1) / 2;
+  const half = (ANTI_ALIAS_TAPS - 1) / 2;
   // Stay below the post-decimation Nyquist frequency with a modest transition band.
   const cutoff = 0.45 / factor;
-  const coefficients = new Float64Array(taps);
+  const coefficients = new Float64Array(ANTI_ALIAS_TAPS);
   let coefficientSum = 0;
 
-  for (let tap = 0; tap < taps; tap++) {
+  for (let tap = 0; tap < ANTI_ALIAS_TAPS; tap++) {
     const offset = tap - half;
     const ideal = offset === 0
       ? 2 * cutoff
       : Math.sin(2 * Math.PI * cutoff * offset) / (Math.PI * offset);
     const window = 0.42
-      - 0.5 * Math.cos((2 * Math.PI * tap) / (taps - 1))
-      + 0.08 * Math.cos((4 * Math.PI * tap) / (taps - 1));
+      - 0.5 * Math.cos((2 * Math.PI * tap) / (ANTI_ALIAS_TAPS - 1))
+      + 0.08 * Math.cos((4 * Math.PI * tap) / (ANTI_ALIAS_TAPS - 1));
     coefficients[tap] = ideal * window;
     coefficientSum += coefficients[tap];
   }
 
-  // Normalize DC gain to one.
-  for (let tap = 0; tap < taps; tap++) coefficients[tap] /= coefficientSum;
+  // Normalize DC gain to one. Coefficients are immutable after being cached.
+  for (let tap = 0; tap < ANTI_ALIAS_TAPS; tap++) coefficients[tap] /= coefficientSum;
+  antiAliasCoefficientCache.set(factor, coefficients);
+  return coefficients;
+}
 
+function decimateWithAntiAlias(input: Float32Array, factor: number): Float32Array {
+  if (factor <= 1) return input;
+
+  const coefficients = getAntiAliasCoefficients(factor);
+  const half = (ANTI_ALIAS_TAPS - 1) / 2;
   const outputLength = Math.floor(input.length / factor);
   const output = new Float32Array(outputLength);
   for (let outIndex = 0; outIndex < outputLength; outIndex++) {
     const center = outIndex * factor;
     let value = 0;
-    for (let tap = 0; tap < taps; tap++) {
+    for (let tap = 0; tap < ANTI_ALIAS_TAPS; tap++) {
       const sourceIndex = Math.max(0, Math.min(input.length - 1, center + tap - half));
       value += input[sourceIndex] * coefficients[tap];
     }
