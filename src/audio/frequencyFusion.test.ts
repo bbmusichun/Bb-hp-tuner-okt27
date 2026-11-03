@@ -37,4 +37,11 @@ describe('reference-frequency estimate fusion', () => {
     assert.equal(fuseAgreeingFrequencyEstimates(A4, Number.NaN, 1), A4);
     assert.ok(Number.isNaN(fuseAgreeingFrequencyEstimates(Number.NaN, A4, 1)));
   });
+  it('requires an independent, high-clarity pitch estimate to corroborate sine-fit refinement', () => {
+    assert.equal(independentPitchConfirmsCandidate(A4, A4 * 2 ** (9.9 / 1200), 0.82), true);
+    assert.equal(independentPitchConfirmsCandidate(A4, A4 * 2 ** (10.1 / 1200), 0.99), false);
+    assert.equal(independentPitchConfirmsCandidate(A4, A4, 0.819), false);
+    assert.equal(independentPitchConfirmsCandidate(A4, null, 1), false);
+    assert.equal(independentPitchConfirmsCandidate(Number.NaN, A4, 1), false);
+  });
 });
