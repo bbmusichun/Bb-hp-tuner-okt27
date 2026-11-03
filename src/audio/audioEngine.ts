@@ -476,7 +476,13 @@ export class BBAudioEngine {
     // Refine the FFT candidate against the original waveform. This is a narrow
     // local fit (±8 cents), so it improves sub-bin precision without allowing
     // the estimator to jump to a neighbouring note or a distant partial.
-    const sineFitHz = fundamentalPeakIsTrackable && rawFundamentalPeak
+    const yinAgreementCents = rawFundamentalPeak && yinEstimate.frequencyHz !== null
+      ? Math.abs(1200 * Math.log2(yinEstimate.frequencyHz / rawFundamentalPeak.freq))
+      : Number.POSITIVE_INFINITY;
+    const independentPitchConfirmsPeak = yinEstimate.frequencyHz !== null &&
+      Number.isFinite(yinEstimate.clarity) && yinEstimate.clarity >= 0.82 &&
+      yinAgreementCents <= 10;
+    const sineFitHz = fundamentalPeakIsTrackable && rawFundamentalPeak && independentPitchConfirmsPeak
       ? refineFrequencyBySineFit(this.timeData, this.sampleRate, rawFundamentalPeak.freq, 8)
       : null;
     const timeRefinedPeak = rawFundamentalPeak && sineFitHz !== null
