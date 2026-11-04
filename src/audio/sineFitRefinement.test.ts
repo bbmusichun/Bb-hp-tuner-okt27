@@ -99,11 +99,14 @@ describe('time-domain sine-fit frequency refinement', () => {
     );
   });
 
-  it('returns null for silence and invalid inputs', () => {
+  it('returns null for silence and invalid inputs, including non-finite samples', () => {
     assert.equal(refineFrequencyBySineFit(new Float32Array(SIZE), RATE, BASE), null);
     assert.equal(refineFrequencyBySineFit(new Float32Array(100), RATE, BASE), null);
     assert.equal(refineFrequencyBySineFit(signal(BASE), 0, BASE), null);
     assert.equal(refineFrequencyBySineFit(signal(BASE), RATE, 0), null);
+    const invalidSamples = signal(BASE);
+    invalidSamples[123] = Number.NaN;
+    assert.equal(refineFrequencyBySineFit(invalidSamples, RATE, BASE), null);
   });
 
   it('does not search beyond its bounded local range', () => {
