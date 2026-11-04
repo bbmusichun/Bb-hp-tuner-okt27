@@ -115,4 +115,23 @@ describe('time-domain sine-fit frequency refinement', () => {
     assert.ok(measured !== null);
     assert.ok(Math.abs(cents(measured, BASE)) < 8.1);
   });
+
+  it('keeps the estimate phase-invariant with a large DC offset and a short frame', () => {
+    const actual = BASE * 2 ** (2.1 / 1200);
+    for (const phase of [0.01, 0.7, 1.9, 3.13, 5.8]) {
+      const samples = new Float32Array(4096);
+      for (let i = 0; i < samples.length; i++) {
+        const t = i / RATE;
+        samples[i] = 0.12 + 0.2 * Math.sin(2 * Math.PI * actual * t + phase);
+      }
+      const measured = refineFrequencyBySineFit(
+        samples, RATE, actual * 2 ** (-2 / 1200), 8,
+      );
+      assert.ok(measured !== null, `no estimate at phase ${phase}`);
+      assert.ok(
+        Math.abs(cents(measured, actual)) < 0.2,
+        `phase=${phase}, error=${cents(measured, actual).toFixed(4)} cents`,
+      );
+    }
+  });
 });
