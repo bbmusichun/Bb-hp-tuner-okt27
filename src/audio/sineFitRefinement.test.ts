@@ -109,6 +109,22 @@ describe('time-domain sine-fit frequency refinement', () => {
     assert.equal(refineFrequencyBySineFit(invalidSamples, RATE, BASE), null);
   });
 
+  it('rejects a constant DC signal instead of inventing a pitch', () => {
+    const dcOnly = new Float32Array(SIZE);
+    dcOnly.fill(0.12);
+    assert.equal(refineFrequencyBySineFit(dcOnly, RATE, BASE), null);
+  });
+
+  it('rejects broadband noise with no sufficiently strong narrow-band candidate', () => {
+    const noise = new Float32Array(SIZE);
+    let seed = 0xabcdef01;
+    for (let i = 0; i < noise.length; i++) {
+      seed = (1664525 * seed + 1013904223) >>> 0;
+      noise[i] = (seed / 0x100000000 - 0.5) * 0.2;
+    }
+    assert.equal(refineFrequencyBySineFit(noise, RATE, BASE), null);
+  });
+
   it('does not search beyond its bounded local range', () => {
     const actual = BASE * 2 ** (15 / 1200);
     const measured = refineFrequencyBySineFit(signal(actual), RATE, BASE, 8);
