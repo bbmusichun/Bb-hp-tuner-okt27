@@ -72,6 +72,23 @@ export function refineFrequencyBySineFit(samples: Float32Array, sampleRate: numb
   }
   if (!Number.isFinite(energy) || energy / samples.length < 1e-10) return null;
   const window = getWindow(samples.length);
+  // Reject frames with too little AC content. A DC offset alone must never
+  // produce a seemingly valid frequency by maximizing numerical noise.
+  let weightedSum = 0, weightSum = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const w = window[i] * window[i];
+    weightedSum += w * samples[i];
+    weightSum += w;
+  }
+  if (!(weightSum > 0)) return null;
+  const weightedMean = weightedSum / weightSum;
+  let centeredEnergy = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const delta = samples[i] - weightedMean;
+    centeredEnergy += window[i] * window[i] * delta * delta;
+  }
+  if (!Number.isFinite(centeredEnergy) || centeredEnergy <= 1e-12) return null;
+
   let low = centerHz * 2 ** (-searchCents / 1200);
   let high = centerHz * 2 ** (searchCents / 1200);
   const ratio = (Math.sqrt(5) - 1) / 2;
@@ -88,5 +105,10 @@ export function refineFrequencyBySineFit(samples: Float32Array, sampleRate: numb
     }
   }
   const result = (low + high) / 2;
+  const explained = projectedPower(samples, sampleRate, result, window);
+  // Require the candidate sinusoid to explain at least 1% of the frame's
+  // weighted AC energy. This rejects noise/DC-only frames while retaining
+  // legitimate handpan fundamentals even when upper partials are stronger.
+  if (!Number.isFinite(explained) || explained / centeredEnergy < 0.01) return null;
   return Number.isFinite(result) && result > 0 ? result : null;
 }
