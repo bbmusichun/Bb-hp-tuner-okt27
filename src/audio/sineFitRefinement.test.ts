@@ -106,10 +106,20 @@ describe('time-domain sine-fit frequency refinement', () => {
     assert.equal(refineFrequencyBySineFit(signal(BASE), RATE, 0), null);
   });
 
-  it('does not search beyond its bounded local range', () => {
-    const actual = BASE * 2 ** (15 / 1200);
-    const measured = refineFrequencyBySineFit(signal(actual), RATE, BASE, 8);
-    assert.ok(measured !== null);
-    assert.ok(Math.abs(cents(measured, BASE)) < 8.1);
+  it('rejects a fit whose optimum is pinned to the local search boundary', () => {
+    for (const detuning of [-15, -8.5, 8.5, 15]) {
+      const actual = BASE * 2 ** (detuning / 1200);
+      const measured = refineFrequencyBySineFit(signal(actual), RATE, BASE, 8);
+      assert.equal(measured, null, `unexpected boundary estimate at ${detuning} cents`);
+    }
+  });
+
+  it('still returns an interior optimum close to the allowed search edge', () => {
+    for (const detuning of [-7.5, 7.5]) {
+      const actual = BASE * 2 ** (detuning / 1200);
+      const measured = refineFrequencyBySineFit(signal(actual), RATE, BASE, 8);
+      assert.ok(measured !== null);
+      assert.ok(Math.abs(cents(measured, actual)) < 0.15);
+    }
   });
 });
