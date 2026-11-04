@@ -23,6 +23,10 @@ function projectedPower(samples: Float32Array, sampleRate: number, frequency: nu
 /**
  * Refine a credible spectral peak inside a narrow local range. This estimates
  * sub-bin frequency from the original time samples, not interpolated FFT bins.
+ *
+ * A maximum at the edge of the search interval is not a trustworthy refinement:
+ * it means the best fit may lie outside the permitted range. Return null instead
+ * of presenting the boundary as if it were a measured local optimum.
  */
 export function refineFrequencyBySineFit(samples: Float32Array, sampleRate: number, centerHz: number, searchCents = 8): number | null {
   if (samples.length < 1024 || !Number.isFinite(sampleRate) || sampleRate <= 0 ||
@@ -32,8 +36,10 @@ export function refineFrequencyBySineFit(samples: Float32Array, sampleRate: numb
   for (let i = 0; i < samples.length; i++) energy += samples[i] * samples[i];
   if (!Number.isFinite(energy) || energy / samples.length < 1e-10) return null;
   const window = getWindow(samples.length);
-  let low = centerHz * 2 ** (-searchCents / 1200);
-  let high = centerHz * 2 ** (searchCents / 1200);
+  const searchLow = centerHz * 2 ** (-searchCents / 1200);
+  const searchHigh = centerHz * 2 ** (searchCents / 1200);
+  let low = searchLow;
+  let high = searchHigh;
   const ratio = (Math.sqrt(5) - 1) / 2;
   let x1 = high - ratio * (high - low), x2 = low + ratio * (high - low);
   let p1 = projectedPower(samples, sampleRate, x1, window);
@@ -48,5 +54,11 @@ export function refineFrequencyBySineFit(samples: Float32Array, sampleRate: numb
     }
   }
   const result = (low + high) / 2;
-  return Number.isFinite(result) && result > 0 ? result : null;
+  if (!Number.isFinite(result) || result <= 0) return null;
+  const lowEdgeDistance = Math.abs(1200 * Math.log2(result / searchLow));
+  const highEdgeDistance = Math.abs(1200 * Math.log2(searchHigh / result));
+  // The 0.02-cent margin is comfortably wider than the final search bracket
+  // while remaining negligible relative to the ±8-cent local refinement span.
+  if (lowEdgeDistance <= 0.02 || highEdgeDistance <= 0.02) return null;
+  return result;
 }
