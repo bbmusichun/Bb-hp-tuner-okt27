@@ -8,43 +8,69 @@ function getWindow(length: number): Float64Array {
   windowCache.set(length, window);
   return window;
 }
-function projectedPower(samples: Float32Array, sampleRate: number, frequency: number, window: Float64Array): number {
+
+/** Remove the window-weighted DC component before evaluating a candidate. */
+function weightedMean(samples: Float32Array, window: Float64Array): number {
+  let weightedSum = 0;
+  let weightSum = 0;
+  for (let i = 0; i < samples.length; i++) {
+    weightedSum += samples[i] * window[i];
+    weightSum += window[i];
+  }
+  return weightSum > 0 ? weightedSum / weightSum : 0;
+}
+
+function projectedPower(
+  samples: Float32Array,
+  sampleRate: number,
+  frequency: number,
+  window: Float64Array,
+  dcOffset: number,
+): number {
   const step = 2 * Math.PI * frequency / sampleRate;
   const cs = Math.cos(step), sn = Math.sin(step);
   let c = 1, s = 0, re = 0, im = 0;
   for (let i = 0; i < samples.length; i++) {
-    const v = samples[i] * window[i];
+    const v = (samples[i] - dcOffset) * window[i];
     re += v * c; im -= v * s;
     const nc = c * cs - s * sn;
     s = s * cs + c * sn; c = nc;
   }
   return re * re + im * im;
 }
+
 /**
  * Refine a credible spectral peak inside a narrow local range. This estimates
  * sub-bin frequency from the original time samples, not interpolated FFT bins.
+ * A window-weighted DC estimate is removed first so sensor/input offsets do
+ * not bias the narrow-band sinusoidal projection.
  */
 export function refineFrequencyBySineFit(samples: Float32Array, sampleRate: number, centerHz: number, searchCents = 8): number | null {
   if (samples.length < 1024 || !Number.isFinite(sampleRate) || sampleRate <= 0 ||
       !Number.isFinite(centerHz) || centerHz <= 0 || !Number.isFinite(searchCents) ||
       searchCents <= 0 || searchCents > 30) return null;
   let energy = 0;
-  for (let i = 0; i < samples.length; i++) energy += samples[i] * samples[i];
+  for (let i = 0; i < samples.length; i++) {
+    if (!Number.isFinite(samples[i])) return null;
+    energy += samples[i] * samples[i];
+  }
   if (!Number.isFinite(energy) || energy / samples.length < 1e-10) return null;
   const window = getWindow(samples.length);
+  const dcOffset = weightedMean(samples, window);
+  if (!Number.isFinite(dcOffset)) return null;
   let low = centerHz * 2 ** (-searchCents / 1200);
   let high = centerHz * 2 ** (searchCents / 1200);
   const ratio = (Math.sqrt(5) - 1) / 2;
   let x1 = high - ratio * (high - low), x2 = low + ratio * (high - low);
-  let p1 = projectedPower(samples, sampleRate, x1, window);
-  let p2 = projectedPower(samples, sampleRate, x2, window);
+  let p1 = projectedPower(samples, sampleRate, x1, window, dcOffset);
+  let p2 = projectedPower(samples, sampleRate, x2, window, dcOffset);
   for (let i = 0; i < 18; i++) {
     if (p1 < p2) {
       low = x1; x1 = x2; p1 = p2;
-      x2 = low + ratio * (high - low); p2 = projectedPower(samples, sampleRate, x2, window);
+      x2 = low + ratio * (high - low); p2 = projectedPower(samples, sampleRate, x2, window, dcOffset);
     } else {
       high = x2; x2 = x1; p2 = p1;
-      x1 = high - ratio * (high - low); p1 = projectedPower(samples, sampleRate, x1, window);
+      x1 = high - ratio * (high - low); p1 = projectedPower(samples, sampleRate, x1, window, dcOffset);
     }
   }
   const result = (low + high) / 2;
