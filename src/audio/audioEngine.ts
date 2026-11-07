@@ -17,7 +17,7 @@ import { analyzeSpectralPeakInWindow } from './spectralPeak';
 import { refineFrequencyBySineFit } from './sineFitRefinement';
 import { DecayDriftTracker } from './decayDrift';
 import { finalizePeakReading } from './resonanceMetrics';
-import { fuseAgreeingFrequencyEstimates, independentPitchConfirmsCandidate } from './frequencyFusion';
+import { independentPitchConfirmsCandidate } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
 import { createMicrophoneAudioConstraints } from './microphoneConstraints';
 
@@ -503,16 +503,11 @@ export class BBAudioEngine {
     const timeRefinedPeak = rawFundamentalPeak && sineFitHz !== null
       ? { ...rawFundamentalPeak, freq: sineFitHz }
       : rawFundamentalPeak;
-    const fPeak = fundamentalPeakIsTrackable && timeRefinedPeak && yinEstimate.frequencyHz !== null
-      ? {
-          ...timeRefinedPeak,
-          freq: fuseAgreeingFrequencyEstimates(
-            timeRefinedPeak.freq,
-            yinEstimate.frequencyHz,
-            yinEstimate.clarity,
-          ),
-        }
-      : timeRefinedPeak;
+    // YIN is an independent plausibility check, not a second frequency standard.
+    // Once it corroborates the FFT candidate, keep the time-domain least-squares
+    // estimate as the reported frequency; blending a less precise periodicity
+    // estimate back into it can reintroduce several tenths of a cent of bias.
+    const fPeak = timeRefinedPeak;
     // Search each resonance independently to reduce masking by a dominant fundamental.
     const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
     const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
