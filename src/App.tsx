@@ -197,6 +197,21 @@ function loadDisabledToneNotesByScale(): Record<string, string[]> {
   }
 }
 
+function isValidStrikeSessionSummary(value: unknown): value is StrikeSessionSummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const session = value as Record<string, unknown>;
+  if (!Number.isInteger(session.strikeCount) || (session.strikeCount as number) < 3 || session.requiredSamples !== 3) return false;
+  const validMode = (mode: unknown) => {
+    if (!mode || typeof mode !== 'object' || Array.isArray(mode)) return false;
+    const item = mode as Record<string, unknown>;
+    return ['medianHz', 'medianCents', 'medianConfidence', 'medianAmplitudeDb', 'madCents', 'rangeCents'].every((key) => typeof item[key] === 'number' && Number.isFinite(item[key])) &&
+      (item.medianHz as number) > 0 && (item.medianConfidence as number) >= 0 && (item.medianConfidence as number) <= 1 &&
+      (item.madCents as number) >= 0 && (item.rangeCents as number) >= 0 &&
+      Number.isInteger(item.acceptedCount) && (item.acceptedCount as number) >= 3 &&
+      Number.isInteger(item.rejectedCount) && (item.rejectedCount as number) >= 0;
+  };
+  return validMode(session.fundamental) && validMode(session.fifth) && validMode(session.octave);
+}
 function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
   if (!value || typeof value !== 'object') return false;
   const entry = value as Partial<TuningLogEntry>;
@@ -218,6 +233,7 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
     (entry.toleranceOverrideCents === undefined || isValidTuningToleranceSetting(entry.toleranceOverrideCents)) &&
     (entry.instrumentProfileId === undefined || typeof entry.instrumentProfileId === 'string') &&
     (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string') &&
+    (entry.strikeSession === undefined || isValidStrikeSessionSummary(entry.strikeSession)) &&
     (entry.quality === undefined || (
       !!entry.quality && typeof entry.quality === 'object' && !Array.isArray(entry.quality) &&
       (['fundamental', 'fifth', 'octave'] as const).every((role) => {
