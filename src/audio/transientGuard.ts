@@ -82,14 +82,14 @@ export class StablePitchTracker {
     this.readings = [];
   }
 
-  observe(reading: StablePitchReading): { stable: boolean; frequencyHz: number | null; count: number } {
+  observe(reading: StablePitchReading): { stable: boolean; frequencyHz: number | null; count: number; spreadCents: number | null } {
     const valid = Number.isFinite(reading.frequencyHz) && reading.frequencyHz > 0 &&
       Number.isFinite(reading.timestampMs) &&
       (reading.confidence === undefined ||
         (Number.isFinite(reading.confidence) && reading.confidence >= this.minConfidence));
     if (!valid) {
       this.reset();
-      return { stable: false, frequencyHz: null, count: 0 };
+      return { stable: false, frequencyHz: null, count: 0, spreadCents: null };
     }
 
     const previous = this.readings[this.readings.length - 1];
@@ -115,7 +115,7 @@ export class StablePitchTracker {
     const stable = this.readings.length >= this.requiredReadings &&
       Number.isFinite(spreadCents) &&
       spreadCents <= this.maxDeviationCents;
-    return { stable, frequencyHz: stable ? frequencyHz : null, count: this.readings.length };
+    return { stable, frequencyHz: stable ? frequencyHz : null, count: this.readings.length, spreadCents: frequencies.length > 1 ? spreadCents : null };
   }
 
   private median(values: number[]): number {
