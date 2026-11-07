@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ResonanceMeasurement, StrikeSessionSummary, TuningLogEntry } from '../types/tuner';
 import { isWithinTuningTolerance } from '../audio/tuningTolerance';
 import type { TuningToleranceSetting } from '../audio/tuningTolerance';
-import { isStrikePointValid, summarizeStrikeSamples, type StrikePoint, type StrikeSample } from '../audio/multiStrikeSession';
+import { getStrikeRejectionReason, isStrikePointValid, summarizeStrikeSamples, type StrikePoint, type StrikeSample } from '../audio/multiStrikeSession';
 
 interface Props {
   noteName: string;
@@ -95,7 +95,14 @@ export const BBTuningWorkbench: React.FC<Props> = ({
     const point = (measurement: ResonanceMeasurement): StrikePoint | null => isStrikePointValid(measurement)
       ? { hz: measurement.measuredHz!, cents: measurement.deviationCents!, confidence: measurement.confidence!, amplitudeDb: measurement.amplitudeDb! }
       : null;
-    setStrikeSamples((previous) => [...previous, { capturedAtMs: Date.now(), fundamental: point(alap), fifth: point(kvint), octave: point(oktav) }]);
+    const rejectionReasons: StrikeSample['rejectionReasons'] = {};
+    const fundamentalReason = getStrikeRejectionReason(alap);
+    const fifthReason = getStrikeRejectionReason(kvint);
+    const octaveReason = getStrikeRejectionReason(oktav);
+    if (fundamentalReason) rejectionReasons.fundamental = fundamentalReason;
+    if (fifthReason) rejectionReasons.fifth = fifthReason;
+    if (octaveReason) rejectionReasons.octave = octaveReason;
+    setStrikeSamples((previous) => [...previous, { capturedAtMs: Date.now(), fundamental: point(alap), fifth: point(kvint), octave: point(oktav), rejectionReasons }]);
     setSawFreshStrike(false);
   };
 
