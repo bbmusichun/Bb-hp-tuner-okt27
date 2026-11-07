@@ -26,12 +26,12 @@ describe('multi-strike tone-field summary', () => {
     ];
     const result = summarizeStrikeSamples(samples);
     assert.ok(result);
-    assert.equal(result.fundamental.medianCents, 1.15);
+    assert.ok(Math.abs(result.fundamental.medianCents - 1.15) < 1e-9);
     assert.ok(Math.abs(result.fundamental.madCents - 0.1) < 1e-9);
     assert.equal(result.fundamental.acceptedCount, 4);
     assert.equal(result.fundamental.rangeCents, 79);
-    assert.equal(result.fifth.medianCents, 2.15);
-    assert.equal(result.octave.medianCents, 3.15);
+    assert.ok(Math.abs(result.fifth.medianCents - 2.15) < 1e-9);
+    assert.ok(Math.abs(result.octave.medianCents - 3.15) < 1e-9);
   });
 
   it('aggregates each resonance independently and counts rejected modes', () => {
