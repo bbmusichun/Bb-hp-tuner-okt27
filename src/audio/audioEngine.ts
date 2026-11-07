@@ -7,7 +7,7 @@
 import { ResonanceMeasurement, MicState } from '../types/tuner';
 import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 import { detectTransientOnset, isTransientHoldoffActive, StablePitchTracker } from './transientGuard';
-import { PitchSample, smoothPitchSample } from './pitchSmoothing';
+import { PitchSample, retainAcceptedPitchSamples, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
 import { isNearDigitalClipPeak } from './inputClipping';
 import { isUsableSignalLevel } from './signalLevel';
@@ -17,7 +17,7 @@ import { analyzeSpectralPeakInWindow } from './spectralPeak';
 import { refineFrequencyBySineFit } from './sineFitRefinement';
 import { DecayDriftTracker } from './decayDrift';
 import { finalizePeakReading } from './resonanceMetrics';
-import { fuseAgreeingFrequencyEstimates, independentPitchConfirmsCandidate } from './frequencyFusion';
+import { independentPitchConfirmsCandidate } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
 import { createMicrophoneAudioConstraints } from './microphoneConstraints';
 
@@ -449,14 +449,19 @@ export class BBAudioEngine {
     this.previousRms = shortRms;
     if (transientDetected) {
       this.lastTransientAt = now;
-      // A fresh strike invalidates the previous reading immediately. Otherwise a new,
-      // different note can appear to measure as the old note during the holdoff window
-      // because buildResonanceMeasurement intentionally retains valid readings.
+      // A new strike starts a fresh stability run, but it must not erase the accepted
+      // pitch estimate: repeated strikes on the same tone field should remain continuous.
+      // Drop only unconfirmed attack candidates; a genuinely changed pitch still needs
+      // three agreeing frames in smoothPitchSample before replacing the accepted cluster.
       this.lastValidResonances = {};
       this.stabilityHistory = [];
-      this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
+      this.pitchHistory = {
+        fundamental: retainAcceptedPitchSamples(this.pitchHistory.fundamental),
+        fifth: retainAcceptedPitchSamples(this.pitchHistory.fifth),
+        octave: retainAcceptedPitchSamples(this.pitchHistory.octave),
+      };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
-    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
+      Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
     const transientHoldoff = isTransientHoldoffActive(
       this.lastTransientAt,
@@ -498,16 +503,11 @@ export class BBAudioEngine {
     const timeRefinedPeak = rawFundamentalPeak && sineFitHz !== null
       ? { ...rawFundamentalPeak, freq: sineFitHz }
       : rawFundamentalPeak;
-    const fPeak = fundamentalPeakIsTrackable && timeRefinedPeak && yinEstimate.frequencyHz !== null
-      ? {
-          ...timeRefinedPeak,
-          freq: fuseAgreeingFrequencyEstimates(
-            timeRefinedPeak.freq,
-            yinEstimate.frequencyHz,
-            yinEstimate.clarity,
-          ),
-        }
-      : timeRefinedPeak;
+    // YIN is an independent plausibility check, not a second frequency standard.
+    // Once it corroborates the FFT candidate, keep the time-domain least-squares
+    // estimate as the reported frequency; blending a less precise periodicity
+    // estimate back into it can reintroduce several tenths of a cent of bias.
+    const fPeak = timeRefinedPeak;
     // Search each resonance independently to reduce masking by a dominant fundamental.
     const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
     const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
@@ -655,28 +655,36 @@ export class BBAudioEngine {
     const confidence = rawPeak ? resonanceConfidenceFromDb(rawPeak.magDb) : 0;
     const trackable = !trackingSuppressed && rawPeak !== null &&
       isTrackableResonancePeak(peakAmbiguous, confidence, peakProminenceDb);
-    let currentPeak = rawPeak;
+    // Only a trackable spectral peak may reach the live readout. In particular,
+    // never display a raw transient/ambiguous peak as if it were a new pitch.
+    let currentPeak: { freq: number; magDb: number } | null = null;
 
     if (trackable && rawPeak) {
-      const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now);
+      const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now, {
+        // Match the tracker's own allowed spread: a larger-than-stable jump must
+        // be confirmed before it can move the visible tuning value.
+        jumpThresholdCents: role === 'fundamental' ? 5 : 7,
+        candidateMatchCents: 3,
+        candidateConfirmations: 3,
+      });
       this.pitchHistory[role] = smoothed.history;
       currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
     } else {
-      // A weak, ambiguous, or missing peak must not enter the median history or
-      // complete a stability run. Keep a visible raw reading where available.
-      this.pitchHistory[role] = [];
-      this.stablePitchTrackers[role].reset();
+      // Preserve the last accepted pitch cluster through isolated weak frames.
+      // smoothPitchSample expires it by age; a fresh strike explicitly resets all
+      // trackers in analyze() when the transient is detected.
+      this.decayDriftTrackers[role].reset();
     }
 
-    const stability = trackable && rawPeak
-      ? this.stablePitchTrackers[role].observe({ frequencyHz: rawPeak.freq, confidence, timestampMs: now })
+    const stability = trackable && currentPeak
+      ? this.stablePitchTrackers[role].observe({ frequencyHz: currentPeak.freq, confidence, timestampMs: now })
       : { stable: false, frequencyHz: null, count: 0, spreadCents: null };
     const decayDrift = trackable && rawPeak
       ? this.decayDriftTrackers[role].observe({ frequencyHz: rawPeak.freq, timestampMs: now })
       : (this.decayDriftTrackers[role].reset(), null);
     const finalized = finalizePeakReading(
       currentPeak,
-      stability.stable ? stability.frequencyHz : null,
+      null,
       targetHz,
     );
     currentPeak = finalized.peak;
@@ -686,8 +694,8 @@ export class BBAudioEngine {
     // than live. This gives the player time to read the value after a strike while
     // preserving a clear distinction between a live measurement and a retained result.
     const status = currentPeak && hasSignal
-      ? trackable && stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
-      : 'no-signal';
+      ? stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      : hasSignal && !trackingSuppressed ? 'uncertain' : 'no-signal';
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
         hz: currentPeak.freq,
