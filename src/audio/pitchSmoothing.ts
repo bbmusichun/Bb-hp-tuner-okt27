@@ -13,6 +13,11 @@ export interface PitchSample {
   candidate?: boolean;
 }
 
+/** Keep the last accepted pitch cluster across a new strike, but discard unconfirmed attack candidates. */
+export function retainAcceptedPitchSamples(history: PitchSample[]): PitchSample[] {
+  return history.filter((sample) => sample.candidate !== true);
+}
+
 export function median(values: number[]): number {
   if (values.length === 0) return Number.NaN;
   const sorted = [...values].sort((a, b) => a - b);
