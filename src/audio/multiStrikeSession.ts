@@ -25,7 +25,9 @@ export function getStrikeRejectionReason(measurement: ResonanceMeasurement): str
   if (measurement.measuredHz === null || !Number.isFinite(measurement.measuredHz) || measurement.measuredHz <= 0) return 'Nincs mérhető frekvencia';
   if (measurement.deviationCents === null || !Number.isFinite(measurement.deviationCents)) return 'Nincs centérték';
   if (measurement.confidence === null || !Number.isFinite(measurement.confidence) || measurement.confidence < MIN_STRIKE_CONFIDENCE) return 'Alacsony jelbiztonság';
+  if (measurement.confidence > 1) return 'Érvénytelen jelbiztonság';
   if (measurement.amplitudeDb === null || !Number.isFinite(measurement.amplitudeDb)) return 'Nincs jelszintadat';
+  if (measurement.amplitudeDb < -160 || measurement.amplitudeDb > 0) return 'Érvénytelen jelszint';
   return null;
 }
 
