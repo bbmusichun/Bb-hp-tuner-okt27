@@ -92,6 +92,18 @@ export interface StrikeSessionModeSummary {
   rejectedCount: number;
 }
 
+export interface StrikeSessionReading {
+  hz: number;
+  cents: number;
+  confidence: number;
+  amplitudeDb: number;
+}
+
+export interface StrikeSessionStrike {
+  fundamental: StrikeSessionReading | null;
+  fifth: StrikeSessionReading | null;
+  octave: StrikeSessionReading | null;
+}
 export interface StrikeSessionSummary {
   strikeCount: number;
   requiredSamples: number;
@@ -118,6 +130,8 @@ export interface TuningLogEntry {
   quality?: Partial<Record<ResonanceRole, ResonanceSnapshotQuality>>;
   /** Robust per-mode aggregate from manually confirmed, distinct strikes. */
   strikeSession?: StrikeSessionSummary;
+  /** Original per-strike readings retained for audit and before/after comparison. */
+  strikeSamples?: StrikeSessionStrike[];
   /** Measured frequencies. */
   fundamentalHz: number;
   fundamentalCents: number;
