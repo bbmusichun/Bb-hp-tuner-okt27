@@ -55,7 +55,7 @@ export interface StablePitchReading {
 export interface StablePitchOptions {
   /** Number of consecutive compatible readings required before accepting pitch. */
   requiredReadings?: number;
-  /** Maximum allowed spread from the rolling median, in cents. */
+  /** Maximum peak-to-peak spread of the rolling readings, in cents. */
   maxDeviationCents?: number;
   /** Ignore readings below this optional confidence threshold. */
   minConfidence?: number;
@@ -63,8 +63,8 @@ export interface StablePitchOptions {
 
 /**
  * Confirms a pitch only after consecutive readings agree in cents.
- * This is intentionally separate from display smoothing: invalid or unstable
- * readings never become an accepted tuning value.
+ * Stability uses the full peak-to-peak range, not distance from the median,
+ * so a gradual drift cannot hide on opposite sides of the median.
  */
 export class StablePitchTracker {
   private readings: StablePitchReading[] = [];
@@ -107,11 +107,14 @@ export class StablePitchTracker {
     this.readings.push(reading);
     if (this.readings.length > this.requiredReadings) this.readings.shift();
 
-    const frequencyHz = this.median(this.readings.map((item) => item.frequencyHz));
+    const frequencies = this.readings.map((item) => item.frequencyHz);
+    const frequencyHz = this.median(frequencies);
+    const spreadCents = frequencies.length > 1
+      ? 1200 * Math.log2(Math.max(...frequencies) / Math.min(...frequencies))
+      : 0;
     const stable = this.readings.length >= this.requiredReadings &&
-      this.readings.every((item) =>
-        Math.abs(1200 * Math.log2(item.frequencyHz / frequencyHz)) <= this.maxDeviationCents
-      );
+      Number.isFinite(spreadCents) &&
+      spreadCents <= this.maxDeviationCents;
     return { stable, frequencyHz: stable ? frequencyHz : null, count: this.readings.length };
   }
 
