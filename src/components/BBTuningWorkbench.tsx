@@ -167,7 +167,8 @@ export const BBTuningWorkbench: React.FC<Props> = ({
               {([["Alap", "fundamental"], ["3. parciális", "fifth"], ["Oktáv", "octave"]] as const).map(([label, key]) => {
                 const accepted = strikeSamples.filter((sample) => sample[key] !== null).length;
                 const rejected = strikeSamples.length - accepted;
-                return <div key={key} className="rounded-md bg-black/20 px-2 py-1.5"><div className="text-slate-300">{label}</div><div className="mt-0.5 font-mono text-sky-100">{accepted} / {strikeSamples.length}</div><div className="text-slate-500">kihagyva: {rejected}</div></div>;
+                const lastReason = [...strikeSamples].reverse().find((sample) => sample.rejectionReasons?.[key])?.rejectionReasons?.[key];
+                return <div key={key} className="rounded-md bg-black/20 px-2 py-1.5"><div className="text-slate-300">{label}</div><div className="mt-0.5 font-mono text-sky-100">{accepted} / {strikeSamples.length}</div><div className="text-slate-500">kihagyva: {rejected}</div>{lastReason && <div className="mt-0.5 text-amber-200/90">{lastReason}</div>}</div>;
               })}
             </div>
             {strikeSummary && (
