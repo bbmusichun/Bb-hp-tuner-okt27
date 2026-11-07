@@ -1,5 +1,5 @@
-import React from 'react';
-import type { ResonanceMeasurement, TuningLogEntry } from '../types/tuner';
+import React, { useEffect, useRef, useState } from 'react';
+import type { ResonanceMeasurement, StrikeSessionSummary, TuningLogEntry } from '../types/tuner';
 import { isWithinTuningTolerance } from '../audio/tuningTolerance';
 import type { TuningToleranceSetting } from '../audio/tuningTolerance';
 
@@ -12,6 +12,9 @@ interface Props {
   toleranceOverrideCents: TuningToleranceSetting;
   canCapture: boolean;
   onCapture: () => void;
+  transientHoldoff: boolean;
+  sessionKey: string;
+  onSaveStrikeSession: (summary: StrikeSessionSummary) => void;
 }
 
 type Mode = {
@@ -21,6 +24,40 @@ type Mode = {
   previousCents: number | null;
   previousTargetHz: number | null;
 };
+
+type StrikePoint = { hz: number; cents: number; confidence: number; amplitudeDb: number };
+type StrikeSample = { fundamental: StrikePoint | null; fifth: StrikePoint | null; octave: StrikePoint | null };
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function summarizeStrikeMode(samples: StrikeSample[], key: 'fundamental' | 'fifth' | 'octave') {
+  const accepted = samples.map((sample) => sample[key]).filter((value): value is StrikePoint => value !== null);
+  const cents = accepted.map((value) => value.cents);
+  const center = median(cents);
+  return {
+    medianHz: median(accepted.map((value) => value.hz)),
+    medianCents: center,
+    medianConfidence: median(accepted.map((value) => value.confidence)),
+    medianAmplitudeDb: median(accepted.map((value) => value.amplitudeDb)),
+    madCents: median(cents.map((value) => Math.abs(value - center))),
+    rangeCents: Math.max(...cents) - Math.min(...cents),
+    acceptedCount: accepted.length,
+    rejectedCount: samples.length - accepted.length,
+  };
+}
+
+function isStrikePointValid(measurement: ResonanceMeasurement): boolean {
+  return measurement.status === 'valid' &&
+    measurement.measuredHz !== null && Number.isFinite(measurement.measuredHz) && measurement.measuredHz > 0 &&
+    measurement.deviationCents !== null && Number.isFinite(measurement.deviationCents) &&
+    measurement.confidence !== null && Number.isFinite(measurement.confidence) && measurement.confidence >= 0.32 &&
+    measurement.peakAmbiguous !== true &&
+    measurement.amplitudeDb !== null && Number.isFinite(measurement.amplitudeDb);
+}
 
 function formatCents(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return '—';
@@ -51,7 +88,65 @@ export const BBTuningWorkbench: React.FC<Props> = ({
   toleranceOverrideCents,
   canCapture,
   onCapture,
+  transientHoldoff,
+  sessionKey,
+  onSaveStrikeSession,
 }) => {
+  const [strikeSamples, setStrikeSamples] = useState<StrikeSample[]>([]);
+  const [sawFreshStrike, setSawFreshStrike] = useState(false);
+  const [sessionActive, setSessionActive] = useState(false);
+  const sawTransientRef = useRef(false);
+
+  useEffect(() => {
+    setStrikeSamples([]);
+    setSawFreshStrike(false);
+    setSessionActive(false);
+    sawTransientRef.current = false;
+  }, [sessionKey]);
+
+  useEffect(() => {
+    if (sessionActive && transientHoldoff) {
+      sawTransientRef.current = true;
+      setSawFreshStrike(true);
+    }
+  }, [sessionActive, transientHoldoff]);
+
+  const currentStrikeValid = [alap, kvint, oktav].some(isStrikePointValid);
+  const readyToCaptureStrike = sessionActive && sawFreshStrike && !transientHoldoff && currentStrikeValid;
+  const strikeSummary = strikeSamples.length >= 3 ? {
+    strikeCount: strikeSamples.length,
+    requiredSamples: 3,
+    fundamental: summarizeStrikeMode(strikeSamples, 'fundamental'),
+    fifth: summarizeStrikeMode(strikeSamples, 'fifth'),
+    octave: summarizeStrikeMode(strikeSamples, 'octave'),
+  } : null;
+  const readyToSaveSession = strikeSummary !== null &&
+    strikeSummary.fundamental.acceptedCount >= 3 &&
+    strikeSummary.fifth.acceptedCount >= 3 &&
+    strikeSummary.octave.acceptedCount >= 3;
+
+  const beginStrikeSession = () => {
+    setStrikeSamples([]);
+    setSessionActive(true);
+    setSawFreshStrike(false);
+    sawTransientRef.current = false;
+  };
+
+  const captureStrike = () => {
+    if (!readyToCaptureStrike) return;
+    const point = (measurement: ResonanceMeasurement): StrikePoint | null => isStrikePointValid(measurement)
+      ? { hz: measurement.measuredHz!, cents: measurement.deviationCents!, confidence: measurement.confidence!, amplitudeDb: measurement.amplitudeDb! }
+      : null;
+    setStrikeSamples((previous) => [...previous, { fundamental: point(alap), fifth: point(kvint), octave: point(oktav) }]);
+    setSawFreshStrike(false);
+    sawTransientRef.current = false;
+  };
+
+  const finishStrikeSession = () => {
+    if (!readyToSaveSession || !strikeSummary) return;
+    onSaveStrikeSession(strikeSummary);
+    setSessionActive(false);
+  };
   const modes: Mode[] = [
     { key: 'fundamental', label: 'Alaphang · 1×', current: alap, previousCents: previous?.fundamentalCents ?? null, previousTargetHz: previous?.fundamentalTargetHz ?? null },
     { key: 'fifth', label: '3. parciális · 3×', current: kvint, previousCents: previous?.fifthCents ?? null, previousTargetHz: previous?.fifthTargetHz ?? null },
