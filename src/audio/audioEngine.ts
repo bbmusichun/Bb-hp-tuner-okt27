@@ -660,7 +660,7 @@ export class BBAudioEngine {
 
     const stability = trackable && rawPeak
       ? this.stablePitchTrackers[role].observe({ frequencyHz: rawPeak.freq, confidence, timestampMs: now })
-      : { stable: false, frequencyHz: null, count: 0 };
+      : { stable: false, frequencyHz: null, count: 0, spreadCents: null };
     const finalized = finalizePeakReading(
       currentPeak,
       stability.stable ? stability.frequencyHz : null,
@@ -701,6 +701,7 @@ export class BBAudioEngine {
       amplitudeDb: currentPeak ? currentPeak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
       confidence: currentPeak ? confidence : cachedIsFresh ? cached!.confidence : 0,
       peakAmbiguous: Boolean(currentPeak && peakAmbiguous),
+      stabilitySpreadCents: stability.spreadCents,
       timestampMs: currentPeak ? now : cachedIsFresh ? cached!.timestampMs : now,
       status: !currentPeak && cachedIsFresh ? 'held' : status,
     };
@@ -722,6 +723,7 @@ export class BBAudioEngine {
       amplitudeDb: null,
       confidence: 0,
       peakAmbiguous: false,
+      stabilitySpreadCents: null,
       timestampMs: Date.now(),
       status: 'no-signal',
     };
