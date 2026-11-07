@@ -81,6 +81,25 @@ export interface ResonanceSnapshotQuality {
   status: MeasurementStatus;
 }
 
+export interface StrikeSessionModeSummary {
+  medianHz: number;
+  medianCents: number;
+  medianConfidence: number;
+  medianAmplitudeDb: number;
+  madCents: number;
+  rangeCents: number;
+  acceptedCount: number;
+  rejectedCount: number;
+}
+
+export interface StrikeSessionSummary {
+  strikeCount: number;
+  requiredSamples: number;
+  fundamental: StrikeSessionModeSummary;
+  fifth: StrikeSessionModeSummary;
+  octave: StrikeSessionModeSummary;
+}
+
 export interface TuningLogEntry {
   id: string;
   timestamp: number;
@@ -97,6 +116,8 @@ export interface TuningLogEntry {
   toleranceOverrideCents?: TuningToleranceSetting;
   /** Per-resonance measurement quality captured with the snapshot; optional for older logs. */
   quality?: Partial<Record<ResonanceRole, ResonanceSnapshotQuality>>;
+  /** Robust per-mode aggregate from manually confirmed, distinct strikes. */
+  strikeSession?: StrikeSessionSummary;
   /** Measured frequencies. */
   fundamentalHz: number;
   fundamentalCents: number;
