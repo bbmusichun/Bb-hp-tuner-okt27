@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ResonanceMeasurement, StrikeSessionSummary, TuningLogEntry } from '../types/tuner';
 import { isWithinTuningTolerance } from '../audio/tuningTolerance';
 import type { TuningToleranceSetting } from '../audio/tuningTolerance';
+import { isStrikePointValid, summarizeStrikeSamples, type StrikePoint, type StrikeSample } from '../audio/multiStrikeSession';
 
 interface Props {
   noteName: string;
@@ -24,41 +25,6 @@ type Mode = {
   previousCents: number | null;
   previousTargetHz: number | null;
 };
-
-type StrikePoint = { hz: number; cents: number; confidence: number; amplitudeDb: number };
-type StrikeSample = { fundamental: StrikePoint | null; fifth: StrikePoint | null; octave: StrikePoint | null };
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-function summarizeStrikeMode(samples: StrikeSample[], key: 'fundamental' | 'fifth' | 'octave') {
-  const accepted = samples.map((sample) => sample[key]).filter((value): value is StrikePoint => value !== null);
-  if (accepted.length === 0) return { medianHz: 0, medianCents: 0, medianConfidence: 0, medianAmplitudeDb: -160, madCents: 0, rangeCents: 0, acceptedCount: 0, rejectedCount: samples.length };
-  const cents = accepted.map((value) => value.cents);
-  const center = median(cents);
-  return {
-    medianHz: median(accepted.map((value) => value.hz)),
-    medianCents: center,
-    medianConfidence: median(accepted.map((value) => value.confidence)),
-    medianAmplitudeDb: median(accepted.map((value) => value.amplitudeDb)),
-    madCents: median(cents.map((value) => Math.abs(value - center))),
-    rangeCents: Math.max(...cents) - Math.min(...cents),
-    acceptedCount: accepted.length,
-    rejectedCount: samples.length - accepted.length,
-  };
-}
-
-function isStrikePointValid(measurement: ResonanceMeasurement): boolean {
-  return measurement.status === 'valid' &&
-    measurement.measuredHz !== null && Number.isFinite(measurement.measuredHz) && measurement.measuredHz > 0 &&
-    measurement.deviationCents !== null && Number.isFinite(measurement.deviationCents) &&
-    measurement.confidence !== null && Number.isFinite(measurement.confidence) && measurement.confidence >= 0.32 &&
-    measurement.peakAmbiguous !== true &&
-    measurement.amplitudeDb !== null && Number.isFinite(measurement.amplitudeDb);
-}
 
 function formatCents(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return '—';
@@ -112,13 +78,7 @@ export const BBTuningWorkbench: React.FC<Props> = ({
 
   const currentStrikeValid = [alap, kvint, oktav].some(isStrikePointValid);
   const readyToCaptureStrike = sessionActive && sawFreshStrike && !transientHoldoff && currentStrikeValid;
-  const strikeSummary = strikeSamples.length >= 3 ? {
-    strikeCount: strikeSamples.length,
-    requiredSamples: 3,
-    fundamental: summarizeStrikeMode(strikeSamples, 'fundamental'),
-    fifth: summarizeStrikeMode(strikeSamples, 'fifth'),
-    octave: summarizeStrikeMode(strikeSamples, 'octave'),
-  } : null;
+  const strikeSummary = summarizeStrikeSamples(strikeSamples);
   const readyToSaveSession = strikeSummary !== null &&
     strikeSummary.fundamental.acceptedCount >= 3 &&
     strikeSummary.fifth.acceptedCount >= 3 &&
