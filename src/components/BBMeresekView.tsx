@@ -241,7 +241,7 @@ export const BBMeresekView: React.FC<Props> = ({
                   <div className="mt-1 space-y-1.5">
                     {log.strikeSamples.map((sample, index) => (
                       <div key={index} className="grid grid-cols-[28px_repeat(3,minmax(0,1fr))] gap-1 border-t border-white/5 pt-1">
-                        <span className="text-slate-500">#{index + 1}</span>
+                        <span className="text-slate-500">#{index + 1}<br />{new Date(sample.capturedAtMs).toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
                         {([['Alap', sample.fundamental], ['3×', sample.fifth], ['2×', sample.octave]] as const).map(([label, reading]) => (
                           <div key={label}><div className="text-slate-500">{label}</div><div className="font-mono text-slate-300">{reading ? `${reading.hz.toFixed(2)} Hz` : '—'}</div><div className="font-mono text-slate-400">{reading ? `${reading.cents > 0 ? '+' : ''}${reading.cents.toFixed(2)} c` : '—'}</div></div>
                         ))}
