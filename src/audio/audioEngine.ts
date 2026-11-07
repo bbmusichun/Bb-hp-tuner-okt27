@@ -655,17 +655,19 @@ export class BBAudioEngine {
     const confidence = rawPeak ? resonanceConfidenceFromDb(rawPeak.magDb) : 0;
     const trackable = !trackingSuppressed && rawPeak !== null &&
       isTrackableResonancePeak(peakAmbiguous, confidence, peakProminenceDb);
-    let currentPeak = rawPeak;
+    // Only a trackable spectral peak may reach the live readout. In particular,
+    // never display a raw transient/ambiguous peak as if it were a new pitch.
+    let currentPeak: { freq: number; magDb: number } | null = null;
 
     if (trackable && rawPeak) {
       const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now);
       this.pitchHistory[role] = smoothed.history;
       currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
     } else {
-      // A weak, ambiguous, or missing peak must not enter the median history or
-      // complete a stability run. Keep a visible raw reading where available.
-      this.pitchHistory[role] = [];
-      this.stablePitchTrackers[role].reset();
+      // Preserve the last accepted pitch cluster through isolated weak frames.
+      // smoothPitchSample expires it by age; a fresh strike explicitly resets all
+      // trackers in analyze() when the transient is detected.
+      this.decayDriftTrackers[role].reset();
     }
 
     const stability = trackable && rawPeak
@@ -686,8 +688,8 @@ export class BBAudioEngine {
     // than live. This gives the player time to read the value after a strike while
     // preserving a clear distinction between a live measurement and a retained result.
     const status = currentPeak && hasSignal
-      ? trackable && stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
-      : 'no-signal';
+      ? stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      : hasSignal && !trackingSuppressed ? 'uncertain' : 'no-signal';
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
         hz: currentPeak.freq,
