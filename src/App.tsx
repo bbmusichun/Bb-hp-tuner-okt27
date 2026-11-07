@@ -41,7 +41,7 @@ import {
   type PartialTargetOffsetField,
   type PartialTargetOffsetMap,
 } from './audio/partialTargets';
-import { BBNavTab, HandpanScale, ResonanceMeasurement, StrikeSessionSummary, ToneFieldNote, TuningLogEntry } from './types/tuner';
+import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry, type StrikeSessionSummary } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
 import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
