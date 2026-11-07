@@ -49,7 +49,7 @@ describe('multi-strike tone-field summary', () => {
   });
 
   it('requires at least three distinct strike records before producing a session summary', () => {
-    assert.equal(summarizeStrikeSamples([{ fundamental: point('fundamental', 1), fifth: point('fifth', 2), octave: point('octave', 3) }]), null);
+    assert.equal(summarizeStrikeSamples([{ capturedAtMs: Date.now(), fundamental: point('fundamental', 1), fifth: point('fifth', 2), octave: point('octave', 3) }]), null);
   });
 
   it('rejects weak, ambiguous, held and missing resonance measurements', () => {
