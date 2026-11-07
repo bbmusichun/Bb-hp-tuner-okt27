@@ -104,6 +104,7 @@ export interface StrikeSessionStrike {
   fundamental: StrikeSessionReading | null;
   fifth: StrikeSessionReading | null;
   octave: StrikeSessionReading | null;
+  rejectionReasons?: Partial<Record<ResonanceRole, string>>;
 }
 export interface StrikeSessionSummary {
   strikeCount: number;
