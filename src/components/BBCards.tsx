@@ -120,6 +120,12 @@ export const BBCards: React.FC<Props> = ({
                   : centsStr}
             </div>
 
+            {c.data.stabilitySpreadCents !== null && c.data.stabilitySpreadCents !== undefined && c.data.status !== 'held' && c.data.status !== 'no-signal' && (
+              <div className="text-[9px] font-mono text-slate-500 mt-0.5" title="A legutóbbi követhető frekvenciamérések teljes tartománya">
+                Ablakszórás: {c.data.stabilitySpreadCents.toFixed(2)} cent
+              </div>
+            )}
+
             {/* Mini Sparkline Canvas */}
             <div className="w-full h-5 mt-1 overflow-hidden">
               <SparklineCanvas

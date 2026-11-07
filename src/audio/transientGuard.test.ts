@@ -64,6 +64,7 @@ describe('stable pitch tracker', () => {
     assert.equal(drifting.stable, false);
     assert.equal(drifting.frequencyHz, null);
     assert.equal(drifting.count, 4);
+    assert.ok(drifting.spreadCents !== null && Math.abs(drifting.spreadCents - 6) < 1e-9);
   });
 
   it('accepts a genuinely narrow cluster within the configured total spread', () => {
@@ -75,6 +76,7 @@ describe('stable pitch tracker', () => {
     );
     assert.equal(results[3].stable, true);
     assert.ok(results[3].frequencyHz !== null);
+    assert.ok(results[3].spreadCents !== null && results[3].spreadCents < 5);
   });
 
   it('resets on a large pitch jump and never accepts invalid readings', () => {
@@ -89,6 +91,7 @@ describe('stable pitch tracker', () => {
     assert.equal(invalid.stable, false);
     assert.equal(invalid.frequencyHz, null);
     assert.equal(invalid.count, 0);
+    assert.equal(invalid.spreadCents, null);
   });
 
   it('rejects readings below configured confidence', () => {
