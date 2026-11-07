@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { ResonanceMeasurement, StrikeSessionSummary, TuningLogEntry } from '../types/tuner';
 import { isWithinTuningTolerance } from '../audio/tuningTolerance';
 import type { TuningToleranceSetting } from '../audio/tuningTolerance';
@@ -36,6 +36,7 @@ function median(values: number[]): number {
 
 function summarizeStrikeMode(samples: StrikeSample[], key: 'fundamental' | 'fifth' | 'octave') {
   const accepted = samples.map((sample) => sample[key]).filter((value): value is StrikePoint => value !== null);
+  if (accepted.length === 0) return { medianHz: 0, medianCents: 0, medianConfidence: 0, medianAmplitudeDb: -160, madCents: 0, rangeCents: 0, acceptedCount: 0, rejectedCount: samples.length };
   const cents = accepted.map((value) => value.cents);
   const center = median(cents);
   return {
@@ -95,18 +96,15 @@ export const BBTuningWorkbench: React.FC<Props> = ({
   const [strikeSamples, setStrikeSamples] = useState<StrikeSample[]>([]);
   const [sawFreshStrike, setSawFreshStrike] = useState(false);
   const [sessionActive, setSessionActive] = useState(false);
-  const sawTransientRef = useRef(false);
 
   useEffect(() => {
     setStrikeSamples([]);
     setSawFreshStrike(false);
     setSessionActive(false);
-    sawTransientRef.current = false;
   }, [sessionKey]);
 
   useEffect(() => {
     if (sessionActive && transientHoldoff) {
-      sawTransientRef.current = true;
       setSawFreshStrike(true);
     }
   }, [sessionActive, transientHoldoff]);
@@ -129,7 +127,6 @@ export const BBTuningWorkbench: React.FC<Props> = ({
     setStrikeSamples([]);
     setSessionActive(true);
     setSawFreshStrike(false);
-    sawTransientRef.current = false;
   };
 
   const captureStrike = () => {
@@ -210,7 +207,7 @@ export const BBTuningWorkbench: React.FC<Props> = ({
               <div className="mt-2 space-y-1 rounded-md bg-black/20 p-2 text-[9px] text-slate-300">
                 <div className="font-semibold text-slate-100">Összesítés · medián és MAD</div>
                 {([["Alap", strikeSummary.fundamental], ["3. parciális", strikeSummary.fifth], ["Oktáv", strikeSummary.octave]] as const).map(([label, result]) => (
-                  <div key={label} className="flex justify-between gap-2"><span>{label} · {result.acceptedCount}/3 elfogadott</span><span className="font-mono">medián {result.medianCents > 0 ? "+" : ""}{result.medianCents.toFixed(2)} c · MAD {result.madCents.toFixed(2)} c</span></div>
+                  <div key={label} className="flex justify-between gap-2"><span>{label} · {result.acceptedCount}/3 elfogadott</span><span className="font-mono">{result.acceptedCount === 0 ? "nincs mérés" : `medián ${result.medianCents > 0 ? "+" : ""}${result.medianCents.toFixed(2)} c · MAD ${result.madCents.toFixed(2)} c`}</span></div>
                 ))}
                 <div className="pt-1 text-slate-500">A MAD és a tartomány a leütések közötti ismételhetőséget írja le, nem kalibrációs bizonytalanságot.</div>
                 <button type="button" onClick={finishStrikeSession} disabled={!readyToSaveSession} className="mt-1 w-full rounded-md bg-emerald-300 px-2.5 py-2 text-[10px] font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-35">Összesített állapot mentése</button>
