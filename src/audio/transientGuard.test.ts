@@ -53,6 +53,30 @@ describe('stable pitch tracker', () => {
     assert.ok(result.frequencyHz !== null && Math.abs(result.frequencyHz - 146.81) < 0.02);
   });
 
+  it('does not call a gradual pitch drift stable when its full spread exceeds the limit', () => {
+    const tracker = new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 5 });
+    const base = 220;
+    const centsToHz = (cents: number) => base * 2 ** (cents / 1200);
+    assert.equal(tracker.observe({ frequencyHz: centsToHz(0), timestampMs: 1 }).stable, false);
+    assert.equal(tracker.observe({ frequencyHz: centsToHz(2), timestampMs: 2 }).stable, false);
+    assert.equal(tracker.observe({ frequencyHz: centsToHz(4), timestampMs: 3 }).stable, false);
+    const drifting = tracker.observe({ frequencyHz: centsToHz(6), timestampMs: 4 });
+    assert.equal(drifting.stable, false);
+    assert.equal(drifting.frequencyHz, null);
+    assert.equal(drifting.count, 4);
+  });
+
+  it('accepts a genuinely narrow cluster within the configured total spread', () => {
+    const tracker = new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 5 });
+    const base = 220;
+    const centsToHz = (cents: number) => base * 2 ** (cents / 1200);
+    const results = [-1.5, 1.2, 0, 2.1].map((cents, i) =>
+      tracker.observe({ frequencyHz: centsToHz(cents), timestampMs: i + 1 })
+    );
+    assert.equal(results[3].stable, true);
+    assert.ok(results[3].frequencyHz !== null);
+  });
+
   it('resets on a large pitch jump and never accepts invalid readings', () => {
     const tracker = new StablePitchTracker({ requiredReadings: 3, maxDeviationCents: 5 });
     [220, 220.1, 220.05].forEach((frequencyHz, i) =>
