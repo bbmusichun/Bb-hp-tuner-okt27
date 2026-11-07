@@ -477,8 +477,9 @@ export class BBAudioEngine {
     // applies a Blackman taper; suppressing the entire 341 ms frame after a strike
     // can hide a short-lived ding. Early readings remain visible as uncertain, but
     // are quarantined from smoothing and stability until the holdoff ends.
-    // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const fundamentalAnalysis = analyzeSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);
+    // Search each selected resonance within ±75 cents. This excludes the adjacent semitone's
+    // resonance while still allowing a substantially detuned handpan mode to be measured.
+    const fundamentalAnalysis = analyzeSpectralPeakInWindow(targetFundamentalHz, 75, this.freqData, this.sampleRate);
     const rawFundamentalPeak = fundamentalAnalysis?.peak ?? null;
     // Refine the fundamental only when the independent periodicity estimate strongly agrees
     // with the FFT peak. The FFT remains the primary reference; YIN cannot pull it to an octave.
@@ -509,8 +510,8 @@ export class BBAudioEngine {
     // estimate back into it can reintroduce several tenths of a cent of bias.
     const fPeak = timeRefinedPeak;
     // Search each resonance independently to reduce masking by a dominant fundamental.
-    const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
-    const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
+    const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 75, this.freqData, this.sampleRate);
+    const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 75, this.freqData, this.sampleRate);
     const rawFifthPeak = fifthAnalysis?.peak ?? null;
     const rawOctavePeak = octaveAnalysis?.peak ?? null;
 
