@@ -200,6 +200,7 @@ function loadDisabledToneNotesByScale(): Record<string, string[]> {
 function isValidStrikeSessionStrike(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const strike = value as Record<string, unknown>;
+  if (typeof strike.capturedAtMs !== 'number' || !Number.isFinite(strike.capturedAtMs) || !Number.isFinite(new Date(strike.capturedAtMs).getTime())) return false;
   const validReading = (reading: unknown) => reading === null || (
     !!reading && typeof reading === 'object' && !Array.isArray(reading) &&
     typeof (reading as Record<string, unknown>).hz === 'number' && Number.isFinite((reading as Record<string, unknown>).hz) && ((reading as Record<string, unknown>).hz as number) > 0 &&
