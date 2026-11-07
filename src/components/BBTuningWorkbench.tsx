@@ -19,6 +19,7 @@ type Mode = {
   label: string;
   current: ResonanceMeasurement;
   previousCents: number | null;
+  previousTargetHz: number | null;
 };
 
 function formatCents(value: number | null): string {
@@ -52,9 +53,9 @@ export const BBTuningWorkbench: React.FC<Props> = ({
   onCapture,
 }) => {
   const modes: Mode[] = [
-    { key: 'fundamental', label: 'Alaphang · 1×', current: alap, previousCents: previous?.fundamentalCents ?? null },
-    { key: 'fifth', label: '3. parciális · 3×', current: kvint, previousCents: previous?.fifthCents ?? null },
-    { key: 'octave', label: 'Oktáv · 2×', current: oktav, previousCents: previous?.octaveCents ?? null },
+    { key: 'fundamental', label: 'Alaphang · 1×', current: alap, previousCents: previous?.fundamentalCents ?? null, previousTargetHz: previous?.fundamentalTargetHz ?? null },
+    { key: 'fifth', label: '3. parciális · 3×', current: kvint, previousCents: previous?.fifthCents ?? null, previousTargetHz: previous?.fifthTargetHz ?? null },
+    { key: 'octave', label: 'Oktáv · 2×', current: oktav, previousCents: previous?.octaveCents ?? null, previousTargetHz: previous?.octaveTargetHz ?? null },
   ];
   const valid = modes.filter((mode) => mode.current.status === 'valid' && mode.current.deviationCents !== null);
   const allInTolerance = valid.length === 3 && valid.every((mode) =>
@@ -88,7 +89,11 @@ export const BBTuningWorkbench: React.FC<Props> = ({
       <div className="mt-3 space-y-2">
         {modes.map((mode) => {
           const cents = mode.current.status === 'valid' ? mode.current.deviationCents : null;
-          const comparison = cents !== null && mode.previousCents !== null
+          const targetHz = mode.current.targetHz;
+          const targetChanged = previous !== null && mode.previousCents !== null &&
+            (mode.previousTargetHz === null || targetHz === null ||
+              Math.abs(1200 * Math.log2(targetHz / mode.previousTargetHz)) > 0.05);
+          const comparison = cents !== null && mode.previousCents !== null && !targetChanged
             ? comparisonText(cents, mode.previousCents)
             : null;
           const inTolerance = cents !== null && isWithinTuningTolerance(cents, mode.current.targetHz, toleranceOverrideCents);
@@ -105,9 +110,17 @@ export const BBTuningWorkbench: React.FC<Props> = ({
                     Előző: {formatCents(mode.previousCents)} → most: {formatCents(cents)} · {comparison.text}
                   </div>
                 )}
-                {!comparison && mode.previousCents === null && previous && (
+                {!comparison && previous && targetChanged && (
+                  <div className="mt-1 text-[10px] text-amber-200">A célfrekvencia megváltozott; az eltérés nem hasonlítható össze.</div>
+                )}
+                {!comparison && previous && !targetChanged && mode.previousCents === null && (
                   <div className="mt-1 text-[10px] text-slate-500">Nincs összehasonlítható korábbi érték.</div>
                 )}
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[9px] text-slate-500">
+                  <span>Jelbiztonság: {mode.current.confidence !== null ? `${Math.round(mode.current.confidence * 100)}%` : '—'}</span>
+                  {mode.current.peakAmbiguous && <span className="text-amber-200">Több versengő spektrális csúcs</span>}
+                  {mode.current.status !== 'valid' && <span className="text-amber-200">A mérés nem érvényes</span>}
+                </div>
               </div>
               <div className="text-right">
                 <div className={`font-mono text-sm font-bold ${cents === null ? 'text-slate-500' : inTolerance ? 'text-emerald-300' : 'text-amber-300'}`}>
