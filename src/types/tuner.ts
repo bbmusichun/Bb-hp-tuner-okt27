@@ -20,6 +20,16 @@ export interface ResonanceMeasurement {
   confidence: number | null; // 0 to 1
   /** True when a second similarly strong, separated FFT peak competes in the target window. */
   peakAmbiguous?: boolean;
+  /** Peak-to-peak spread across the current short tracking window; not measurement uncertainty. */
+  stabilitySpreadCents?: number | null;
+  /** Observed start-to-end frequency movement during the recent sustain/decay window. */
+  decayDriftCents?: number | null;
+  /** Peak-to-peak frequency movement during the recent sustain/decay window. */
+  decayRangeCents?: number | null;
+  /** Linear-regression drift rate in cents per second during the recent window. */
+  decaySlopeCentsPerSecond?: number | null;
+  decaySampleCount?: number;
+  decayDurationMs?: number;
   timestampMs: number;
   status: MeasurementStatus;
 }
