@@ -121,7 +121,7 @@ export class BBAudioEngine {
 
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.fftSize;
-      this.analyser.smoothingTimeConstant = 0.05; // Keep attack/sustain changes responsive; pitch smoothing is handled separately
+      this.analyser.smoothingTimeConstant = 0; // Keep FFT and waveform frames time-aligned for precision measurements.
       this.analyser.minDecibels = -100;
       // Do not clamp strong FFT peaks at -10 dB: a flattened peak biases sub-bin interpolation.
       this.analyser.maxDecibels = 0;
@@ -178,7 +178,7 @@ export class BBAudioEngine {
 
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.fftSize;
-      this.analyser.smoothingTimeConstant = 0.05;
+      this.analyser.smoothingTimeConstant = 0; // No temporal FFT averaging: each partial must describe the same audio frame.
       this.analyser.minDecibels = -100;
       this.analyser.maxDecibels = 0;
       this.timeData = new Float32Array(this.analyser.fftSize);
@@ -514,11 +514,11 @@ export class BBAudioEngine {
     const rawFifthPeak = fifthAnalysis?.peak ?? null;
     const rawOctavePeak = octaveAnalysis?.peak ?? null;
 
-    // Apply the same sub-bin time-domain refinement to every handpan mode.
-    // The 3rd partial and octave have independent physical frequencies; each is
-    // fitted around its own FFT peak rather than being forced to an exact ratio
-    // of the fundamental. Use the recent half-frame to bound mobile CPU cost.
-    const partialFitWindow = this.timeData.subarray(Math.max(0, this.timeData.length - 8192));
+    // Apply the same time-domain observation window to all three resonances.
+    // Using a full frame for the fundamental but only its last half for the upper
+    // modes makes the three reported values refer to different moments in a decaying
+    // strike. Precision takes priority here: fit every mode against the same samples.
+    const partialFitWindow = this.timeData;
     const fifthTrackable = rawFifthPeak !== null && isTrackableResonancePeak(
       fifthAnalysis?.ambiguous ?? false,
       resonanceConfidenceFromDb(rawFifthPeak.magDb),
@@ -780,7 +780,7 @@ export class BBAudioEngine {
     if (useToneAsAnalysisInput) {
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.fftSize;
-      this.analyser.smoothingTimeConstant = 0.05;
+      this.analyser.smoothingTimeConstant = 0; // No temporal FFT averaging: each partial must describe the same audio frame.
       this.analyser.minDecibels = -100;
       this.analyser.maxDecibels = 0;
       this.toneSilenceGain = this.audioCtx.createGain();
