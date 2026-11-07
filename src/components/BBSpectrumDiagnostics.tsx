@@ -55,7 +55,7 @@ export const BBSpectrumDiagnostics: React.FC<Props> = ({
         const targets = [
           { id: 'fundamental', label: state.alap.name || 'Alaphang', measurement: state.alap },
           { id: 'octave', label: state.oktav.name || 'Oktáv', measurement: state.oktav },
-          { id: 'third-partial', label: state.kvint.name || '3. parciális', measurement: state.kvint },
+          { id: 'third-partial', label: state.kvint.name || 'Kvint (3×)', measurement: state.kvint },
         ];
         const next = targets.map(({ id, label, measurement }) => {
           const target = measurement.targetHz;
