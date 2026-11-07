@@ -15,7 +15,7 @@ interface Props {
   onCapture: () => void;
   transientHoldoff: boolean;
   sessionKey: string;
-  onSaveStrikeSession: (summary: StrikeSessionSummary) => void;
+  onSaveStrikeSession: (summary: StrikeSessionSummary, samples: StrikeSample[]) => void;
 }
 
 type Mode = {
@@ -101,7 +101,7 @@ export const BBTuningWorkbench: React.FC<Props> = ({
 
   const finishStrikeSession = () => {
     if (!readyToSaveSession || !strikeSummary) return;
-    onSaveStrikeSession(strikeSummary);
+    onSaveStrikeSession(strikeSummary, strikeSamples);
     setSessionActive(false);
   };
   const modes: Mode[] = [
