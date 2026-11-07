@@ -19,10 +19,10 @@ function point(role: 'fundamental' | 'fifth' | 'octave', cents: number): StrikeS
 describe('multi-strike tone-field summary', () => {
   it('uses the median and MAD to limit the influence of one contaminated strike', () => {
     const samples: StrikeSample[] = [
-      { fundamental: point('fundamental', 1), fifth: point('fifth', 2), octave: point('octave', 3) },
-      { fundamental: point('fundamental', 1.2), fifth: point('fifth', 2.2), octave: point('octave', 3.2) },
-      { fundamental: point('fundamental', 1.1), fifth: point('fifth', 2.1), octave: point('octave', 3.1) },
-      { fundamental: point('fundamental', 80), fifth: point('fifth', 2.3), octave: point('octave', 3.3) },
+      { capturedAtMs: Date.now(), fundamental: point('fundamental', 1), fifth: point('fifth', 2), octave: point('octave', 3) },
+      { capturedAtMs: Date.now() + 1, fundamental: point('fundamental', 1.2), fifth: point('fifth', 2.2), octave: point('octave', 3.2) },
+      { capturedAtMs: Date.now() + 2, fundamental: point('fundamental', 1.1), fifth: point('fifth', 2.1), octave: point('octave', 3.1) },
+      { capturedAtMs: Date.now() + 3, fundamental: point('fundamental', 80), fifth: point('fifth', 2.3), octave: point('octave', 3.3) },
     ];
     const result = summarizeStrikeSamples(samples);
     assert.ok(result);
@@ -36,9 +36,9 @@ describe('multi-strike tone-field summary', () => {
 
   it('aggregates each resonance independently and counts rejected modes', () => {
     const samples: StrikeSample[] = [
-      { fundamental: point('fundamental', 1), fifth: point('fifth', 2), octave: point('octave', 3) },
-      { fundamental: point('fundamental', 2), fifth: null, octave: point('octave', 4) },
-      { fundamental: point('fundamental', 3), fifth: point('fifth', 4), octave: point('octave', 5) },
+      { capturedAtMs: Date.now(), fundamental: point('fundamental', 1), fifth: point('fifth', 2), octave: point('octave', 3) },
+      { capturedAtMs: Date.now() + 1, fundamental: point('fundamental', 2), fifth: null, octave: point('octave', 4) },
+      { capturedAtMs: Date.now() + 2, fundamental: point('fundamental', 3), fifth: point('fifth', 4), octave: point('octave', 5) },
     ];
     const result = summarizeStrikeSamples(samples);
     assert.ok(result);
