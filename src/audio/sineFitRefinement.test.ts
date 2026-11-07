@@ -99,6 +99,36 @@ describe('time-domain sine-fit frequency refinement', () => {
     );
   });
 
+  it('refines the fundamental, octave, and third partial independently in an inharmonic handpan-like frame', () => {
+    const base = BASE * 2 ** (1.4 / 1200);
+    const modes = [
+      { frequency: base, expected: base, name: 'fundamental' },
+      { frequency: base * 2.002, expected: base * 2.002, name: 'octave mode' },
+      { frequency: base * 3.009, expected: base * 3.009, name: 'third partial mode' },
+    ];
+    const samples = new Float32Array(SIZE);
+    for (let i = 0; i < SIZE; i++) {
+      const time = i / RATE;
+      const envelope = Math.exp(-time * 1.8);
+      samples[i] = envelope * (
+        0.22 * Math.sin(2 * Math.PI * modes[0].frequency * time + 0.2) +
+        0.27 * Math.sin(2 * Math.PI * modes[1].frequency * time + 1.1) +
+        0.16 * Math.sin(2 * Math.PI * modes[2].frequency * time + 2.0)
+      );
+    }
+
+    for (const mode of modes) {
+      const measured = refineFrequencyBySineFit(
+        samples, RATE, mode.expected * 2 ** (2 / 1200), 8,
+      );
+      assert.ok(measured !== null, `no estimate for ${mode.name}`);
+      assert.ok(
+        Math.abs(cents(measured, mode.expected)) < 0.5,
+        `${mode.name} error=${cents(measured, mode.expected).toFixed(4)} cents`,
+      );
+    }
+  });
+
   it('returns null for silence and invalid inputs, including non-finite samples', () => {
     assert.equal(refineFrequencyBySineFit(new Float32Array(SIZE), RATE, BASE), null);
     assert.equal(refineFrequencyBySineFit(new Float32Array(100), RATE, BASE), null);

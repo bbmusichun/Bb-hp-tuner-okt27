@@ -29,7 +29,7 @@ export const BBMeresekView: React.FC<Props> = ({
 }) => {
   const handleExportCSV = () => {
     if (logs.length === 0) return;
-    const headers = ['Timestamp', 'Date', 'Instrument_Profile_ID', 'Instrument_Profile_Name', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Tolerance_Mode', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune'];
+    const headers = ['Timestamp', 'Date', 'Instrument_Profile_ID', 'Instrument_Profile_Name', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Tolerance_Mode', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune', 'Quality_Metadata_JSON', 'Strike_Session_JSON', 'Strike_Samples_JSON'];
     const rows = logs.map((l) => [
       l.timestamp,
       new Date(l.timestamp).toISOString(),
@@ -50,6 +50,9 @@ export const BBMeresekView: React.FC<Props> = ({
       l.octaveTargetHz?.toFixed(3) ?? '',
       l.octaveCents.toFixed(2),
       l.overallInTune ? 'TRUE' : 'FALSE',
+      l.quality ? JSON.stringify(l.quality) : '',
+      l.strikeSession ? JSON.stringify(l.strikeSession) : '',
+      l.strikeSamples ? JSON.stringify(l.strikeSamples) : '',
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((row) => row.map((value) => '"' + String(value).replace(/"/g, '""') + '"').join(','))].join('\n');
@@ -221,6 +224,54 @@ export const BBMeresekView: React.FC<Props> = ({
                   </div>
                 </div>
               </div>
+              {log.strikeSession && (
+                <div className="mt-2 rounded border border-sky-400/15 bg-sky-950/15 px-2 py-1.5 text-[9px] text-slate-300">
+                  <div className="font-semibold text-sky-100">Több leütéses összesítés · {log.strikeSession.strikeCount} leütés</div>
+                  <div className="mt-1 grid grid-cols-3 gap-1.5">
+                    {([['Alap', log.strikeSession.fundamental], ['3. parciális', log.strikeSession.fifth], ['Oktáv', log.strikeSession.octave]] as const).map(([label, result]) => (
+                      <div key={label}><div className="text-slate-400">{label}</div><div className="font-mono">MAD {result.madCents.toFixed(2)} c</div><div className="text-slate-500">Tartomány {result.rangeCents.toFixed(2)} c</div><div className="text-slate-500">{result.acceptedCount} elfogadott / {result.rejectedCount} kihagyott</div></div>
+                    ))}
+                  </div>
+                  <div className="mt-1 text-slate-500">A medián a rögzített leütések összesített frekvencia-/centértéke; MAD és tartomány = ismételhetőség.</div>
+                </div>
+              )}
+              {log.strikeSamples && log.strikeSamples.length > 0 && (
+                <details className="mt-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[9px] text-slate-300">
+                  <summary className="cursor-pointer font-semibold text-slate-200">Leütésenkénti nyers adatok ({log.strikeSamples.length})</summary>
+                  <div className="mt-1 space-y-1.5">
+                    {log.strikeSamples.map((sample, index) => (
+                      <div key={index} className="grid grid-cols-[28px_repeat(3,minmax(0,1fr))] gap-1 border-t border-white/5 pt-1">
+                        <span className="text-slate-500">#{index + 1}<br />{new Date(sample.capturedAtMs).toLocaleTimeString('hu-HU', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                        {([['Alap', 'fundamental', sample.fundamental], ['3×', 'fifth', sample.fifth], ['2×', 'octave', sample.octave]] as const).map(([label, role, reading]) => (
+                          <div key={label}><div className="text-slate-500">{label}</div><div className="font-mono text-slate-300">{reading ? `${reading.hz.toFixed(2)} Hz` : '—'}</div><div className="font-mono text-slate-400">{reading ? `${reading.cents > 0 ? '+' : ''}${reading.cents.toFixed(2)} c` : sample.rejectionReasons?.[role] ?? 'Kihagyva'}</div></div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+              {log.quality && (
+                <div className="mt-2 grid grid-cols-3 gap-1.5 border-t border-white/5 pt-2 text-[9px] text-slate-400">
+                  {([
+                    { role: 'fundamental', label: 'Alap' },
+                    { role: 'fifth', label: '3. parciális' },
+                    { role: 'octave', label: 'Oktáv' },
+                  ] as const).map(({ role, label }) => {
+                    const quality = log.quality?.[role];
+                    if (!quality) return <div key={role} className="text-slate-600">{label}: nincs minőségi adat</div>;
+                    return (
+                      <div key={role} className="rounded bg-black/20 px-1.5 py-1">
+                        <div className="font-semibold text-slate-300">{label}</div>
+                        <div>Biztonság: {quality.confidence === null ? '—' : `${Math.round(quality.confidence * 100)}%`}</div>
+                        <div>Jelszint: {quality.amplitudeDb === null ? '—' : `${quality.amplitudeDb.toFixed(1)} dB`}</div>
+                        <div>Szórás: {quality.stabilitySpreadCents === null ? '—' : `${quality.stabilitySpreadCents.toFixed(2)} c`}</div>
+                        <div>Lecsengés: {quality.decayDriftCents === null ? '—' : `${quality.decayDriftCents.toFixed(2)} c`}</div>
+                        {quality.peakAmbiguous && <div className="text-amber-300">Több csúcs</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ))
         )}

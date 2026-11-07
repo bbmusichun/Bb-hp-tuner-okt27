@@ -15,6 +15,7 @@ import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, isTrackableResonancePeak, resonanceConfidenceFromDb } from './peakConfidence';
 import { analyzeSpectralPeakInWindow } from './spectralPeak';
 import { refineFrequencyBySineFit } from './sineFitRefinement';
+import { DecayDriftTracker } from './decayDrift';
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates, independentPitchConfirmsCandidate } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
@@ -52,6 +53,11 @@ export class BBAudioEngine {
   private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
   private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; targetHz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
   private pitchHistory: Record<'fundamental' | 'fifth' | 'octave', PitchSample[]> = { fundamental: [], fifth: [], octave: [] };
+  private decayDriftTrackers: Record<'fundamental' | 'fifth' | 'octave', DecayDriftTracker> = {
+    fundamental: new DecayDriftTracker(),
+    fifth: new DecayDriftTracker(),
+    octave: new DecayDriftTracker(),
+  };
   private stablePitchTrackers: Record<'fundamental' | 'fifth' | 'octave', StablePitchTracker> = {
     fundamental: new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 5, minConfidence: 0.32 }),
     fifth: new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 7, minConfidence: 0.32 }),
@@ -201,6 +207,7 @@ export class BBAudioEngine {
       this.lastValidResonances = {};
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
       return true;
     } catch (err: unknown) {
       this.mediaElementSourceNode?.disconnect();
@@ -231,6 +238,7 @@ export class BBAudioEngine {
     this.lastValidResonances = {};
     this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
     Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
   }
 
   public stopMicrophone(): void {
@@ -254,6 +262,7 @@ export class BBAudioEngine {
     this.lastValidResonances = {};
     this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
     Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
   }
 
   public getMicState(): MicState {
@@ -447,6 +456,7 @@ export class BBAudioEngine {
       this.stabilityHistory = [];
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
     const transientHoldoff = isTransientHoldoffActive(
       this.lastTransientAt,
@@ -501,8 +511,36 @@ export class BBAudioEngine {
     // Search each resonance independently to reduce masking by a dominant fundamental.
     const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
     const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
-    const qPeak = fifthAnalysis?.peak ?? null;
-    const oPeak = octaveAnalysis?.peak ?? null;
+    const rawFifthPeak = fifthAnalysis?.peak ?? null;
+    const rawOctavePeak = octaveAnalysis?.peak ?? null;
+
+    // Apply the same sub-bin time-domain refinement to every handpan mode.
+    // The 3rd partial and octave have independent physical frequencies; each is
+    // fitted around its own FFT peak rather than being forced to an exact ratio
+    // of the fundamental. Use the recent half-frame to bound mobile CPU cost.
+    const partialFitWindow = this.timeData.subarray(Math.max(0, this.timeData.length - 8192));
+    const fifthTrackable = rawFifthPeak !== null && isTrackableResonancePeak(
+      fifthAnalysis?.ambiguous ?? false,
+      resonanceConfidenceFromDb(rawFifthPeak.magDb),
+      fifthAnalysis?.prominenceDb ?? 0,
+    );
+    const octaveTrackable = rawOctavePeak !== null && isTrackableResonancePeak(
+      octaveAnalysis?.ambiguous ?? false,
+      resonanceConfidenceFromDb(rawOctavePeak.magDb),
+      octaveAnalysis?.prominenceDb ?? 0,
+    );
+    const fifthSineFitHz = fifthTrackable && rawFifthPeak
+      ? refineFrequencyBySineFit(partialFitWindow, this.sampleRate, rawFifthPeak.freq, 8)
+      : null;
+    const octaveSineFitHz = octaveTrackable && rawOctavePeak
+      ? refineFrequencyBySineFit(partialFitWindow, this.sampleRate, rawOctavePeak.freq, 8)
+      : null;
+    const qPeak = rawFifthPeak && fifthSineFitHz !== null
+      ? { ...rawFifthPeak, freq: fifthSineFitHz }
+      : rawFifthPeak;
+    const oPeak = rawOctavePeak && octaveSineFitHz !== null
+      ? { ...rawOctavePeak, freq: octaveSineFitHz }
+      : rawOctavePeak;
 
     // Construct measurements
     const alap = this.buildResonanceMeasurement(
@@ -632,7 +670,10 @@ export class BBAudioEngine {
 
     const stability = trackable && rawPeak
       ? this.stablePitchTrackers[role].observe({ frequencyHz: rawPeak.freq, confidence, timestampMs: now })
-      : { stable: false, frequencyHz: null, count: 0 };
+      : { stable: false, frequencyHz: null, count: 0, spreadCents: null };
+    const decayDrift = trackable && rawPeak
+      ? this.decayDriftTrackers[role].observe({ frequencyHz: rawPeak.freq, timestampMs: now })
+      : (this.decayDriftTrackers[role].reset(), null);
     const finalized = finalizePeakReading(
       currentPeak,
       stability.stable ? stability.frequencyHz : null,
@@ -673,6 +714,12 @@ export class BBAudioEngine {
       amplitudeDb: currentPeak ? currentPeak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
       confidence: currentPeak ? confidence : cachedIsFresh ? cached!.confidence : 0,
       peakAmbiguous: Boolean(currentPeak && peakAmbiguous),
+      stabilitySpreadCents: stability.spreadCents,
+      decayDriftCents: decayDrift?.driftCents ?? null,
+      decayRangeCents: decayDrift?.rangeCents ?? null,
+      decaySlopeCentsPerSecond: decayDrift?.slopeCentsPerSecond ?? null,
+      decaySampleCount: decayDrift?.sampleCount ?? 0,
+      decayDurationMs: decayDrift?.durationMs ?? 0,
       timestampMs: currentPeak ? now : cachedIsFresh ? cached!.timestampMs : now,
       status: !currentPeak && cachedIsFresh ? 'held' : status,
     };
@@ -694,6 +741,12 @@ export class BBAudioEngine {
       amplitudeDb: null,
       confidence: 0,
       peakAmbiguous: false,
+      stabilitySpreadCents: null,
+      decayDriftCents: null,
+      decayRangeCents: null,
+      decaySlopeCentsPerSecond: null,
+      decaySampleCount: 0,
+      decayDurationMs: 0,
       timestampMs: Date.now(),
       status: 'no-signal',
     };
@@ -740,6 +793,7 @@ export class BBAudioEngine {
       this.lastValidResonances = {};
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
 
     this.toneGain = this.audioCtx.createGain();
@@ -788,6 +842,7 @@ export class BBAudioEngine {
       this.lastValidResonances = {};
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
     try {
       gain.gain.cancelScheduledValues(now);
