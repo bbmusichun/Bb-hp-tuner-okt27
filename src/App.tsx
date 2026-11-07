@@ -48,6 +48,7 @@ import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
 import { BBPitchDial } from './components/BBPitchDial';
 import { BBCards } from './components/BBCards';
 import { BBStabilityGraph } from './components/BBStabilityGraph';
+import { BBTuningWorkbench } from './components/BBTuningWorkbench';
 import { BBHangmezoView } from './components/BBHangmezoView';
 import { BBScaleNoteEnablePanel } from './components/BBScaleNoteEnablePanel';
 import { BBMeresekView } from './components/BBMeresekView';
@@ -1036,6 +1037,16 @@ export default function App() {
 
   // Determine active resonance details for Section B header
   const activeResonance = selectedRole === 'fundamental' ? alap : selectedRole === 'fifth' ? kvint : oktav;
+  // The latest saved snapshot for this exact instrument, scale and tone field is
+  // the workshop baseline; other notes/profiles must never be mixed into it.
+  const previousMatchingLog = logs.find((entry) =>
+    entry.instrumentProfileId === activeInstrumentProfileId &&
+    entry.scaleId === currentScale.id &&
+    entry.noteName === selectedNote.noteName,
+  ) ?? null;
+  const canCaptureTuningSnapshot = [alap, kvint, oktav].every((measurement) =>
+    measurement.status === 'valid' && measurement.measuredHz !== null && measurement.deviationCents !== null,
+  );
   const referenceToneHz = activeResonance.targetHz ?? (
     selectedRole === 'fundamental' ? selectedNote.frequency
       : selectedRole === 'fifth' ? selectedNote.fifthFreq
@@ -1749,6 +1760,17 @@ export default function App() {
               toleranceOverrideCents={toleranceOverrideCents}
               readoutMode={readoutMode}
               a4Ref={a4Ref}
+            />
+
+            <BBTuningWorkbench
+              noteName={selectedNote.noteName}
+              previous={previousMatchingLog}
+              alap={alap}
+              kvint={kvint}
+              oktav={oktav}
+              toleranceOverrideCents={toleranceOverrideCents}
+              canCapture={canCaptureTuningSnapshot}
+              onCapture={handleCaptureSnapshot}
             />
 
             {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
