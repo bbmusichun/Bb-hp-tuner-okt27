@@ -224,15 +224,14 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
         const quality = entry.quality?.[role];
         if (quality === undefined) return true;
         if (!quality || typeof quality !== 'object') return false;
-        const q = quality as Record<string, unknown>;
-        const nullableFinite = (value: unknown) => value === null || (typeof value === 'number' && Number.isFinite(value));
-        return nullableFinite(q.confidence) && nullableFinite(q.amplitudeDb) &&
-          typeof q.peakAmbiguous === 'boolean' &&
-          nullableFinite(q.stabilitySpreadCents) && nullableFinite(q.decayDriftCents) &&
-          nullableFinite(q.decayRangeCents) && nullableFinite(q.decaySlopeCentsPerSecond) &&
-          typeof q.decaySampleCount === 'number' && Number.isInteger(q.decaySampleCount) && q.decaySampleCount >= 0 &&
-          typeof q.decayDurationMs === 'number' && Number.isFinite(q.decayDurationMs) && q.decayDurationMs >= 0 &&
-          (q.status === 'valid' || q.status === 'uncertain' || q.status === 'held' || q.status === 'no-signal');
+        const nullableFinite = (value: number | null) => value === null || Number.isFinite(value);
+        return nullableFinite(quality.confidence) && nullableFinite(quality.amplitudeDb) &&
+          typeof quality.peakAmbiguous === 'boolean' &&
+          nullableFinite(quality.stabilitySpreadCents) && nullableFinite(quality.decayDriftCents) &&
+          nullableFinite(quality.decayRangeCents) && nullableFinite(quality.decaySlopeCentsPerSecond) &&
+          Number.isInteger(quality.decaySampleCount) && quality.decaySampleCount >= 0 &&
+          Number.isFinite(quality.decayDurationMs) && quality.decayDurationMs >= 0 &&
+          (quality.status === 'valid' || quality.status === 'uncertain' || quality.status === 'held' || quality.status === 'no-signal');
       })
     ));
 }
