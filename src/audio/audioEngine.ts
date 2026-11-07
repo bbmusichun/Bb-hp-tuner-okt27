@@ -482,8 +482,12 @@ export class BBAudioEngine {
         yinEstimate.frequencyHz,
         yinEstimate.clarity,
       );
+    // Keep the time-domain estimators on the same recent frame. A decaying handpan
+    // resonance can drift during the 341 ms FFT window; comparing a full-window
+    // sine fit with a recent-window YIN estimate would mix different moments in
+    // the decay and can bias the fused pitch. Both now analyze the same 8192 samples.
     const sineFitHz = fundamentalPeakIsTrackable && rawFundamentalPeak && independentPitchConfirmsPeak
-      ? refineFrequencyBySineFit(this.timeData, this.sampleRate, rawFundamentalPeak.freq, 8)
+      ? refineFrequencyBySineFit(yinWindow, this.sampleRate, rawFundamentalPeak.freq, 8)
       : null;
     const timeRefinedPeak = rawFundamentalPeak && sineFitHz !== null
       ? { ...rawFundamentalPeak, freq: sineFitHz }
