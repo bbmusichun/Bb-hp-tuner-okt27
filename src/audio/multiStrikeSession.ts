@@ -8,6 +8,7 @@ export interface StrikePoint {
 }
 
 export interface StrikeSample {
+  capturedAtMs: number;
   fundamental: StrikePoint | null;
   fifth: StrikePoint | null;
   octave: StrikePoint | null;
