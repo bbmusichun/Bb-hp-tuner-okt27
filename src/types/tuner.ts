@@ -100,6 +100,7 @@ export interface StrikeSessionReading {
 }
 
 export interface StrikeSessionStrike {
+  capturedAtMs: number;
   fundamental: StrikeSessionReading | null;
   fifth: StrikeSessionReading | null;
   octave: StrikeSessionReading | null;
