@@ -42,9 +42,12 @@ describe('decay drift tracker', () => {
     const tracker = new DecayDriftTracker({ minDurationMs: 300 });
     const sequence = [0, 1, 20, 3, 4, 5];
     let result: DecayDriftSnapshot | null = null;
-    sequence.forEach((cents, index) => {
-      result = tracker.observe({ frequencyHz: hzAtCents(220, cents), timestampMs: index * 100 });
-    });
+    for (let index = 0; index < sequence.length; index++) {
+      result = tracker.observe({
+        frequencyHz: hzAtCents(220, sequence[index]),
+        timestampMs: index * 100,
+      });
+    }
     assert.ok(result);
     assert.ok(result.rangeCents <= 5.01, `unexpected robust range: ${result.rangeCents}`);
     assert.ok(Math.abs(result.driftCents - 5) < 1e-8);
