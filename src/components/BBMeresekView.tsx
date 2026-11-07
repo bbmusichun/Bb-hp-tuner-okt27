@@ -235,6 +235,21 @@ export const BBMeresekView: React.FC<Props> = ({
                   <div className="mt-1 text-slate-500">A medián a rögzített leütések összesített frekvencia-/centértéke; MAD és tartomány = ismételhetőség.</div>
                 </div>
               )}
+              {log.strikeSamples && log.strikeSamples.length > 0 && (
+                <details className="mt-2 rounded border border-white/10 bg-black/15 px-2 py-1.5 text-[9px] text-slate-300">
+                  <summary className="cursor-pointer font-semibold text-slate-200">Leütésenkénti nyers adatok ({log.strikeSamples.length})</summary>
+                  <div className="mt-1 space-y-1.5">
+                    {log.strikeSamples.map((sample, index) => (
+                      <div key={index} className="grid grid-cols-[28px_repeat(3,minmax(0,1fr))] gap-1 border-t border-white/5 pt-1">
+                        <span className="text-slate-500">#{index + 1}</span>
+                        {([['Alap', sample.fundamental], ['3×', sample.fifth], ['2×', sample.octave]] as const).map(([label, reading]) => (
+                          <div key={label}><div className="text-slate-500">{label}</div><div className="font-mono text-slate-300">{reading ? `${reading.hz.toFixed(2)} Hz` : '—'}</div><div className="font-mono text-slate-400">{reading ? `${reading.cents > 0 ? '+' : ''}${reading.cents.toFixed(2)} c` : '—'}</div></div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
               {log.quality && (
                 <div className="mt-2 grid grid-cols-3 gap-1.5 border-t border-white/5 pt-2 text-[9px] text-slate-400">
                   {([
