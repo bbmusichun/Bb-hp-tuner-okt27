@@ -207,6 +207,7 @@ export class BBAudioEngine {
       this.lastValidResonances = {};
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
       return true;
     } catch (err: unknown) {
       this.mediaElementSourceNode?.disconnect();
@@ -237,6 +238,7 @@ export class BBAudioEngine {
     this.lastValidResonances = {};
     this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
     Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
   }
 
   public stopMicrophone(): void {
@@ -260,6 +262,7 @@ export class BBAudioEngine {
     this.lastValidResonances = {};
     this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
     Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
   }
 
   public getMicState(): MicState {
@@ -453,6 +456,7 @@ export class BBAudioEngine {
       this.stabilityHistory = [];
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
     const transientHoldoff = isTransientHoldoffActive(
       this.lastTransientAt,
@@ -789,6 +793,7 @@ export class BBAudioEngine {
       this.lastValidResonances = {};
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
 
     this.toneGain = this.audioCtx.createGain();
@@ -837,6 +842,7 @@ export class BBAudioEngine {
       this.lastValidResonances = {};
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
     try {
       gain.gain.cancelScheduledValues(now);
