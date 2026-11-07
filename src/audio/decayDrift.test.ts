@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { DecayDriftTracker } from './decayDrift';
+import { DecayDriftTracker, type DecayDriftSnapshot } from './decayDrift';
 
 const hzAtCents = (base: number, cents: number) => base * 2 ** (cents / 1200);
 
@@ -41,7 +41,7 @@ describe('decay drift tracker', () => {
   it('rejects an isolated one-frame peak jump without flattening a sustained drift', () => {
     const tracker = new DecayDriftTracker({ minDurationMs: 300 });
     const sequence = [0, 1, 20, 3, 4, 5];
-    let result = null;
+    let result: DecayDriftSnapshot | null = null;
     sequence.forEach((cents, index) => {
       result = tracker.observe({ frequencyHz: hzAtCents(220, cents), timestampMs: index * 100 });
     });
