@@ -38,6 +38,19 @@ describe('decay drift tracker', () => {
     assert.ok(Math.abs(result.driftCents - 3) < 1e-8);
   });
 
+  it('rejects an isolated one-frame peak jump without flattening a sustained drift', () => {
+    const tracker = new DecayDriftTracker({ minDurationMs: 300 });
+    const sequence = [0, 1, 20, 3, 4, 5];
+    let result = null;
+    sequence.forEach((cents, index) => {
+      result = tracker.observe({ frequencyHz: hzAtCents(220, cents), timestampMs: index * 100 });
+    });
+    assert.ok(result);
+    assert.ok(result.rangeCents <= 5.01, `unexpected robust range: ${result.rangeCents}`);
+    assert.ok(Math.abs(result.driftCents - 5) < 1e-8);
+    assert.ok(Math.abs(result.slopeCentsPerSecond - 10) < 2);
+  });
+
   it('resets on invalid samples and non-monotonic timestamps', () => {
     const tracker = new DecayDriftTracker({ minDurationMs: 100 });
     tracker.observe({ frequencyHz: 220, timestampMs: 0 });
