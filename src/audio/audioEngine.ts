@@ -15,6 +15,7 @@ import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, isTrackableResonancePeak, resonanceConfidenceFromDb } from './peakConfidence';
 import { analyzeSpectralPeakInWindow } from './spectralPeak';
 import { refineFrequencyBySineFit } from './sineFitRefinement';
+import { DecayDriftTracker } from './decayDrift';
 import { finalizePeakReading } from './resonanceMetrics';
 import { fuseAgreeingFrequencyEstimates, independentPitchConfirmsCandidate } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
@@ -52,6 +53,11 @@ export class BBAudioEngine {
   private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
   private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; targetHz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
   private pitchHistory: Record<'fundamental' | 'fifth' | 'octave', PitchSample[]> = { fundamental: [], fifth: [], octave: [] };
+  private decayDriftTrackers: Record<'fundamental' | 'fifth' | 'octave', DecayDriftTracker> = {
+    fundamental: new DecayDriftTracker(),
+    fifth: new DecayDriftTracker(),
+    octave: new DecayDriftTracker(),
+  };
   private stablePitchTrackers: Record<'fundamental' | 'fifth' | 'octave', StablePitchTracker> = {
     fundamental: new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 5, minConfidence: 0.32 }),
     fifth: new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 7, minConfidence: 0.32 }),
@@ -660,7 +666,10 @@ export class BBAudioEngine {
 
     const stability = trackable && rawPeak
       ? this.stablePitchTrackers[role].observe({ frequencyHz: rawPeak.freq, confidence, timestampMs: now })
-      : { stable: false, frequencyHz: null, count: 0 };
+      : { stable: false, frequencyHz: null, count: 0, spreadCents: null };
+    const decayDrift = trackable && rawPeak
+      ? this.decayDriftTrackers[role].observe({ frequencyHz: rawPeak.freq, timestampMs: now })
+      : (this.decayDriftTrackers[role].reset(), null);
     const finalized = finalizePeakReading(
       currentPeak,
       stability.stable ? stability.frequencyHz : null,
@@ -701,6 +710,12 @@ export class BBAudioEngine {
       amplitudeDb: currentPeak ? currentPeak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
       confidence: currentPeak ? confidence : cachedIsFresh ? cached!.confidence : 0,
       peakAmbiguous: Boolean(currentPeak && peakAmbiguous),
+      stabilitySpreadCents: stability.spreadCents,
+      decayDriftCents: decayDrift?.driftCents ?? null,
+      decayRangeCents: decayDrift?.rangeCents ?? null,
+      decaySlopeCentsPerSecond: decayDrift?.slopeCentsPerSecond ?? null,
+      decaySampleCount: decayDrift?.sampleCount ?? 0,
+      decayDurationMs: decayDrift?.durationMs ?? 0,
       timestampMs: currentPeak ? now : cachedIsFresh ? cached!.timestampMs : now,
       status: !currentPeak && cachedIsFresh ? 'held' : status,
     };
@@ -722,6 +737,12 @@ export class BBAudioEngine {
       amplitudeDb: null,
       confidence: 0,
       peakAmbiguous: false,
+      stabilitySpreadCents: null,
+      decayDriftCents: null,
+      decayRangeCents: null,
+      decaySlopeCentsPerSecond: null,
+      decaySampleCount: 0,
+      decayDurationMs: 0,
       timestampMs: Date.now(),
       status: 'no-signal',
     };
