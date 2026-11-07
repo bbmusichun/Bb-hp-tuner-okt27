@@ -7,7 +7,7 @@
 import { ResonanceMeasurement, MicState } from '../types/tuner';
 import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 import { detectTransientOnset, isTransientHoldoffActive, StablePitchTracker } from './transientGuard';
-import { PitchSample, smoothPitchSample } from './pitchSmoothing';
+import { PitchSample, retainAcceptedPitchSamples, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
 import { isNearDigitalClipPeak } from './inputClipping';
 import { isUsableSignalLevel } from './signalLevel';
@@ -449,14 +449,19 @@ export class BBAudioEngine {
     this.previousRms = shortRms;
     if (transientDetected) {
       this.lastTransientAt = now;
-      // A fresh strike invalidates the previous reading immediately. Otherwise a new,
-      // different note can appear to measure as the old note during the holdoff window
-      // because buildResonanceMeasurement intentionally retains valid readings.
+      // A new strike starts a fresh stability run, but it must not erase the accepted
+      // pitch estimate: repeated strikes on the same tone field should remain continuous.
+      // Drop only unconfirmed attack candidates; a genuinely changed pitch still needs
+      // three agreeing frames in smoothPitchSample before replacing the accepted cluster.
       this.lastValidResonances = {};
       this.stabilityHistory = [];
-      this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
+      this.pitchHistory = {
+        fundamental: retainAcceptedPitchSamples(this.pitchHistory.fundamental),
+        fifth: retainAcceptedPitchSamples(this.pitchHistory.fifth),
+        octave: retainAcceptedPitchSamples(this.pitchHistory.octave),
+      };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
-    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
+      Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
     const transientHoldoff = isTransientHoldoffActive(
       this.lastTransientAt,
@@ -676,15 +681,15 @@ export class BBAudioEngine {
       this.decayDriftTrackers[role].reset();
     }
 
-    const stability = trackable && rawPeak
-      ? this.stablePitchTrackers[role].observe({ frequencyHz: rawPeak.freq, confidence, timestampMs: now })
+    const stability = trackable && currentPeak
+      ? this.stablePitchTrackers[role].observe({ frequencyHz: currentPeak.freq, confidence, timestampMs: now })
       : { stable: false, frequencyHz: null, count: 0, spreadCents: null };
     const decayDrift = trackable && rawPeak
       ? this.decayDriftTrackers[role].observe({ frequencyHz: rawPeak.freq, timestampMs: now })
       : (this.decayDriftTrackers[role].reset(), null);
     const finalized = finalizePeakReading(
       currentPeak,
-      stability.stable ? stability.frequencyHz : null,
+      null,
       targetHz,
     );
     currentPeak = finalized.peak;
