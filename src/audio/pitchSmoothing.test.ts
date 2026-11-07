@@ -46,6 +46,18 @@ test('new pitch outside jump threshold starts a new history after confirmation',
   assert.ok(Math.abs(result.frequencyHz - 246.95) < 0.02);
 });
 
+test('role-specific tighter threshold holds a small but unstable jump', () => {
+  let result = smoothPitchSample([], 220, 0);
+  result = smoothPitchSample(result.history, 220.01, 33);
+  const candidate = smoothPitchSample(result.history, 220.9, 66, {
+    jumpThresholdCents: 5,
+    candidateMatchCents: 3,
+    candidateConfirmations: 3,
+  });
+  assert.ok(Math.abs(candidate.frequencyHz - 220.005) < 0.02);
+  assert.equal(candidate.history.filter((sample) => sample.candidate).length, 1);
+});
+
 test('stale history expires after the configured time window', () => {
   const first = smoothPitchSample([], 220, 0);
   const second = smoothPitchSample(first.history, 220.1, 1500);
