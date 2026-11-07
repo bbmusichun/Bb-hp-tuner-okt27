@@ -160,8 +160,8 @@ export const BBTuningWorkbench: React.FC<Props> = ({
         {sessionActive && (
           <div className="mt-2">
             <div className="flex items-center justify-between gap-2">
-              <div className="text-[10px] text-slate-300">{transientHoldoff ? "Leütés érzékelve – várj a tranziens után." : sawFreshStrike ? "A leütés lecsengett – a minta rögzíthető." : "Üsd meg újra a kijelölt hangmezőt."}</div>
-              <button type="button" onClick={captureStrike} disabled={!readyToCaptureStrike} className="shrink-0 rounded-md bg-sky-300 px-2.5 py-1.5 text-[10px] font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-35">Leütés rögzítése</button>
+              <div className="text-[10px] text-slate-300">{transientHoldoff ? "Leütés érzékelve – várj a tranziens után." : sawFreshStrike ? currentStrikeValid ? "A leütés lecsengett – a mérés rögzíthető." : "A leütés lecsengett, de még nincs érvényes rezonanciamérés." : "Üsd meg újra a kijelölt hangmezőt."}</div>
+              <button type="button" onClick={captureStrike} disabled={!readyToCaptureStrike} className="shrink-0 rounded-md bg-sky-300 px-2.5 py-1.5 text-[10px] font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-35">Mérés rögzítése</button>
             </div>
             <div className="mt-2 grid grid-cols-3 gap-1.5 text-[9px]">
               {([["Alap", "fundamental"], ["3. parciális", "fifth"], ["Oktáv", "octave"]] as const).map(([label, key]) => {
