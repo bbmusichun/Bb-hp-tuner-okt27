@@ -758,7 +758,7 @@ export default function App() {
 
   // Note names for the 3 resonances of the selected note
   const resonanceNoteNames = useMemo(() => {
-    // If D3 is selected: Alap = D3, oktáv = D4, 3. parciális = A4
+    // If D3 is selected: Alap = D3, oktáv = D4, Kvint (3×) = A4
     // Otherwise calculate octave and fifth names
     return {
       fundamental: selectedNote.noteName,
@@ -818,7 +818,7 @@ export default function App() {
 
   const [kvint, setKvint] = useState<ResonanceMeasurement>({
     role: 'fifth',
-    name: '3. parciális',
+    name: 'Kvint (3×)',
     noteName: resonanceNoteNames.fifth,
     measuredHz: null,
     targetHz: toneNotes[0].fifthFreq,
@@ -1754,7 +1754,7 @@ export default function App() {
                   }}
                   className="px-2.5 py-1.5 rounded-full border border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#f59e0b] text-xs font-medium flex items-center gap-1 hover:bg-[#f59e0b]/20 transition"
                 >
-                  <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}</span>
+                  <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint (3×)' : 'Oktáv'}</span>
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -1782,7 +1782,7 @@ export default function App() {
               </div>
 
               <div className="mb-1 flex items-center justify-between gap-2 px-1">
-                <label htmlFor="hangoal-reference-tone-mode" className="text-[10px] text-slate-500">{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'} referenciahang-módja</label>
+                <label htmlFor="hangoal-reference-tone-mode" className="text-[10px] text-slate-500">{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint (3×)' : 'Oktáv'} referenciahang-módja</label>
                 <select
                   id="hangoal-reference-tone-mode"
                   value={referenceToneMode}
@@ -1795,7 +1795,7 @@ export default function App() {
                 </select>
               </div>
               <p className="mb-2 px-1 text-[10px] leading-relaxed text-slate-500">
-                Ez a mód csak a kiválasztott sávra vonatkozik; az alaphang, a 3. parciális és az oktáv külön állítható. Ütésmódban a rövid hang a tranziensvédelmi ablak elején szól; a hangszóró visszacsatolása mérési hibát okozhat.
+                Ez a mód csak a kiválasztott sávra vonatkozik; az alaphang, a Kvint (3×) és az oktáv külön állítható. Ütésmódban a rövid hang a tranziensvédelmi ablak elején szól; a hangszóró visszacsatolása mérési hibát okozhat.
               </p>
 
               <div className="mb-1 flex justify-end px-1">
@@ -1907,7 +1907,7 @@ export default function App() {
 
             {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
             <BBStabilityGraph
-              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
+              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint (3×)' : 'Oktáv'}
               hasSignal={hasSignal}
               currentCents={activeCents ?? 0}
               targetHz={activeResonance.targetHz}
