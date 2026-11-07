@@ -207,7 +207,8 @@ function isValidStrikeSessionStrike(value: unknown): boolean {
     typeof (reading as Record<string, unknown>).confidence === 'number' && Number.isFinite((reading as Record<string, unknown>).confidence) && ((reading as Record<string, unknown>).confidence as number) >= 0 && ((reading as Record<string, unknown>).confidence as number) <= 1 &&
     typeof (reading as Record<string, unknown>).amplitudeDb === 'number' && Number.isFinite((reading as Record<string, unknown>).amplitudeDb) && ((reading as Record<string, unknown>).amplitudeDb as number) >= -160 && ((reading as Record<string, unknown>).amplitudeDb as number) <= 0
   );
-  return validReading(strike.fundamental) && validReading(strike.fifth) && validReading(strike.octave);
+  return validReading(strike.fundamental) && validReading(strike.fifth) && validReading(strike.octave) &&
+    [strike.fundamental, strike.fifth, strike.octave].some((reading) => reading !== null);
 }
 
 function isValidStrikeSessionSummary(value: unknown): value is StrikeSessionSummary {
