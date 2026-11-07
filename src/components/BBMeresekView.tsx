@@ -29,7 +29,7 @@ export const BBMeresekView: React.FC<Props> = ({
 }) => {
   const handleExportCSV = () => {
     if (logs.length === 0) return;
-    const headers = ['Timestamp', 'Date', 'Instrument_Profile_ID', 'Instrument_Profile_Name', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Tolerance_Mode', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune', 'Quality_Metadata_JSON'];
+    const headers = ['Timestamp', 'Date', 'Instrument_Profile_ID', 'Instrument_Profile_Name', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Tolerance_Mode', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune', 'Quality_Metadata_JSON', 'Strike_Session_JSON'];
     const rows = logs.map((l) => [
       l.timestamp,
       new Date(l.timestamp).toISOString(),
@@ -51,6 +51,7 @@ export const BBMeresekView: React.FC<Props> = ({
       l.octaveCents.toFixed(2),
       l.overallInTune ? 'TRUE' : 'FALSE',
       l.quality ? JSON.stringify(l.quality) : '',
+      l.strikeSession ? JSON.stringify(l.strikeSession) : '',
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((row) => row.map((value) => '"' + String(value).replace(/"/g, '""') + '"').join(','))].join('\n');
@@ -222,6 +223,17 @@ export const BBMeresekView: React.FC<Props> = ({
                   </div>
                 </div>
               </div>
+              {log.strikeSession && (
+                <div className="mt-2 rounded border border-sky-400/15 bg-sky-950/15 px-2 py-1.5 text-[9px] text-slate-300">
+                  <div className="font-semibold text-sky-100">Több leütéses összesítés · {log.strikeSession.strikeCount} leütés</div>
+                  <div className="mt-1 grid grid-cols-3 gap-1.5">
+                    {([['Alap', log.strikeSession.fundamental], ['3. parciális', log.strikeSession.fifth], ['Oktáv', log.strikeSession.octave]] as const).map(([label, result]) => (
+                      <div key={label}><div className="text-slate-400">{label}</div><div className="font-mono">MAD {result.madCents.toFixed(2)} c</div><div className="text-slate-500">Tartomány {result.rangeCents.toFixed(2)} c</div><div className="text-slate-500">{result.acceptedCount} elfogadott / {result.rejectedCount} kihagyott</div></div>
+                    ))}
+                  </div>
+                  <div className="mt-1 text-slate-500">A medián a rögzített leütések összesített frekvencia-/centértéke; MAD és tartomány = ismételhetőség.</div>
+                </div>
+              )}
               {log.quality && (
                 <div className="mt-2 grid grid-cols-3 gap-1.5 border-t border-white/5 pt-2 text-[9px] text-slate-400">
                   {([
