@@ -217,7 +217,24 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
     (entry.inputLevelDbfs === undefined || (typeof entry.inputLevelDbfs === 'number' && Number.isFinite(entry.inputLevelDbfs) && entry.inputLevelDbfs >= -160 && entry.inputLevelDbfs <= 0)) &&
     (entry.toleranceOverrideCents === undefined || isValidTuningToleranceSetting(entry.toleranceOverrideCents)) &&
     (entry.instrumentProfileId === undefined || typeof entry.instrumentProfileId === 'string') &&
-    (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string');
+    (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string') &&
+    (entry.quality === undefined || (
+      !!entry.quality && typeof entry.quality === 'object' && !Array.isArray(entry.quality) &&
+      (['fundamental', 'fifth', 'octave'] as const).every((role) => {
+        const quality = entry.quality?.[role];
+        if (quality === undefined) return true;
+        if (!quality || typeof quality !== 'object') return false;
+        const q = quality as Record<string, unknown>;
+        const nullableFinite = (value: unknown) => value === null || (typeof value === 'number' && Number.isFinite(value));
+        return nullableFinite(q.confidence) && nullableFinite(q.amplitudeDb) &&
+          typeof q.peakAmbiguous === 'boolean' &&
+          nullableFinite(q.stabilitySpreadCents) && nullableFinite(q.decayDriftCents) &&
+          nullableFinite(q.decayRangeCents) && nullableFinite(q.decaySlopeCentsPerSecond) &&
+          typeof q.decaySampleCount === 'number' && Number.isInteger(q.decaySampleCount) && q.decaySampleCount >= 0 &&
+          typeof q.decayDurationMs === 'number' && Number.isFinite(q.decayDurationMs) && q.decayDurationMs >= 0 &&
+          (q.status === 'valid' || q.status === 'uncertain' || q.status === 'held' || q.status === 'no-signal');
+      })
+    ));
 }
 
 export default function App() {
@@ -1018,6 +1035,44 @@ export default function App() {
       audioSampleRateHz: bbAudioEngine.getSampleRate(),
       inputLevelDbfs: inputLevelDb,
       toleranceOverrideCents,
+      quality: {
+        fundamental: {
+          confidence: alap.confidence,
+          amplitudeDb: alap.amplitudeDb,
+          peakAmbiguous: alap.peakAmbiguous === true,
+          stabilitySpreadCents: alap.stabilitySpreadCents ?? null,
+          decayDriftCents: alap.decayDriftCents ?? null,
+          decayRangeCents: alap.decayRangeCents ?? null,
+          decaySlopeCentsPerSecond: alap.decaySlopeCentsPerSecond ?? null,
+          decaySampleCount: alap.decaySampleCount ?? 0,
+          decayDurationMs: alap.decayDurationMs ?? 0,
+          status: alap.status,
+        },
+        fifth: {
+          confidence: kvint.confidence,
+          amplitudeDb: kvint.amplitudeDb,
+          peakAmbiguous: kvint.peakAmbiguous === true,
+          stabilitySpreadCents: kvint.stabilitySpreadCents ?? null,
+          decayDriftCents: kvint.decayDriftCents ?? null,
+          decayRangeCents: kvint.decayRangeCents ?? null,
+          decaySlopeCentsPerSecond: kvint.decaySlopeCentsPerSecond ?? null,
+          decaySampleCount: kvint.decaySampleCount ?? 0,
+          decayDurationMs: kvint.decayDurationMs ?? 0,
+          status: kvint.status,
+        },
+        octave: {
+          confidence: oktav.confidence,
+          amplitudeDb: oktav.amplitudeDb,
+          peakAmbiguous: oktav.peakAmbiguous === true,
+          stabilitySpreadCents: oktav.stabilitySpreadCents ?? null,
+          decayDriftCents: oktav.decayDriftCents ?? null,
+          decayRangeCents: oktav.decayRangeCents ?? null,
+          decaySlopeCentsPerSecond: oktav.decaySlopeCentsPerSecond ?? null,
+          decaySampleCount: oktav.decaySampleCount ?? 0,
+          decayDurationMs: oktav.decayDurationMs ?? 0,
+          status: oktav.status,
+        },
+      },
       fundamentalHz: alap.measuredHz!,
       fundamentalCents: alap.deviationCents!,
       fifthHz: kvint.measuredHz!,

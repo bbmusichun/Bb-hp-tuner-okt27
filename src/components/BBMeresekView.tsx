@@ -29,7 +29,7 @@ export const BBMeresekView: React.FC<Props> = ({
 }) => {
   const handleExportCSV = () => {
     if (logs.length === 0) return;
-    const headers = ['Timestamp', 'Date', 'Instrument_Profile_ID', 'Instrument_Profile_Name', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Tolerance_Mode', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune'];
+    const headers = ['Timestamp', 'Date', 'Instrument_Profile_ID', 'Instrument_Profile_Name', 'Scale_Profile', 'Note', 'Audio_Sample_Rate_Hz', 'Input_Level_dBFS', 'Tolerance_Mode', 'Fundamental_Measured_Hz', 'Fundamental_Target_Hz', 'Fundamental_Cents', 'Third_Partial_Measured_Hz', 'Third_Partial_Target_Hz', 'Third_Partial_Cents', 'Octave_Measured_Hz', 'Octave_Target_Hz', 'Octave_Cents', 'In_Tune', 'Quality_Metadata_JSON'];
     const rows = logs.map((l) => [
       l.timestamp,
       new Date(l.timestamp).toISOString(),
@@ -50,6 +50,7 @@ export const BBMeresekView: React.FC<Props> = ({
       l.octaveTargetHz?.toFixed(3) ?? '',
       l.octaveCents.toFixed(2),
       l.overallInTune ? 'TRUE' : 'FALSE',
+      l.quality ? JSON.stringify(l.quality) : '',
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((row) => row.map((value) => '"' + String(value).replace(/"/g, '""') + '"').join(','))].join('\n');
@@ -221,6 +222,28 @@ export const BBMeresekView: React.FC<Props> = ({
                   </div>
                 </div>
               </div>
+              {log.quality && (
+                <div className="mt-2 grid grid-cols-3 gap-1.5 border-t border-white/5 pt-2 text-[9px] text-slate-400">
+                  {([
+                    { role: 'fundamental', label: 'Alap' },
+                    { role: 'fifth', label: '3. parciális' },
+                    { role: 'octave', label: 'Oktáv' },
+                  ] as const).map(({ role, label }) => {
+                    const quality = log.quality?.[role];
+                    if (!quality) return <div key={role} className="text-slate-600">{label}: nincs minőségi adat</div>;
+                    return (
+                      <div key={role} className="rounded bg-black/20 px-1.5 py-1">
+                        <div className="font-semibold text-slate-300">{label}</div>
+                        <div>Biztonság: {quality.confidence === null ? '—' : `${Math.round(quality.confidence * 100)}%`}</div>
+                        <div>Jelszint: {quality.amplitudeDb === null ? '—' : `${quality.amplitudeDb.toFixed(1)} dB`}</div>
+                        <div>Szórás: {quality.stabilitySpreadCents === null ? '—' : `${quality.stabilitySpreadCents.toFixed(2)} c`}</div>
+                        <div>Lecsengés: {quality.decayDriftCents === null ? '—' : `${quality.decayDriftCents.toFixed(2)} c`}</div>
+                        {quality.peakAmbiguous && <div className="text-amber-300">Több csúcs</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ))
         )}
