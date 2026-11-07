@@ -68,6 +68,19 @@ export interface HandpanScale {
   }[];
 }
 
+export interface ResonanceSnapshotQuality {
+  confidence: number | null;
+  amplitudeDb: number | null;
+  peakAmbiguous: boolean;
+  stabilitySpreadCents: number | null;
+  decayDriftCents: number | null;
+  decayRangeCents: number | null;
+  decaySlopeCentsPerSecond: number | null;
+  decaySampleCount: number;
+  decayDurationMs: number;
+  status: MeasurementStatus;
+}
+
 export interface TuningLogEntry {
   id: string;
   timestamp: number;
@@ -82,6 +95,8 @@ export interface TuningLogEntry {
   inputLevelDbfs?: number;
   /** Tolerance policy used when calculating overallInTune; null means adaptive Auto. */
   toleranceOverrideCents?: TuningToleranceSetting;
+  /** Per-resonance measurement quality captured with the snapshot; optional for older logs. */
+  quality?: Partial<Record<ResonanceRole, ResonanceSnapshotQuality>>;
   /** Measured frequencies. */
   fundamentalHz: number;
   fundamentalCents: number;
