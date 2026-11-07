@@ -208,7 +208,8 @@ function isValidStrikeSessionSummary(value: unknown): value is StrikeSessionSumm
       (item.medianHz as number) > 0 && (item.medianConfidence as number) >= 0 && (item.medianConfidence as number) <= 1 &&
       (item.madCents as number) >= 0 && (item.rangeCents as number) >= 0 &&
       Number.isInteger(item.acceptedCount) && (item.acceptedCount as number) >= 3 &&
-      Number.isInteger(item.rejectedCount) && (item.rejectedCount as number) >= 0;
+      Number.isInteger(item.rejectedCount) && (item.rejectedCount as number) >= 0 &&
+      (item.acceptedCount as number) + (item.rejectedCount as number) === (session.strikeCount as number);
   };
   return validMode(session.fundamental) && validMode(session.fifth) && validMode(session.octave);
 }
@@ -1121,7 +1122,6 @@ export default function App() {
       instrumentProfileId: activeInstrumentProfileId,
       instrumentProfileName: activeInstrumentProfile?.name ?? 'Handpan',
       audioSampleRateHz: bbAudioEngine.getSampleRate(),
-      inputLevelDbfs: inputLevelDb,
       toleranceOverrideCents,
       strikeSession: summary,
       quality: {
