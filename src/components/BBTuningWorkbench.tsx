@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { ResonanceMeasurement, StrikeSessionSummary, TuningLogEntry } from '../types/tuner';
 import { isWithinTuningTolerance } from '../audio/tuningTolerance';
 import type { TuningToleranceSetting } from '../audio/tuningTolerance';
@@ -96,6 +96,7 @@ export const BBTuningWorkbench: React.FC<Props> = ({
   const [strikeSamples, setStrikeSamples] = useState<StrikeSample[]>([]);
   const [sawFreshStrike, setSawFreshStrike] = useState(false);
   const [sessionActive, setSessionActive] = useState(false);
+  const previousTransientHoldoffRef = useRef(transientHoldoff);
 
   useEffect(() => {
     setStrikeSamples([]);
@@ -104,9 +105,9 @@ export const BBTuningWorkbench: React.FC<Props> = ({
   }, [sessionKey]);
 
   useEffect(() => {
-    if (sessionActive && transientHoldoff) {
-      setSawFreshStrike(true);
-    }
+    const isNewTransient = transientHoldoff && !previousTransientHoldoffRef.current;
+    previousTransientHoldoffRef.current = transientHoldoff;
+    if (sessionActive && isNewTransient) setSawFreshStrike(true);
   }, [sessionActive, transientHoldoff]);
 
   const currentStrikeValid = [alap, kvint, oktav].some(isStrikePointValid);
