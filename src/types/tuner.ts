@@ -20,6 +20,8 @@ export interface ResonanceMeasurement {
   confidence: number | null; // 0 to 1
   /** True when a second similarly strong, separated FFT peak competes in the target window. */
   peakAmbiguous?: boolean;
+  /** Peak-to-peak frequency spread across the current consecutive tracking window, in cents. */
+  stabilitySpreadCents?: number | null;
   timestampMs: number;
   status: MeasurementStatus;
 }
