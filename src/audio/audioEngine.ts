@@ -501,8 +501,36 @@ export class BBAudioEngine {
     // Search each resonance independently to reduce masking by a dominant fundamental.
     const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
     const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
-    const qPeak = fifthAnalysis?.peak ?? null;
-    const oPeak = octaveAnalysis?.peak ?? null;
+    const rawFifthPeak = fifthAnalysis?.peak ?? null;
+    const rawOctavePeak = octaveAnalysis?.peak ?? null;
+
+    // Apply the same sub-bin time-domain refinement to every handpan mode.
+    // The 3rd partial and octave have independent physical frequencies; each is
+    // fitted around its own FFT peak rather than being forced to an exact ratio
+    // of the fundamental. Use the recent half-frame to bound mobile CPU cost.
+    const partialFitWindow = this.timeData.subarray(Math.max(0, this.timeData.length - 8192));
+    const fifthTrackable = rawFifthPeak !== null && isTrackableResonancePeak(
+      fifthAnalysis?.ambiguous ?? false,
+      resonanceConfidenceFromDb(rawFifthPeak.magDb),
+      fifthAnalysis?.prominenceDb ?? 0,
+    );
+    const octaveTrackable = rawOctavePeak !== null && isTrackableResonancePeak(
+      octaveAnalysis?.ambiguous ?? false,
+      resonanceConfidenceFromDb(rawOctavePeak.magDb),
+      octaveAnalysis?.prominenceDb ?? 0,
+    );
+    const fifthSineFitHz = fifthTrackable && rawFifthPeak
+      ? refineFrequencyBySineFit(partialFitWindow, this.sampleRate, rawFifthPeak.freq, 8)
+      : null;
+    const octaveSineFitHz = octaveTrackable && rawOctavePeak
+      ? refineFrequencyBySineFit(partialFitWindow, this.sampleRate, rawOctavePeak.freq, 8)
+      : null;
+    const qPeak = rawFifthPeak && fifthSineFitHz !== null
+      ? { ...rawFifthPeak, freq: fifthSineFitHz }
+      : rawFifthPeak;
+    const oPeak = rawOctavePeak && octaveSineFitHz !== null
+      ? { ...rawOctavePeak, freq: octaveSineFitHz }
+      : rawOctavePeak;
 
     // Construct measurements
     const alap = this.buildResonanceMeasurement(
