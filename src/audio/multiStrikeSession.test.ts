@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ResonanceMeasurement } from '../types/tuner';
-import { isStrikePointValid, summarizeStrikeSamples, type StrikeSample } from './multiStrikeSession';
+import { getStrikeRejectionReason, isStrikePointValid, summarizeStrikeSamples, type StrikeSample } from './multiStrikeSession';
 
 function measurement(role: 'fundamental' | 'fifth' | 'octave', cents: number, overrides: Partial<ResonanceMeasurement> = {}): ResonanceMeasurement {
   return {
@@ -50,6 +50,17 @@ describe('multi-strike tone-field summary', () => {
 
   it('requires at least three distinct strike records before producing a session summary', () => {
     assert.equal(summarizeStrikeSamples([{ capturedAtMs: Date.now(), fundamental: point('fundamental', 1), fifth: point('fifth', 2), octave: point('octave', 3) }]), null);
+  });
+
+  it('returns a specific reason for each rejected resonance', () => {
+    assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { status: 'no-signal' })), 'Nincs jel');
+    assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { status: 'held' })), 'Lecsengés alatti adat');
+    assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { status: 'uncertain' })), 'Bizonytalan mérés');
+    assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { peakAmbiguous: true })), 'Több versengő csúcs');
+    assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { confidence: 0.31 })), 'Alacsony jelbiztonság');
+    assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { measuredHz: null })), 'Nincs mérhető frekvencia');
+    assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { amplitudeDb: null })), 'Nincs jelszintadat');
+    assert.equal(getStrikeRejectionReason(measurement('fundamental', 1)), null);
   });
 
   it('rejects weak, ambiguous, held and missing resonance measurements', () => {
