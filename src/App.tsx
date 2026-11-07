@@ -41,7 +41,7 @@ import {
   type PartialTargetOffsetField,
   type PartialTargetOffsetMap,
 } from './audio/partialTargets';
-import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
+import { BBNavTab, HandpanScale, ResonanceMeasurement, StrikeSessionSummary, ToneFieldNote, TuningLogEntry } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
 import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
@@ -1089,6 +1089,46 @@ export default function App() {
     setLogs((prev) => [newEntry, ...prev]);
   };
 
+
+  const handleSaveStrikeSession = (summary: StrikeSessionSummary) => {
+    if (summary.fundamental.acceptedCount < 3 || summary.fifth.acceptedCount < 3 || summary.octave.acceptedCount < 3) return;
+    const targets = {
+      fundamental: alap.targetHz ?? selectedNote.frequency,
+      fifth: kvint.targetHz ?? selectedNote.fifthFreq,
+      octave: oktav.targetHz ?? selectedNote.octaveFreq,
+    };
+    const newEntry: TuningLogEntry = {
+      id: `session_${Date.now()}`,
+      timestamp: Date.now(),
+      noteName: selectedNote.noteName,
+      scaleId: currentScale.id,
+      instrumentProfileId: activeInstrumentProfileId,
+      instrumentProfileName: activeInstrumentProfile?.name ?? 'Handpan',
+      audioSampleRateHz: bbAudioEngine.getSampleRate(),
+      inputLevelDbfs: inputLevelDb,
+      toleranceOverrideCents,
+      strikeSession: summary,
+      quality: {
+        fundamental: { confidence: summary.fundamental.medianConfidence, amplitudeDb: summary.fundamental.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
+        fifth: { confidence: summary.fifth.medianConfidence, amplitudeDb: summary.fifth.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
+        octave: { confidence: summary.octave.medianConfidence, amplitudeDb: summary.octave.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
+      },
+      fundamentalHz: summary.fundamental.medianHz,
+      fundamentalCents: summary.fundamental.medianCents,
+      fifthHz: summary.fifth.medianHz,
+      fifthCents: summary.fifth.medianCents,
+      octaveHz: summary.octave.medianHz,
+      octaveCents: summary.octave.medianCents,
+      fundamentalTargetHz: targets.fundamental,
+      fifthTargetHz: targets.fifth,
+      octaveTargetHz: targets.octave,
+      overallInTune:
+        isWithinTuningTolerance(summary.fundamental.medianCents, targets.fundamental, toleranceOverrideCents) &&
+        isWithinTuningTolerance(summary.fifth.medianCents, targets.fifth, toleranceOverrideCents) &&
+        isWithinTuningTolerance(summary.octave.medianCents, targets.octave, toleranceOverrideCents),
+    };
+    setLogs((prev) => [newEntry, ...prev]);
+  };
   // Determine active resonance details for Section B header
   const activeResonance = selectedRole === 'fundamental' ? alap : selectedRole === 'fifth' ? kvint : oktav;
   // The latest saved snapshot for this exact instrument, scale and tone field is
@@ -1825,6 +1865,9 @@ export default function App() {
               toleranceOverrideCents={toleranceOverrideCents}
               canCapture={canCaptureTuningSnapshot}
               onCapture={handleCaptureSnapshot}
+              transientHoldoff={transientHoldoff}
+              sessionKey={`${activeInstrumentProfileId}:${currentScale.id}:${selectedNote.id}:${alap.targetHz ?? selectedNote.frequency}:${kvint.targetHz ?? selectedNote.fifthFreq}:${oktav.targetHz ?? selectedNote.octaveFreq}`}
+              onSaveStrikeSession={handleSaveStrikeSession}
             />
 
             {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
