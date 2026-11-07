@@ -6,9 +6,9 @@ export interface DecayFrequencySample {
 export interface DecayDriftSnapshot {
   /** End-to-end change from the oldest to newest retained sample, in cents. */
   driftCents: number;
-  /** Peak-to-peak frequency range within the retained time window, in cents. */
+  /** Robust peak-to-peak frequency range after suppressing isolated one-frame spikes. */
   rangeCents: number;
-  /** Least-squares linear drift rate over the retained window, in cents per second. */
+  /** Least-squares drift rate over the robust frequency trajectory, in cents per second. */
   slopeCentsPerSecond: number;
   sampleCount: number;
   durationMs: number;
@@ -21,10 +21,20 @@ export interface DecayDriftOptions {
   minDurationMs?: number;
 }
 
+function median(values: number[]): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
 /**
  * Describes observed frequency movement during a resonance's sustain/decay.
- * This is a time-series diagnostic, not measurement uncertainty or a calibration
- * accuracy estimate. The caller must reset it at a new strike or invalid reading.
+ * A three-point median rejects isolated single-frame FFT peak jumps before
+ * calculating the drift. This is a signal-quality safeguard, not calibration
+ * or measurement uncertainty. The caller resets it at a new strike/invalid frame.
  */
 export class DecayDriftTracker {
   private readonly windowMs: number;
@@ -66,21 +76,30 @@ export class DecayDriftTracker {
     const durationMs = last.timestampMs - first.timestampMs;
     if (this.samples.length < this.minSamples || durationMs < this.minDurationMs) return null;
 
-    const cents = this.samples.map((item) => 1200 * Math.log2(item.frequencyHz / first.frequencyHz));
-    const meanTime = this.samples.reduce((sum, item) => sum + (item.timestampMs - first.timestampMs) / 1000, 0) / this.samples.length;
-    const meanCents = cents.reduce((sum, value) => sum + value, 0) / cents.length;
+    // Work in cents relative to the oldest retained frequency. A local median
+    // removes an isolated one-frame FFT-bin hop without flattening a sustained trend.
+    const rawCents = this.samples.map((item) => 1200 * Math.log2(item.frequencyHz / first.frequencyHz));
+    const robustCents = rawCents.map((value, index) => {
+      if (index === 0 || index === rawCents.length - 1) return value;
+      return median([rawCents[index - 1], value, rawCents[index + 1]]);
+    });
+
+    const meanTime = this.samples.reduce(
+      (sum, item) => sum + (item.timestampMs - first.timestampMs) / 1000, 0,
+    ) / this.samples.length;
+    const meanCents = robustCents.reduce((sum, value) => sum + value, 0) / robustCents.length;
     let covariance = 0;
     let timeVariance = 0;
     for (let i = 0; i < this.samples.length; i++) {
       const time = (this.samples[i].timestampMs - first.timestampMs) / 1000;
-      covariance += (time - meanTime) * (cents[i] - meanCents);
+      covariance += (time - meanTime) * (robustCents[i] - meanCents);
       timeVariance += (time - meanTime) ** 2;
     }
-    const slopeCentsPerSecond = timeVariance > 0 ? covariance / timeVariance : 0;
+
     return {
-      driftCents: cents[cents.length - 1],
-      rangeCents: Math.max(...cents) - Math.min(...cents),
-      slopeCentsPerSecond,
+      driftCents: robustCents[robustCents.length - 1],
+      rangeCents: Math.max(...robustCents) - Math.min(...robustCents),
+      slopeCentsPerSecond: timeVariance > 0 ? covariance / timeVariance : 0,
       sampleCount: this.samples.length,
       durationMs,
     };
