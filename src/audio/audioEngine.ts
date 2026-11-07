@@ -660,7 +660,13 @@ export class BBAudioEngine {
     let currentPeak: { freq: number; magDb: number } | null = null;
 
     if (trackable && rawPeak) {
-      const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now);
+      const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now, {
+        // Match the tracker's own allowed spread: a larger-than-stable jump must
+        // be confirmed before it can move the visible tuning value.
+        jumpThresholdCents: role === 'fundamental' ? 5 : 7,
+        candidateMatchCents: 3,
+        candidateConfirmations: 3,
+      });
       this.pitchHistory[role] = smoothed.history;
       currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
     } else {
