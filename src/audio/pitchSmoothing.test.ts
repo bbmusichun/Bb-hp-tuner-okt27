@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { smoothPitchSample } from './pitchSmoothing';
+import { retainAcceptedPitchSamples, smoothPitchSample } from './pitchSmoothing';
 
 test('median estimator rejects a single spectral-bin outlier', () => {
   let history = [] as ReturnType<typeof smoothPitchSample>['history'];
@@ -69,4 +69,17 @@ test('invalid frequency does not produce a fake pitch estimate', () => {
   const result = smoothPitchSample([], Number.NaN, 10);
   assert.ok(Number.isNaN(result.frequencyHz));
   assert.equal(result.history.length, 0);
+});
+
+
+test('a fresh strike clears pending outliers but retains the accepted pitch cluster', () => {
+  let result = smoothPitchSample([], 146.8, 0, { jumpThresholdCents: 5, candidateMatchCents: 3 });
+  result = smoothPitchSample(result.history, 146.81, 33, { jumpThresholdCents: 5, candidateMatchCents: 3 });
+  result = smoothPitchSample(result.history, 148, 66, { jumpThresholdCents: 5, candidateMatchCents: 3 });
+  assert.equal(result.history.filter((sample) => sample.candidate).length, 1);
+  const afterStrike = retainAcceptedPitchSamples(result.history);
+  assert.equal(afterStrike.length, 2);
+  assert.equal(afterStrike.some((sample) => sample.candidate), false);
+  const next = smoothPitchSample(afterStrike, 146.82, 99, { jumpThresholdCents: 5, candidateMatchCents: 3 });
+  assert.ok(Math.abs(next.frequencyHz - 146.81) < 0.02);
 });
