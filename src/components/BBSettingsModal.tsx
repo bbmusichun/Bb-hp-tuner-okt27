@@ -576,7 +576,7 @@ export const BBSettingsModal: React.FC<Props> = ({
             {([
               { field: 'fundamentalCents', label: 'Alaphang (1×)', multiplier: 1 as const },
               { field: 'octaveCents', label: 'Oktáv (2×)', multiplier: 2 as const },
-              { field: 'thirdPartialCents', label: '3. parciális (3×)', multiplier: 3 as const },
+              { field: 'thirdPartialCents', label: 'Kvint (3×) (3×)', multiplier: 3 as const },
             ] as const).map(({ field, label, multiplier }) => {
               const offset = partialTargetOffsets[field];
               const targetHz = multiplier === 1
