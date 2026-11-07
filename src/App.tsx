@@ -1901,7 +1901,7 @@ export default function App() {
               canCapture={canCaptureTuningSnapshot}
               onCapture={handleCaptureSnapshot}
               transientHoldoff={transientHoldoff}
-              sessionKey={`${activeInstrumentProfileId}:${currentScale.id}:${selectedNote.id}:${alap.targetHz ?? selectedNote.frequency}:${kvint.targetHz ?? selectedNote.fifthFreq}:${oktav.targetHz ?? selectedNote.octaveFreq}`}
+              sessionKey={`${activeInstrumentProfileId}:${currentScale.id}:${selectedNote.id}:${alap.targetHz ?? selectedNote.frequency}:${kvint.targetHz ?? selectedNote.fifthFreq}:${oktav.targetHz ?? selectedNote.octaveFreq}:${isListening ? "mic" : isFileInputActive ? "file" : "none"}`}
               onSaveStrikeSession={handleSaveStrikeSession}
             />
 
