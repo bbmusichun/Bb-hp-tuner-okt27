@@ -41,7 +41,7 @@ import {
   type PartialTargetOffsetField,
   type PartialTargetOffsetMap,
 } from './audio/partialTargets';
-import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
+import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry, type StrikeSessionSummary, type StrikeSessionStrike } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
 import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
@@ -197,6 +197,39 @@ function loadDisabledToneNotesByScale(): Record<string, string[]> {
   }
 }
 
+function isValidStrikeSessionStrike(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const strike = value as Record<string, unknown>;
+  if (typeof strike.capturedAtMs !== 'number' || !Number.isFinite(strike.capturedAtMs) || !Number.isFinite(new Date(strike.capturedAtMs).getTime())) return false;
+  const reasons = strike.rejectionReasons;
+  if (reasons !== undefined && (!reasons || typeof reasons !== 'object' || Array.isArray(reasons) || !Object.entries(reasons).every(([role, reason]) => ['fundamental', 'fifth', 'octave'].includes(role) && typeof reason === 'string'))) return false;
+  const validReading = (reading: unknown) => reading === null || (
+    !!reading && typeof reading === 'object' && !Array.isArray(reading) &&
+    typeof (reading as Record<string, unknown>).hz === 'number' && Number.isFinite((reading as Record<string, unknown>).hz) && ((reading as Record<string, unknown>).hz as number) > 0 &&
+    typeof (reading as Record<string, unknown>).cents === 'number' && Number.isFinite((reading as Record<string, unknown>).cents) &&
+    typeof (reading as Record<string, unknown>).confidence === 'number' && Number.isFinite((reading as Record<string, unknown>).confidence) && ((reading as Record<string, unknown>).confidence as number) >= 0 && ((reading as Record<string, unknown>).confidence as number) <= 1 &&
+    typeof (reading as Record<string, unknown>).amplitudeDb === 'number' && Number.isFinite((reading as Record<string, unknown>).amplitudeDb) && ((reading as Record<string, unknown>).amplitudeDb as number) >= -160 && ((reading as Record<string, unknown>).amplitudeDb as number) <= 0
+  );
+  return validReading(strike.fundamental) && validReading(strike.fifth) && validReading(strike.octave) &&
+    [strike.fundamental, strike.fifth, strike.octave].some((reading) => reading !== null);
+}
+
+function isValidStrikeSessionSummary(value: unknown): value is StrikeSessionSummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const session = value as Record<string, unknown>;
+  if (!Number.isInteger(session.strikeCount) || (session.strikeCount as number) < 3 || session.requiredSamples !== 3) return false;
+  const validMode = (mode: unknown) => {
+    if (!mode || typeof mode !== 'object' || Array.isArray(mode)) return false;
+    const item = mode as Record<string, unknown>;
+    return ['medianHz', 'medianCents', 'medianConfidence', 'medianAmplitudeDb', 'madCents', 'rangeCents'].every((key) => typeof item[key] === 'number' && Number.isFinite(item[key])) &&
+      (item.medianHz as number) > 0 && (item.medianConfidence as number) >= 0 && (item.medianConfidence as number) <= 1 &&
+      (item.madCents as number) >= 0 && (item.rangeCents as number) >= 0 &&
+      Number.isInteger(item.acceptedCount) && (item.acceptedCount as number) >= 3 &&
+      Number.isInteger(item.rejectedCount) && (item.rejectedCount as number) >= 0 &&
+      (item.acceptedCount as number) + (item.rejectedCount as number) === (session.strikeCount as number);
+  };
+  return validMode(session.fundamental) && validMode(session.fifth) && validMode(session.octave);
+}
 function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
   if (!value || typeof value !== 'object') return false;
   const entry = value as Partial<TuningLogEntry>;
@@ -218,21 +251,22 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
     (entry.toleranceOverrideCents === undefined || isValidTuningToleranceSetting(entry.toleranceOverrideCents)) &&
     (entry.instrumentProfileId === undefined || typeof entry.instrumentProfileId === 'string') &&
     (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string') &&
+    (entry.strikeSession === undefined || isValidStrikeSessionSummary(entry.strikeSession)) &&
+    (entry.strikeSamples === undefined || (entry.strikeSession !== undefined && Array.isArray(entry.strikeSamples) && entry.strikeSamples.length === entry.strikeSession.strikeCount && entry.strikeSamples.every(isValidStrikeSessionStrike))) &&
     (entry.quality === undefined || (
       !!entry.quality && typeof entry.quality === 'object' && !Array.isArray(entry.quality) &&
       (['fundamental', 'fifth', 'octave'] as const).every((role) => {
         const quality = entry.quality?.[role];
         if (quality === undefined) return true;
         if (!quality || typeof quality !== 'object') return false;
-        const q = quality as Record<string, unknown>;
-        const nullableFinite = (value: unknown) => value === null || (typeof value === 'number' && Number.isFinite(value));
-        return nullableFinite(q.confidence) && nullableFinite(q.amplitudeDb) &&
-          typeof q.peakAmbiguous === 'boolean' &&
-          nullableFinite(q.stabilitySpreadCents) && nullableFinite(q.decayDriftCents) &&
-          nullableFinite(q.decayRangeCents) && nullableFinite(q.decaySlopeCentsPerSecond) &&
-          typeof q.decaySampleCount === 'number' && Number.isInteger(q.decaySampleCount) && q.decaySampleCount >= 0 &&
-          typeof q.decayDurationMs === 'number' && Number.isFinite(q.decayDurationMs) && q.decayDurationMs >= 0 &&
-          (q.status === 'valid' || q.status === 'uncertain' || q.status === 'held' || q.status === 'no-signal');
+        const nullableFinite = (value: number | null) => value === null || Number.isFinite(value);
+        return nullableFinite(quality.confidence) && nullableFinite(quality.amplitudeDb) &&
+          typeof quality.peakAmbiguous === 'boolean' &&
+          nullableFinite(quality.stabilitySpreadCents) && nullableFinite(quality.decayDriftCents) &&
+          nullableFinite(quality.decayRangeCents) && nullableFinite(quality.decaySlopeCentsPerSecond) &&
+          Number.isInteger(quality.decaySampleCount) && quality.decaySampleCount >= 0 &&
+          Number.isFinite(quality.decayDurationMs) && quality.decayDurationMs >= 0 &&
+          (quality.status === 'valid' || quality.status === 'uncertain' || quality.status === 'held' || quality.status === 'no-signal');
       })
     ));
 }
@@ -1090,6 +1124,46 @@ export default function App() {
     setLogs((prev) => [newEntry, ...prev]);
   };
 
+
+  const handleSaveStrikeSession = (summary: StrikeSessionSummary, samples: StrikeSessionStrike[]) => {
+    if (summary.fundamental.acceptedCount < 3 || summary.fifth.acceptedCount < 3 || summary.octave.acceptedCount < 3) return;
+    const targets = {
+      fundamental: alap.targetHz ?? selectedNote.frequency,
+      fifth: kvint.targetHz ?? selectedNote.fifthFreq,
+      octave: oktav.targetHz ?? selectedNote.octaveFreq,
+    };
+    const newEntry: TuningLogEntry = {
+      id: `session_${Date.now()}`,
+      timestamp: Date.now(),
+      noteName: selectedNote.noteName,
+      scaleId: currentScale.id,
+      instrumentProfileId: activeInstrumentProfileId,
+      instrumentProfileName: activeInstrumentProfile?.name ?? 'Handpan',
+      audioSampleRateHz: bbAudioEngine.getSampleRate(),
+      toleranceOverrideCents,
+      strikeSession: summary,
+      strikeSamples: samples,
+      quality: {
+        fundamental: { confidence: summary.fundamental.medianConfidence, amplitudeDb: summary.fundamental.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
+        fifth: { confidence: summary.fifth.medianConfidence, amplitudeDb: summary.fifth.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
+        octave: { confidence: summary.octave.medianConfidence, amplitudeDb: summary.octave.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
+      },
+      fundamentalHz: summary.fundamental.medianHz,
+      fundamentalCents: summary.fundamental.medianCents,
+      fifthHz: summary.fifth.medianHz,
+      fifthCents: summary.fifth.medianCents,
+      octaveHz: summary.octave.medianHz,
+      octaveCents: summary.octave.medianCents,
+      fundamentalTargetHz: targets.fundamental,
+      fifthTargetHz: targets.fifth,
+      octaveTargetHz: targets.octave,
+      overallInTune:
+        isWithinTuningTolerance(summary.fundamental.medianCents, targets.fundamental, toleranceOverrideCents) &&
+        isWithinTuningTolerance(summary.fifth.medianCents, targets.fifth, toleranceOverrideCents) &&
+        isWithinTuningTolerance(summary.octave.medianCents, targets.octave, toleranceOverrideCents),
+    };
+    setLogs((prev) => [newEntry, ...prev]);
+  };
   // Determine active resonance details for Section B header
   const activeResonance = selectedRole === 'fundamental' ? alap : selectedRole === 'fifth' ? kvint : oktav;
   // The latest saved snapshot for this exact instrument, scale and tone field is
@@ -1826,6 +1900,9 @@ export default function App() {
               toleranceOverrideCents={toleranceOverrideCents}
               canCapture={canCaptureTuningSnapshot}
               onCapture={handleCaptureSnapshot}
+              transientHoldoff={transientHoldoff}
+              sessionKey={`${activeInstrumentProfileId}:${currentScale.id}:${selectedNote.id}:${alap.targetHz ?? selectedNote.frequency}:${kvint.targetHz ?? selectedNote.fifthFreq}:${oktav.targetHz ?? selectedNote.octaveFreq}:${isListening ? "mic" : isFileInputActive ? "file" : "none"}`}
+              onSaveStrikeSession={handleSaveStrikeSession}
             />
 
             {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
