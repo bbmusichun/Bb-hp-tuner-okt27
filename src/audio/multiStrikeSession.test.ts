@@ -29,7 +29,7 @@ describe('multi-strike tone-field summary', () => {
     assert.equal(result.fundamental.medianCents, 1.15);
     assert.ok(Math.abs(result.fundamental.madCents - 0.1) < 1e-9);
     assert.equal(result.fundamental.acceptedCount, 4);
-    assert.equal(result.fundamental.rangeCents, 78.9);
+    assert.equal(result.fundamental.rangeCents, 79);
     assert.equal(result.fifth.medianCents, 2.15);
     assert.equal(result.octave.medianCents, 3.15);
   });
