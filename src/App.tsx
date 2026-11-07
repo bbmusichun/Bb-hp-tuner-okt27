@@ -41,7 +41,7 @@ import {
   type PartialTargetOffsetField,
   type PartialTargetOffsetMap,
 } from './audio/partialTargets';
-import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry, type StrikeSessionSummary } from './types/tuner';
+import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry, type StrikeSessionSummary, type StrikeSessionStrike } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
 import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
@@ -197,6 +197,19 @@ function loadDisabledToneNotesByScale(): Record<string, string[]> {
   }
 }
 
+function isValidStrikeSessionStrike(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const strike = value as Record<string, unknown>;
+  const validReading = (reading: unknown) => reading === null || (
+    !!reading && typeof reading === 'object' && !Array.isArray(reading) &&
+    typeof (reading as Record<string, unknown>).hz === 'number' && Number.isFinite((reading as Record<string, unknown>).hz) && ((reading as Record<string, unknown>).hz as number) > 0 &&
+    typeof (reading as Record<string, unknown>).cents === 'number' && Number.isFinite((reading as Record<string, unknown>).cents) &&
+    typeof (reading as Record<string, unknown>).confidence === 'number' && Number.isFinite((reading as Record<string, unknown>).confidence) && ((reading as Record<string, unknown>).confidence as number) >= 0 && ((reading as Record<string, unknown>).confidence as number) <= 1 &&
+    typeof (reading as Record<string, unknown>).amplitudeDb === 'number' && Number.isFinite((reading as Record<string, unknown>).amplitudeDb) && ((reading as Record<string, unknown>).amplitudeDb as number) >= -160 && ((reading as Record<string, unknown>).amplitudeDb as number) <= 0
+  );
+  return validReading(strike.fundamental) && validReading(strike.fifth) && validReading(strike.octave);
+}
+
 function isValidStrikeSessionSummary(value: unknown): value is StrikeSessionSummary {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const session = value as Record<string, unknown>;
@@ -235,6 +248,7 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
     (entry.instrumentProfileId === undefined || typeof entry.instrumentProfileId === 'string') &&
     (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string') &&
     (entry.strikeSession === undefined || isValidStrikeSessionSummary(entry.strikeSession)) &&
+    (entry.strikeSamples === undefined || (entry.strikeSession !== undefined && Array.isArray(entry.strikeSamples) && entry.strikeSamples.length === entry.strikeSession.strikeCount && entry.strikeSamples.every(isValidStrikeSessionStrike))) &&
     (entry.quality === undefined || (
       !!entry.quality && typeof entry.quality === 'object' && !Array.isArray(entry.quality) &&
       (['fundamental', 'fifth', 'octave'] as const).every((role) => {
@@ -1107,7 +1121,7 @@ export default function App() {
   };
 
 
-  const handleSaveStrikeSession = (summary: StrikeSessionSummary) => {
+  const handleSaveStrikeSession = (summary: StrikeSessionSummary, samples: StrikeSessionStrike[]) => {
     if (summary.fundamental.acceptedCount < 3 || summary.fifth.acceptedCount < 3 || summary.octave.acceptedCount < 3) return;
     const targets = {
       fundamental: alap.targetHz ?? selectedNote.frequency,
@@ -1124,6 +1138,7 @@ export default function App() {
       audioSampleRateHz: bbAudioEngine.getSampleRate(),
       toleranceOverrideCents,
       strikeSession: summary,
+      strikeSamples: samples,
       quality: {
         fundamental: { confidence: summary.fundamental.medianConfidence, amplitudeDb: summary.fundamental.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
         fifth: { confidence: summary.fifth.medianConfidence, amplitudeDb: summary.fifth.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
