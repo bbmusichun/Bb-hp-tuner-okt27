@@ -1,4 +1,4 @@
-import type { ResonanceMeasurement, StrikeSessionSummary, StrikeSessionModeSummary } from '../types/tuner';
+import type { ResonanceMeasurement, ResonanceRole, StrikeSessionSummary, StrikeSessionModeSummary } from '../types/tuner';
 
 export interface StrikePoint {
   hz: number;
@@ -12,15 +12,25 @@ export interface StrikeSample {
   fundamental: StrikePoint | null;
   fifth: StrikePoint | null;
   octave: StrikePoint | null;
+  rejectionReasons?: Partial<Record<ResonanceRole, string>>;
+}
+
+export const MIN_STRIKE_CONFIDENCE = 0.32;
+
+export function getStrikeRejectionReason(measurement: ResonanceMeasurement): string | null {
+  if (measurement.status === 'no-signal') return 'Nincs jel';
+  if (measurement.status === 'held') return 'Lecsengés alatti adat';
+  if (measurement.status === 'uncertain') return 'Bizonytalan mérés';
+  if (measurement.peakAmbiguous === true) return 'Több versengő csúcs';
+  if (measurement.measuredHz === null || !Number.isFinite(measurement.measuredHz) || measurement.measuredHz <= 0) return 'Nincs mérhető frekvencia';
+  if (measurement.deviationCents === null || !Number.isFinite(measurement.deviationCents)) return 'Nincs centérték';
+  if (measurement.confidence === null || !Number.isFinite(measurement.confidence) || measurement.confidence < MIN_STRIKE_CONFIDENCE) return 'Alacsony jelbiztonság';
+  if (measurement.amplitudeDb === null || !Number.isFinite(measurement.amplitudeDb)) return 'Nincs jelszintadat';
+  return null;
 }
 
 export function isStrikePointValid(measurement: ResonanceMeasurement): boolean {
-  return measurement.status === 'valid' &&
-    measurement.measuredHz !== null && Number.isFinite(measurement.measuredHz) && measurement.measuredHz > 0 &&
-    measurement.deviationCents !== null && Number.isFinite(measurement.deviationCents) &&
-    measurement.confidence !== null && Number.isFinite(measurement.confidence) && measurement.confidence >= 0.32 &&
-    measurement.peakAmbiguous !== true &&
-    measurement.amplitudeDb !== null && Number.isFinite(measurement.amplitudeDb);
+  return getStrikeRejectionReason(measurement) === null;
 }
 
 function median(values: number[]): number {
