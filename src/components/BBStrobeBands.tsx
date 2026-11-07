@@ -129,7 +129,14 @@ export const BBStrobeBands: React.FC<Props> = ({
       rows.forEach((row, index) => {
         const y = index * rowHeight;
         const key = row.id;
-        if (row.valid && row.cents !== null && Number.isFinite(row.cents)) {
+        // The three built-in resonances can have a valid frequency before the
+        // multi-frame stability gate turns the status green. Keep their strobe
+        // phase moving from that measured value instead of freezing/restarting it.
+        const motionAvailable = row.valid || Boolean(
+          row.role && current.hasSignal && row.measuredHz !== null &&
+          row.cents !== null && Number.isFinite(row.cents)
+        );
+        if (motionAvailable && row.cents !== null && Number.isFinite(row.cents)) {
           lastValidRef.current[key] = now;
           if (smoothRef.current[key] === undefined) smoothRef.current[key] = row.cents;
           smoothRef.current[key] += (row.cents - smoothRef.current[key]) * 0.15;
@@ -138,13 +145,15 @@ export const BBStrobeBands: React.FC<Props> = ({
           sampleRef.current[key].push(row.cents);
         }
         const lastValid = lastValidRef.current[key] ?? 0;
-        const held = !row.valid && now - lastValid <= 250;
-        const centsForMotion = row.valid || held ? (smoothRef.current[key] ?? row.cents ?? 0) : 0;
-        const speed = row.valid || held
+        // A strike briefly quarantines the new attack. Continue the previous
+        // phase through that short window; the analyser itself never pauses.
+        const held = !motionAvailable && now - lastValid <= 650;
+        const centsForMotion = motionAvailable || held ? (smoothRef.current[key] ?? row.cents ?? 0) : 0;
+        const speed = motionAvailable || held
           ? Math.max(-220, Math.min(220, row.targetHz * (Math.pow(2, centsForMotion / 1200) - 1) * 65 * current.strobeSensitivity))
           : 0;
         phasesRef.current[key] = (phasesRef.current[key] ?? 0) + speed * dt;
-        const contrast = strobeContrastFromDb(row.valid ? row.db : null);
+        const contrast = strobeContrastFromDb(motionAvailable ? row.db : null);
         const sharpness = strobeSharpnessFromCents(sampleRef.current[key] ?? []);
         const inTolerance = row.valid && isWithinTuningTolerance(row.cents, row.targetHz, current.toleranceOverrideCents);
         if (inTolerance) greenSinceRef.current[key] ??= now;
@@ -193,7 +202,13 @@ export const BBStrobeBands: React.FC<Props> = ({
   }, [canvasHeight, isVisualPaused]);
 
   useEffect(() => {
-    // A new tuning target makes the frozen picture obsolete; return to live tracking.
+    // A new tuning target starts a fresh visual phase; repeated strikes at the
+    // same target retain continuity instead of restarting the moving stripes.
+    phasesRef.current = {};
+    smoothRef.current = {};
+    lastValidRef.current = {};
+    sampleRef.current = {};
+    greenSinceRef.current = {};
     setIsVisualPaused(false);
   }, [baseFrequencyHz, alap.targetHz, kvint.targetHz, oktav.targetHz]);
 
