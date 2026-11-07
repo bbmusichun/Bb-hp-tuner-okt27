@@ -95,7 +95,7 @@ export const BBTuningWorkbench: React.FC<Props> = ({
     const point = (measurement: ResonanceMeasurement): StrikePoint | null => isStrikePointValid(measurement)
       ? { hz: measurement.measuredHz!, cents: measurement.deviationCents!, confidence: measurement.confidence!, amplitudeDb: measurement.amplitudeDb! }
       : null;
-    setStrikeSamples((previous) => [...previous, { fundamental: point(alap), fifth: point(kvint), octave: point(oktav) }]);
+    setStrikeSamples((previous) => [...previous, { capturedAtMs: Date.now(), fundamental: point(alap), fifth: point(kvint), octave: point(oktav) }]);
     setSawFreshStrike(false);
   };
 
