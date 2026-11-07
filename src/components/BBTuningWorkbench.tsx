@@ -137,7 +137,6 @@ export const BBTuningWorkbench: React.FC<Props> = ({
       : null;
     setStrikeSamples((previous) => [...previous, { fundamental: point(alap), fifth: point(kvint), octave: point(oktav) }]);
     setSawFreshStrike(false);
-    sawTransientRef.current = false;
   };
 
   const finishStrikeSession = () => {
