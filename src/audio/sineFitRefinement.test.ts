@@ -129,6 +129,35 @@ describe('time-domain sine-fit frequency refinement', () => {
     }
   });
 
+  it('measures all three independently detuned modes from the same decaying, noisy frame', () => {
+    const modes = [
+      { name: 'fundamental', frequency: BASE * 2 ** (1.7 / 1200), decay: 1.4, amplitude: 0.16 },
+      { name: 'octave', frequency: BASE * 2.0017 * 2 ** (-2.2 / 1200), decay: 2.1, amplitude: 0.29 },
+      { name: 'compound fifth', frequency: BASE * 3.006 * 2 ** (3.1 / 1200), decay: 2.8, amplitude: 0.21 },
+    ];
+    const samples = new Float32Array(SIZE);
+    let seed = 0x91e10da5;
+    for (let i = 0; i < SIZE; i++) {
+      const time = i / RATE;
+      seed = (1664525 * seed + 1013904223) >>> 0;
+      const noise = ((seed / 0x100000000) - 0.5) * 0.00015;
+      samples[i] = modes.reduce((sum, mode, index) =>
+        sum + mode.amplitude * Math.exp(-mode.decay * time) *
+          Math.sin(2 * Math.PI * mode.frequency * time + 0.43 * (index + 1)), noise);
+    }
+
+    for (const mode of modes) {
+      const measured = refineFrequencyBySineFit(
+        samples, RATE, mode.frequency * 2 ** (1.5 / 1200), 8,
+      );
+      assert.ok(measured !== null, `no estimate for ${mode.name}`);
+      assert.ok(
+        Math.abs(cents(measured, mode.frequency)) < 0.6,
+        `${mode.name} error=${cents(measured, mode.frequency).toFixed(4)} cents`,
+      );
+    }
+  });
+
   it('returns null for silence and invalid inputs, including non-finite samples', () => {
     assert.equal(refineFrequencyBySineFit(new Float32Array(SIZE), RATE, BASE), null);
     assert.equal(refineFrequencyBySineFit(new Float32Array(100), RATE, BASE), null);
