@@ -60,6 +60,8 @@ describe('multi-strike tone-field summary', () => {
     assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { confidence: 0.31 })), 'Alacsony jelbiztonság');
     assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { measuredHz: null })), 'Nincs mérhető frekvencia');
     assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { amplitudeDb: null })), 'Nincs jelszintadat');
+    assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { confidence: 1.01 })), 'Érvénytelen jelbiztonság');
+    assert.equal(getStrikeRejectionReason(measurement('fundamental', 1, { amplitudeDb: 0.1 })), 'Érvénytelen jelszint');
     assert.equal(getStrikeRejectionReason(measurement('fundamental', 1)), null);
   });
 
