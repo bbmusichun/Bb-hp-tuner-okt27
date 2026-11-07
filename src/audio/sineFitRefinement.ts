@@ -105,10 +105,21 @@ export function refineFrequencyBySineFit(samples: Float32Array, sampleRate: numb
     }
   }
   const result = (low + high) / 2;
+  if (!Number.isFinite(result) || result <= 0) return null;
+
+  // A local optimizer pinned to its search boundary has not found an interior
+  // optimum. Do not report the clipped edge as a precise measurement; let the
+  // upstream FFT/YIN estimate remain authoritative instead.
+  const searchLow = centerHz * 2 ** (-searchCents / 1200);
+  const searchHigh = centerHz * 2 ** (searchCents / 1200);
+  const lowEdgeDistanceCents = Math.abs(1200 * Math.log2(result / searchLow));
+  const highEdgeDistanceCents = Math.abs(1200 * Math.log2(searchHigh / result));
+  if (lowEdgeDistanceCents <= 0.02 || highEdgeDistanceCents <= 0.02) return null;
+
   const explained = projectedPower(samples, sampleRate, result, window);
   // Require the candidate sinusoid to explain at least 1% of the frame's
   // weighted AC energy. This rejects noise/DC-only frames while retaining
   // legitimate handpan fundamentals even when upper partials are stronger.
   if (!Number.isFinite(explained) || explained / centeredEnergy < 0.01) return null;
-  return Number.isFinite(result) && result > 0 ? result : null;
+  return result;
 }
