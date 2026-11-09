@@ -91,6 +91,7 @@ function fitModeAmplitudes(
   if (!coefficients) return null;
   return {
     dc: coefficients[0],
+    bases,
     modes: bases.map((_, index) => [coefficients[1 + index * 2], coefficients[2 + index * 2]]),
   };
 }
@@ -139,8 +140,7 @@ export function refineIndependentResonances(
         for (let other = 0; other < valid.length; other++) {
           if (other === modeIndex) continue;
           const [cosine, sine] = fitted.modes[other];
-          const step = 2 * Math.PI * frequencies[other] * i / sampleRate;
-          value -= cosine * Math.cos(step) + sine * Math.sin(step);
+          value -= cosine * fitted.bases[other].cosine[i] + sine * fitted.bases[other].sine[i];
         }
         residual[i] = value;
       }
