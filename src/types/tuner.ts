@@ -20,6 +20,16 @@ export interface ResonanceMeasurement {
   confidence: number | null; // 0 to 1
   /** True when a second similarly strong, separated FFT peak competes in the target window. */
   peakAmbiguous?: boolean;
+  /** Peak-to-peak spread across the current short tracking window; not measurement uncertainty. */
+  stabilitySpreadCents?: number | null;
+  /** Observed start-to-end frequency movement during the recent sustain/decay window. */
+  decayDriftCents?: number | null;
+  /** Peak-to-peak frequency movement during the recent sustain/decay window. */
+  decayRangeCents?: number | null;
+  /** Linear-regression drift rate in cents per second during the recent window. */
+  decaySlopeCentsPerSecond?: number | null;
+  decaySampleCount?: number;
+  decayDurationMs?: number;
   timestampMs: number;
   status: MeasurementStatus;
 }
@@ -58,6 +68,52 @@ export interface HandpanScale {
   }[];
 }
 
+export interface ResonanceSnapshotQuality {
+  confidence: number | null;
+  amplitudeDb: number | null;
+  peakAmbiguous: boolean;
+  stabilitySpreadCents: number | null;
+  decayDriftCents: number | null;
+  decayRangeCents: number | null;
+  decaySlopeCentsPerSecond: number | null;
+  decaySampleCount: number;
+  decayDurationMs: number;
+  status: MeasurementStatus;
+}
+
+export interface StrikeSessionModeSummary {
+  medianHz: number;
+  medianCents: number;
+  medianConfidence: number;
+  medianAmplitudeDb: number;
+  madCents: number;
+  rangeCents: number;
+  acceptedCount: number;
+  rejectedCount: number;
+}
+
+export interface StrikeSessionReading {
+  hz: number;
+  cents: number;
+  confidence: number;
+  amplitudeDb: number;
+}
+
+export interface StrikeSessionStrike {
+  capturedAtMs: number;
+  fundamental: StrikeSessionReading | null;
+  fifth: StrikeSessionReading | null;
+  octave: StrikeSessionReading | null;
+  rejectionReasons?: Partial<Record<ResonanceRole, string>>;
+}
+export interface StrikeSessionSummary {
+  strikeCount: number;
+  requiredSamples: number;
+  fundamental: StrikeSessionModeSummary;
+  fifth: StrikeSessionModeSummary;
+  octave: StrikeSessionModeSummary;
+}
+
 export interface TuningLogEntry {
   id: string;
   timestamp: number;
@@ -72,6 +128,12 @@ export interface TuningLogEntry {
   inputLevelDbfs?: number;
   /** Tolerance policy used when calculating overallInTune; null means adaptive Auto. */
   toleranceOverrideCents?: TuningToleranceSetting;
+  /** Per-resonance measurement quality captured with the snapshot; optional for older logs. */
+  quality?: Partial<Record<ResonanceRole, ResonanceSnapshotQuality>>;
+  /** Robust per-mode aggregate from manually confirmed, distinct strikes. */
+  strikeSession?: StrikeSessionSummary;
+  /** Original per-strike readings retained for audit and before/after comparison. */
+  strikeSamples?: StrikeSessionStrike[];
   /** Measured frequencies. */
   fundamentalHz: number;
   fundamentalCents: number;

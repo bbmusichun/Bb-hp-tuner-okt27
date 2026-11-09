@@ -38,7 +38,7 @@ export const BBCards: React.FC<Props> = ({
     },
     {
       role: 'fifth' as const,
-      title: '3. parciális',
+      title: 'Kvint (3×)',
       note: kvint.noteName || 'A4',
       dotColor: '#c084fc',
       borderSelected: 'border-[#c084fc]/70 shadow-[#c084fc]/10',
@@ -119,6 +119,17 @@ export const BBCards: React.FC<Props> = ({
                   ? `Utolsó ütés · ${Math.max(0, (Date.now() - c.data.timestampMs) / 1000).toFixed(1)} s · ${centsStr}`
                   : centsStr}
             </div>
+
+            {c.data.stabilitySpreadCents != null && c.data.status !== 'held' && c.data.status !== 'no-signal' && (
+              <div className="text-[9px] font-mono text-slate-500 mt-0.5" title="A legutóbbi követhető frekvenciamérések teljes tartománya, nem pontossági bizonytalanság">
+                Ablakszórás: {c.data.stabilitySpreadCents.toFixed(2)} cent
+              </div>
+            )}
+            {c.data.decayDriftCents != null && c.data.decaySlopeCentsPerSecond != null && c.data.status !== 'held' && c.data.status !== 'no-signal' && (
+              <div className="text-[9px] font-mono text-slate-400 mt-0.5" title="Megfigyelt frekvenciaváltozás a legutóbbi sustain/decay mérési ablakban; nem kalibrált bizonytalanság">
+                Lecsengési drift: {c.data.decayDriftCents > 0 ? '+' : ''}{c.data.decayDriftCents.toFixed(2)} c · {c.data.decaySlopeCentsPerSecond > 0 ? '+' : ''}{c.data.decaySlopeCentsPerSecond.toFixed(2)} c/s
+              </div>
+            )}
 
             {/* Mini Sparkline Canvas */}
             <div className="w-full h-5 mt-1 overflow-hidden">

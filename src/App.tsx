@@ -41,13 +41,14 @@ import {
   type PartialTargetOffsetField,
   type PartialTargetOffsetMap,
 } from './audio/partialTargets';
-import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry } from './types/tuner';
+import { BBNavTab, HandpanScale, ResonanceMeasurement, ToneFieldNote, TuningLogEntry, type StrikeSessionSummary, type StrikeSessionStrike } from './types/tuner';
 import { BBStrobeBands } from './components/BBStrobeBands';
 import { BBSpectrum } from './components/BBSpectrum';
 import { BBSpectrumDiagnostics } from './components/BBSpectrumDiagnostics';
 import { BBPitchDial } from './components/BBPitchDial';
 import { BBCards } from './components/BBCards';
 import { BBStabilityGraph } from './components/BBStabilityGraph';
+import { BBTuningWorkbench } from './components/BBTuningWorkbench';
 import { BBHangmezoView } from './components/BBHangmezoView';
 import { BBScaleNoteEnablePanel } from './components/BBScaleNoteEnablePanel';
 import { BBMeresekView } from './components/BBMeresekView';
@@ -196,6 +197,39 @@ function loadDisabledToneNotesByScale(): Record<string, string[]> {
   }
 }
 
+function isValidStrikeSessionStrike(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const strike = value as Record<string, unknown>;
+  if (typeof strike.capturedAtMs !== 'number' || !Number.isFinite(strike.capturedAtMs) || !Number.isFinite(new Date(strike.capturedAtMs).getTime())) return false;
+  const reasons = strike.rejectionReasons;
+  if (reasons !== undefined && (!reasons || typeof reasons !== 'object' || Array.isArray(reasons) || !Object.entries(reasons).every(([role, reason]) => ['fundamental', 'fifth', 'octave'].includes(role) && typeof reason === 'string'))) return false;
+  const validReading = (reading: unknown) => reading === null || (
+    !!reading && typeof reading === 'object' && !Array.isArray(reading) &&
+    typeof (reading as Record<string, unknown>).hz === 'number' && Number.isFinite((reading as Record<string, unknown>).hz) && ((reading as Record<string, unknown>).hz as number) > 0 &&
+    typeof (reading as Record<string, unknown>).cents === 'number' && Number.isFinite((reading as Record<string, unknown>).cents) &&
+    typeof (reading as Record<string, unknown>).confidence === 'number' && Number.isFinite((reading as Record<string, unknown>).confidence) && ((reading as Record<string, unknown>).confidence as number) >= 0 && ((reading as Record<string, unknown>).confidence as number) <= 1 &&
+    typeof (reading as Record<string, unknown>).amplitudeDb === 'number' && Number.isFinite((reading as Record<string, unknown>).amplitudeDb) && ((reading as Record<string, unknown>).amplitudeDb as number) >= -160 && ((reading as Record<string, unknown>).amplitudeDb as number) <= 0
+  );
+  return validReading(strike.fundamental) && validReading(strike.fifth) && validReading(strike.octave) &&
+    [strike.fundamental, strike.fifth, strike.octave].some((reading) => reading !== null);
+}
+
+function isValidStrikeSessionSummary(value: unknown): value is StrikeSessionSummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const session = value as Record<string, unknown>;
+  if (!Number.isInteger(session.strikeCount) || (session.strikeCount as number) < 3 || session.requiredSamples !== 3) return false;
+  const validMode = (mode: unknown) => {
+    if (!mode || typeof mode !== 'object' || Array.isArray(mode)) return false;
+    const item = mode as Record<string, unknown>;
+    return ['medianHz', 'medianCents', 'medianConfidence', 'medianAmplitudeDb', 'madCents', 'rangeCents'].every((key) => typeof item[key] === 'number' && Number.isFinite(item[key])) &&
+      (item.medianHz as number) > 0 && (item.medianConfidence as number) >= 0 && (item.medianConfidence as number) <= 1 &&
+      (item.madCents as number) >= 0 && (item.rangeCents as number) >= 0 &&
+      Number.isInteger(item.acceptedCount) && (item.acceptedCount as number) >= 3 &&
+      Number.isInteger(item.rejectedCount) && (item.rejectedCount as number) >= 0 &&
+      (item.acceptedCount as number) + (item.rejectedCount as number) === (session.strikeCount as number);
+  };
+  return validMode(session.fundamental) && validMode(session.fifth) && validMode(session.octave);
+}
 function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
   if (!value || typeof value !== 'object') return false;
   const entry = value as Partial<TuningLogEntry>;
@@ -216,7 +250,25 @@ function isValidTuningLogEntry(value: unknown): value is TuningLogEntry {
     (entry.inputLevelDbfs === undefined || (typeof entry.inputLevelDbfs === 'number' && Number.isFinite(entry.inputLevelDbfs) && entry.inputLevelDbfs >= -160 && entry.inputLevelDbfs <= 0)) &&
     (entry.toleranceOverrideCents === undefined || isValidTuningToleranceSetting(entry.toleranceOverrideCents)) &&
     (entry.instrumentProfileId === undefined || typeof entry.instrumentProfileId === 'string') &&
-    (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string');
+    (entry.instrumentProfileName === undefined || typeof entry.instrumentProfileName === 'string') &&
+    (entry.strikeSession === undefined || isValidStrikeSessionSummary(entry.strikeSession)) &&
+    (entry.strikeSamples === undefined || (entry.strikeSession !== undefined && Array.isArray(entry.strikeSamples) && entry.strikeSamples.length === entry.strikeSession.strikeCount && entry.strikeSamples.every(isValidStrikeSessionStrike))) &&
+    (entry.quality === undefined || (
+      !!entry.quality && typeof entry.quality === 'object' && !Array.isArray(entry.quality) &&
+      (['fundamental', 'fifth', 'octave'] as const).every((role) => {
+        const quality = entry.quality?.[role];
+        if (quality === undefined) return true;
+        if (!quality || typeof quality !== 'object') return false;
+        const nullableFinite = (value: number | null) => value === null || Number.isFinite(value);
+        return nullableFinite(quality.confidence) && nullableFinite(quality.amplitudeDb) &&
+          typeof quality.peakAmbiguous === 'boolean' &&
+          nullableFinite(quality.stabilitySpreadCents) && nullableFinite(quality.decayDriftCents) &&
+          nullableFinite(quality.decayRangeCents) && nullableFinite(quality.decaySlopeCentsPerSecond) &&
+          Number.isInteger(quality.decaySampleCount) && quality.decaySampleCount >= 0 &&
+          Number.isFinite(quality.decayDurationMs) && quality.decayDurationMs >= 0 &&
+          (quality.status === 'valid' || quality.status === 'uncertain' || quality.status === 'held' || quality.status === 'no-signal');
+      })
+    ));
 }
 
 export default function App() {
@@ -706,7 +758,7 @@ export default function App() {
 
   // Note names for the 3 resonances of the selected note
   const resonanceNoteNames = useMemo(() => {
-    // If D3 is selected: Alap = D3, oktáv = D4, 3. parciális = A4
+    // If D3 is selected: Alap = D3, oktáv = D4, Kvint (3×) = A4
     // Otherwise calculate octave and fifth names
     return {
       fundamental: selectedNote.noteName,
@@ -766,7 +818,7 @@ export default function App() {
 
   const [kvint, setKvint] = useState<ResonanceMeasurement>({
     role: 'fifth',
-    name: '3. parciális',
+    name: 'Kvint (3×)',
     noteName: resonanceNoteNames.fifth,
     measuredHz: null,
     targetHz: toneNotes[0].fifthFreq,
@@ -1017,6 +1069,44 @@ export default function App() {
       audioSampleRateHz: bbAudioEngine.getSampleRate(),
       inputLevelDbfs: inputLevelDb,
       toleranceOverrideCents,
+      quality: {
+        fundamental: {
+          confidence: alap.confidence,
+          amplitudeDb: alap.amplitudeDb,
+          peakAmbiguous: alap.peakAmbiguous === true,
+          stabilitySpreadCents: alap.stabilitySpreadCents ?? null,
+          decayDriftCents: alap.decayDriftCents ?? null,
+          decayRangeCents: alap.decayRangeCents ?? null,
+          decaySlopeCentsPerSecond: alap.decaySlopeCentsPerSecond ?? null,
+          decaySampleCount: alap.decaySampleCount ?? 0,
+          decayDurationMs: alap.decayDurationMs ?? 0,
+          status: alap.status,
+        },
+        fifth: {
+          confidence: kvint.confidence,
+          amplitudeDb: kvint.amplitudeDb,
+          peakAmbiguous: kvint.peakAmbiguous === true,
+          stabilitySpreadCents: kvint.stabilitySpreadCents ?? null,
+          decayDriftCents: kvint.decayDriftCents ?? null,
+          decayRangeCents: kvint.decayRangeCents ?? null,
+          decaySlopeCentsPerSecond: kvint.decaySlopeCentsPerSecond ?? null,
+          decaySampleCount: kvint.decaySampleCount ?? 0,
+          decayDurationMs: kvint.decayDurationMs ?? 0,
+          status: kvint.status,
+        },
+        octave: {
+          confidence: oktav.confidence,
+          amplitudeDb: oktav.amplitudeDb,
+          peakAmbiguous: oktav.peakAmbiguous === true,
+          stabilitySpreadCents: oktav.stabilitySpreadCents ?? null,
+          decayDriftCents: oktav.decayDriftCents ?? null,
+          decayRangeCents: oktav.decayRangeCents ?? null,
+          decaySlopeCentsPerSecond: oktav.decaySlopeCentsPerSecond ?? null,
+          decaySampleCount: oktav.decaySampleCount ?? 0,
+          decayDurationMs: oktav.decayDurationMs ?? 0,
+          status: oktav.status,
+        },
+      },
       fundamentalHz: alap.measuredHz!,
       fundamentalCents: alap.deviationCents!,
       fifthHz: kvint.measuredHz!,
@@ -1034,8 +1124,58 @@ export default function App() {
     setLogs((prev) => [newEntry, ...prev]);
   };
 
+
+  const handleSaveStrikeSession = (summary: StrikeSessionSummary, samples: StrikeSessionStrike[]) => {
+    if (summary.fundamental.acceptedCount < 3 || summary.fifth.acceptedCount < 3 || summary.octave.acceptedCount < 3) return;
+    const targets = {
+      fundamental: alap.targetHz ?? selectedNote.frequency,
+      fifth: kvint.targetHz ?? selectedNote.fifthFreq,
+      octave: oktav.targetHz ?? selectedNote.octaveFreq,
+    };
+    const newEntry: TuningLogEntry = {
+      id: `session_${Date.now()}`,
+      timestamp: Date.now(),
+      noteName: selectedNote.noteName,
+      scaleId: currentScale.id,
+      instrumentProfileId: activeInstrumentProfileId,
+      instrumentProfileName: activeInstrumentProfile?.name ?? 'Handpan',
+      audioSampleRateHz: bbAudioEngine.getSampleRate(),
+      toleranceOverrideCents,
+      strikeSession: summary,
+      strikeSamples: samples,
+      quality: {
+        fundamental: { confidence: summary.fundamental.medianConfidence, amplitudeDb: summary.fundamental.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
+        fifth: { confidence: summary.fifth.medianConfidence, amplitudeDb: summary.fifth.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
+        octave: { confidence: summary.octave.medianConfidence, amplitudeDb: summary.octave.medianAmplitudeDb, peakAmbiguous: false, stabilitySpreadCents: null, decayDriftCents: null, decayRangeCents: null, decaySlopeCentsPerSecond: null, decaySampleCount: 0, decayDurationMs: 0, status: 'valid' },
+      },
+      fundamentalHz: summary.fundamental.medianHz,
+      fundamentalCents: summary.fundamental.medianCents,
+      fifthHz: summary.fifth.medianHz,
+      fifthCents: summary.fifth.medianCents,
+      octaveHz: summary.octave.medianHz,
+      octaveCents: summary.octave.medianCents,
+      fundamentalTargetHz: targets.fundamental,
+      fifthTargetHz: targets.fifth,
+      octaveTargetHz: targets.octave,
+      overallInTune:
+        isWithinTuningTolerance(summary.fundamental.medianCents, targets.fundamental, toleranceOverrideCents) &&
+        isWithinTuningTolerance(summary.fifth.medianCents, targets.fifth, toleranceOverrideCents) &&
+        isWithinTuningTolerance(summary.octave.medianCents, targets.octave, toleranceOverrideCents),
+    };
+    setLogs((prev) => [newEntry, ...prev]);
+  };
   // Determine active resonance details for Section B header
   const activeResonance = selectedRole === 'fundamental' ? alap : selectedRole === 'fifth' ? kvint : oktav;
+  // The latest saved snapshot for this exact instrument, scale and tone field is
+  // the workshop baseline; other notes/profiles must never be mixed into it.
+  const previousMatchingLog = logs.find((entry) =>
+    entry.instrumentProfileId === activeInstrumentProfileId &&
+    entry.scaleId === currentScale.id &&
+    entry.noteName === selectedNote.noteName,
+  ) ?? null;
+  const canCaptureTuningSnapshot = [alap, kvint, oktav].every((measurement) =>
+    measurement.status === 'valid' && measurement.measuredHz !== null && measurement.deviationCents !== null,
+  );
   const referenceToneHz = activeResonance.targetHz ?? (
     selectedRole === 'fundamental' ? selectedNote.frequency
       : selectedRole === 'fifth' ? selectedNote.fifthFreq
@@ -1614,7 +1754,7 @@ export default function App() {
                   }}
                   className="px-2.5 py-1.5 rounded-full border border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#f59e0b] text-xs font-medium flex items-center gap-1 hover:bg-[#f59e0b]/20 transition"
                 >
-                  <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}</span>
+                  <span>{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint (3×)' : 'Oktáv'}</span>
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -1642,7 +1782,7 @@ export default function App() {
               </div>
 
               <div className="mb-1 flex items-center justify-between gap-2 px-1">
-                <label htmlFor="hangoal-reference-tone-mode" className="text-[10px] text-slate-500">{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'} referenciahang-módja</label>
+                <label htmlFor="hangoal-reference-tone-mode" className="text-[10px] text-slate-500">{selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint (3×)' : 'Oktáv'} referenciahang-módja</label>
                 <select
                   id="hangoal-reference-tone-mode"
                   value={referenceToneMode}
@@ -1655,7 +1795,7 @@ export default function App() {
                 </select>
               </div>
               <p className="mb-2 px-1 text-[10px] leading-relaxed text-slate-500">
-                Ez a mód csak a kiválasztott sávra vonatkozik; az alaphang, a 3. parciális és az oktáv külön állítható. Ütésmódban a rövid hang a tranziensvédelmi ablak elején szól; a hangszóró visszacsatolása mérési hibát okozhat.
+                Ez a mód csak a kiválasztott sávra vonatkozik; az alaphang, a Kvint (3×) és az oktáv külön állítható. Ütésmódban a rövid hang a tranziensvédelmi ablak elején szól; a hangszóró visszacsatolása mérési hibát okozhat.
               </p>
 
               <div className="mb-1 flex justify-end px-1">
@@ -1751,9 +1891,23 @@ export default function App() {
               a4Ref={a4Ref}
             />
 
+            <BBTuningWorkbench
+              noteName={selectedNote.noteName}
+              previous={previousMatchingLog}
+              alap={alap}
+              kvint={kvint}
+              oktav={oktav}
+              toleranceOverrideCents={toleranceOverrideCents}
+              canCapture={canCaptureTuningSnapshot}
+              onCapture={handleCaptureSnapshot}
+              transientHoldoff={transientHoldoff}
+              sessionKey={`${activeInstrumentProfileId}:${currentScale.id}:${selectedNote.id}:${alap.targetHz ?? selectedNote.frequency}:${kvint.targetHz ?? selectedNote.fifthFreq}:${oktav.targetHz ?? selectedNote.octaveFreq}:${isListening ? "mic" : isFileInputActive ? "file" : "none"}`}
+              onSaveStrikeSession={handleSaveStrikeSession}
+            />
+
             {/* ================= SECTION E: FREQUENCY STABILITY GRAPH ================= */}
             <BBStabilityGraph
-              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? '3. parciális' : 'Oktáv'}
+              roleName={selectedRole === 'fundamental' ? 'Alaphang' : selectedRole === 'fifth' ? 'Kvint (3×)' : 'Oktáv'}
               hasSignal={hasSignal}
               currentCents={activeCents ?? 0}
               targetHz={activeResonance.targetHz}

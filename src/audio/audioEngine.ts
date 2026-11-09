@@ -7,7 +7,7 @@
 import { ResonanceMeasurement, MicState } from '../types/tuner';
 import { chooseNoteCandidate, NoteCandidate } from './noteDetection';
 import { detectTransientOnset, isTransientHoldoffActive, StablePitchTracker } from './transientGuard';
-import { PitchSample, smoothPitchSample } from './pitchSmoothing';
+import { PitchSample, retainAcceptedPitchSamples, smoothPitchSample } from './pitchSmoothing';
 import { estimatePitchYin } from './yinPitch';
 import { isNearDigitalClipPeak } from './inputClipping';
 import { isUsableSignalLevel } from './signalLevel';
@@ -15,8 +15,9 @@ import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, isTrackableResonancePeak, resonanceConfidenceFromDb } from './peakConfidence';
 import { analyzeSpectralPeakInWindow } from './spectralPeak';
 import { refineFrequencyBySineFit } from './sineFitRefinement';
+import { DecayDriftTracker } from './decayDrift';
 import { finalizePeakReading } from './resonanceMetrics';
-import { fuseAgreeingFrequencyEstimates, independentPitchConfirmsCandidate } from './frequencyFusion';
+import { independentPitchConfirmsCandidate } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
 import { createMicrophoneAudioConstraints } from './microphoneConstraints';
 
@@ -52,6 +53,11 @@ export class BBAudioEngine {
   private stabilityRole: 'fundamental' | 'fifth' | 'octave' = 'fundamental';
   private lastValidResonances: Partial<Record<'fundamental' | 'fifth' | 'octave', { hz: number; targetHz: number; cents: number; amplitudeDb: number; confidence: number; timestampMs: number }>> = {};
   private pitchHistory: Record<'fundamental' | 'fifth' | 'octave', PitchSample[]> = { fundamental: [], fifth: [], octave: [] };
+  private decayDriftTrackers: Record<'fundamental' | 'fifth' | 'octave', DecayDriftTracker> = {
+    fundamental: new DecayDriftTracker(),
+    fifth: new DecayDriftTracker(),
+    octave: new DecayDriftTracker(),
+  };
   private stablePitchTrackers: Record<'fundamental' | 'fifth' | 'octave', StablePitchTracker> = {
     fundamental: new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 5, minConfidence: 0.32 }),
     fifth: new StablePitchTracker({ requiredReadings: 4, maxDeviationCents: 7, minConfidence: 0.32 }),
@@ -115,7 +121,7 @@ export class BBAudioEngine {
 
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.fftSize;
-      this.analyser.smoothingTimeConstant = 0.05; // Keep attack/sustain changes responsive; pitch smoothing is handled separately
+      this.analyser.smoothingTimeConstant = 0; // Keep FFT and waveform frames time-aligned for precision measurements.
       this.analyser.minDecibels = -100;
       // Do not clamp strong FFT peaks at -10 dB: a flattened peak biases sub-bin interpolation.
       this.analyser.maxDecibels = 0;
@@ -172,7 +178,7 @@ export class BBAudioEngine {
 
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.fftSize;
-      this.analyser.smoothingTimeConstant = 0.05;
+      this.analyser.smoothingTimeConstant = 0; // No temporal FFT averaging: each partial must describe the same audio frame.
       this.analyser.minDecibels = -100;
       this.analyser.maxDecibels = 0;
       this.timeData = new Float32Array(this.analyser.fftSize);
@@ -201,6 +207,7 @@ export class BBAudioEngine {
       this.lastValidResonances = {};
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
       return true;
     } catch (err: unknown) {
       this.mediaElementSourceNode?.disconnect();
@@ -231,6 +238,7 @@ export class BBAudioEngine {
     this.lastValidResonances = {};
     this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
     Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
   }
 
   public stopMicrophone(): void {
@@ -254,6 +262,7 @@ export class BBAudioEngine {
     this.lastValidResonances = {};
     this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
     Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
   }
 
   public getMicState(): MicState {
@@ -440,13 +449,19 @@ export class BBAudioEngine {
     this.previousRms = shortRms;
     if (transientDetected) {
       this.lastTransientAt = now;
-      // A fresh strike invalidates the previous reading immediately. Otherwise a new,
-      // different note can appear to measure as the old note during the holdoff window
-      // because buildResonanceMeasurement intentionally retains valid readings.
+      // A new strike starts a fresh stability run, but it must not erase the accepted
+      // pitch estimate: repeated strikes on the same tone field should remain continuous.
+      // Drop only unconfirmed attack candidates; a genuinely changed pitch still needs
+      // three agreeing frames in smoothPitchSample before replacing the accepted cluster.
       this.lastValidResonances = {};
       this.stabilityHistory = [];
-      this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
+      this.pitchHistory = {
+        fundamental: retainAcceptedPitchSamples(this.pitchHistory.fundamental),
+        fifth: retainAcceptedPitchSamples(this.pitchHistory.fifth),
+        octave: retainAcceptedPitchSamples(this.pitchHistory.octave),
+      };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+      Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
     const transientHoldoff = isTransientHoldoffActive(
       this.lastTransientAt,
@@ -462,8 +477,9 @@ export class BBAudioEngine {
     // applies a Blackman taper; suppressing the entire 341 ms frame after a strike
     // can hide a short-lived ding. Early readings remain visible as uncertain, but
     // are quarantined from smoothing and stability until the holdoff ends.
-    // 1. Alaphang (Fundamental): search within ±150 cents of target
-    const fundamentalAnalysis = analyzeSpectralPeakInWindow(targetFundamentalHz, 150, this.freqData, this.sampleRate);
+    // Search each selected resonance within ±75 cents. This excludes the adjacent semitone's
+    // resonance while still allowing a substantially detuned handpan mode to be measured.
+    const fundamentalAnalysis = analyzeSpectralPeakInWindow(targetFundamentalHz, 75, this.freqData, this.sampleRate);
     const rawFundamentalPeak = fundamentalAnalysis?.peak ?? null;
     // Refine the fundamental only when the independent periodicity estimate strongly agrees
     // with the FFT peak. The FFT remains the primary reference; YIN cannot pull it to an octave.
@@ -488,21 +504,44 @@ export class BBAudioEngine {
     const timeRefinedPeak = rawFundamentalPeak && sineFitHz !== null
       ? { ...rawFundamentalPeak, freq: sineFitHz }
       : rawFundamentalPeak;
-    const fPeak = fundamentalPeakIsTrackable && timeRefinedPeak && yinEstimate.frequencyHz !== null
-      ? {
-          ...timeRefinedPeak,
-          freq: fuseAgreeingFrequencyEstimates(
-            timeRefinedPeak.freq,
-            yinEstimate.frequencyHz,
-            yinEstimate.clarity,
-          ),
-        }
-      : timeRefinedPeak;
+    // YIN is an independent plausibility check, not a second frequency standard.
+    // Once it corroborates the FFT candidate, keep the time-domain least-squares
+    // estimate as the reported frequency; blending a less precise periodicity
+    // estimate back into it can reintroduce several tenths of a cent of bias.
+    const fPeak = timeRefinedPeak;
     // Search each resonance independently to reduce masking by a dominant fundamental.
-    const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 150, this.freqData, this.sampleRate);
-    const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 150, this.freqData, this.sampleRate);
-    const qPeak = fifthAnalysis?.peak ?? null;
-    const oPeak = octaveAnalysis?.peak ?? null;
+    const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 75, this.freqData, this.sampleRate);
+    const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 75, this.freqData, this.sampleRate);
+    const rawFifthPeak = fifthAnalysis?.peak ?? null;
+    const rawOctavePeak = octaveAnalysis?.peak ?? null;
+
+    // Apply the same time-domain observation window to all three resonances.
+    // Using a full frame for the fundamental but only its last half for the upper
+    // modes makes the three reported values refer to different moments in a decaying
+    // strike. Precision takes priority here: fit every mode against the same samples.
+    const partialFitWindow = this.timeData;
+    const fifthTrackable = rawFifthPeak !== null && isTrackableResonancePeak(
+      fifthAnalysis?.ambiguous ?? false,
+      resonanceConfidenceFromDb(rawFifthPeak.magDb),
+      fifthAnalysis?.prominenceDb ?? 0,
+    );
+    const octaveTrackable = rawOctavePeak !== null && isTrackableResonancePeak(
+      octaveAnalysis?.ambiguous ?? false,
+      resonanceConfidenceFromDb(rawOctavePeak.magDb),
+      octaveAnalysis?.prominenceDb ?? 0,
+    );
+    const fifthSineFitHz = fifthTrackable && rawFifthPeak
+      ? refineFrequencyBySineFit(partialFitWindow, this.sampleRate, rawFifthPeak.freq, 8)
+      : null;
+    const octaveSineFitHz = octaveTrackable && rawOctavePeak
+      ? refineFrequencyBySineFit(partialFitWindow, this.sampleRate, rawOctavePeak.freq, 8)
+      : null;
+    const qPeak = rawFifthPeak && fifthSineFitHz !== null
+      ? { ...rawFifthPeak, freq: fifthSineFitHz }
+      : rawFifthPeak;
+    const oPeak = rawOctavePeak && octaveSineFitHz !== null
+      ? { ...rawOctavePeak, freq: octaveSineFitHz }
+      : rawOctavePeak;
 
     // Construct measurements
     const alap = this.buildResonanceMeasurement(
@@ -617,25 +656,36 @@ export class BBAudioEngine {
     const confidence = rawPeak ? resonanceConfidenceFromDb(rawPeak.magDb) : 0;
     const trackable = !trackingSuppressed && rawPeak !== null &&
       isTrackableResonancePeak(peakAmbiguous, confidence, peakProminenceDb);
-    let currentPeak = rawPeak;
+    // Only a trackable spectral peak may reach the live readout. In particular,
+    // never display a raw transient/ambiguous peak as if it were a new pitch.
+    let currentPeak: { freq: number; magDb: number } | null = null;
 
     if (trackable && rawPeak) {
-      const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now);
+      const smoothed = smoothPitchSample(this.pitchHistory[role], rawPeak.freq, now, {
+        // Match the tracker's own allowed spread: a larger-than-stable jump must
+        // be confirmed before it can move the visible tuning value.
+        jumpThresholdCents: role === 'fundamental' ? 5 : 7,
+        candidateMatchCents: 3,
+        candidateConfirmations: 3,
+      });
       this.pitchHistory[role] = smoothed.history;
       currentPeak = { ...rawPeak, freq: smoothed.frequencyHz };
     } else {
-      // A weak, ambiguous, or missing peak must not enter the median history or
-      // complete a stability run. Keep a visible raw reading where available.
-      this.pitchHistory[role] = [];
-      this.stablePitchTrackers[role].reset();
+      // Preserve the last accepted pitch cluster through isolated weak frames.
+      // smoothPitchSample expires it by age; a fresh strike explicitly resets all
+      // trackers in analyze() when the transient is detected.
+      this.decayDriftTrackers[role].reset();
     }
 
-    const stability = trackable && rawPeak
-      ? this.stablePitchTrackers[role].observe({ frequencyHz: rawPeak.freq, confidence, timestampMs: now })
-      : { stable: false, frequencyHz: null, count: 0 };
+    const stability = trackable && currentPeak
+      ? this.stablePitchTrackers[role].observe({ frequencyHz: currentPeak.freq, confidence, timestampMs: now })
+      : { stable: false, frequencyHz: null, count: 0, spreadCents: null };
+    const decayDrift = trackable && rawPeak
+      ? this.decayDriftTrackers[role].observe({ frequencyHz: rawPeak.freq, timestampMs: now })
+      : (this.decayDriftTrackers[role].reset(), null);
     const finalized = finalizePeakReading(
       currentPeak,
-      stability.stable ? stability.frequencyHz : null,
+      null,
       targetHz,
     );
     currentPeak = finalized.peak;
@@ -645,8 +695,8 @@ export class BBAudioEngine {
     // than live. This gives the player time to read the value after a strike while
     // preserving a clear distinction between a live measurement and a retained result.
     const status = currentPeak && hasSignal
-      ? trackable && stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
-      : 'no-signal';
+      ? stability.stable && isReliableResonanceConfidence(confidence) && cents !== null && Number.isFinite(cents) ? 'valid' : 'uncertain'
+      : hasSignal && !trackingSuppressed ? 'uncertain' : 'no-signal';
     if (status === 'valid' && currentPeak && cents !== null) {
       this.lastValidResonances[role] = {
         hz: currentPeak.freq,
@@ -673,6 +723,12 @@ export class BBAudioEngine {
       amplitudeDb: currentPeak ? currentPeak.magDb : cachedIsFresh ? cached!.amplitudeDb : null,
       confidence: currentPeak ? confidence : cachedIsFresh ? cached!.confidence : 0,
       peakAmbiguous: Boolean(currentPeak && peakAmbiguous),
+      stabilitySpreadCents: stability.spreadCents,
+      decayDriftCents: decayDrift?.driftCents ?? null,
+      decayRangeCents: decayDrift?.rangeCents ?? null,
+      decaySlopeCentsPerSecond: decayDrift?.slopeCentsPerSecond ?? null,
+      decaySampleCount: decayDrift?.sampleCount ?? 0,
+      decayDurationMs: decayDrift?.durationMs ?? 0,
       timestampMs: currentPeak ? now : cachedIsFresh ? cached!.timestampMs : now,
       status: !currentPeak && cachedIsFresh ? 'held' : status,
     };
@@ -694,6 +750,12 @@ export class BBAudioEngine {
       amplitudeDb: null,
       confidence: 0,
       peakAmbiguous: false,
+      stabilitySpreadCents: null,
+      decayDriftCents: null,
+      decayRangeCents: null,
+      decaySlopeCentsPerSecond: null,
+      decaySampleCount: 0,
+      decayDurationMs: 0,
       timestampMs: Date.now(),
       status: 'no-signal',
     };
@@ -719,7 +781,7 @@ export class BBAudioEngine {
     if (useToneAsAnalysisInput) {
       this.analyser = this.audioCtx.createAnalyser();
       this.analyser.fftSize = this.fftSize;
-      this.analyser.smoothingTimeConstant = 0.05;
+      this.analyser.smoothingTimeConstant = 0; // No temporal FFT averaging: each partial must describe the same audio frame.
       this.analyser.minDecibels = -100;
       this.analyser.maxDecibels = 0;
       this.toneSilenceGain = this.audioCtx.createGain();
@@ -740,6 +802,7 @@ export class BBAudioEngine {
       this.lastValidResonances = {};
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
 
     this.toneGain = this.audioCtx.createGain();
@@ -788,6 +851,7 @@ export class BBAudioEngine {
       this.lastValidResonances = {};
       this.pitchHistory = { fundamental: [], fifth: [], octave: [] };
       Object.values(this.stablePitchTrackers).forEach((tracker) => tracker.reset());
+    Object.values(this.decayDriftTrackers).forEach((tracker) => tracker.reset());
     }
     try {
       gain.gain.cancelScheduledValues(now);
