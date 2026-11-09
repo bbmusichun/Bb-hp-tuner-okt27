@@ -129,6 +129,35 @@ describe('time-domain sine-fit frequency refinement', () => {
     }
   });
 
+  it('measures all three independently detuned modes from the same decaying, noisy frame', () => {
+    const modes = [
+      { name: 'fundamental', frequency: BASE * 2 ** (1.7 / 1200), decay: 1.4, amplitude: 0.16 },
+      { name: 'octave', frequency: BASE * 2.0017 * 2 ** (-2.2 / 1200), decay: 2.1, amplitude: 0.29 },
+      { name: 'compound fifth', frequency: BASE * 3.006 * 2 ** (3.1 / 1200), decay: 2.8, amplitude: 0.21 },
+    ];
+    const samples = new Float32Array(SIZE);
+    let seed = 0x91e10da5;
+    for (let i = 0; i < SIZE; i++) {
+      const time = i / RATE;
+      seed = (1664525 * seed + 1013904223) >>> 0;
+      const noise = ((seed / 0x100000000) - 0.5) * 0.00015;
+      samples[i] = modes.reduce((sum, mode, index) =>
+        sum + mode.amplitude * Math.exp(-mode.decay * time) *
+          Math.sin(2 * Math.PI * mode.frequency * time + 0.43 * (index + 1)), noise);
+    }
+
+    for (const mode of modes) {
+      const measured = refineFrequencyBySineFit(
+        samples, RATE, mode.frequency * 2 ** (1.5 / 1200), 8,
+      );
+      assert.ok(measured !== null, `no estimate for ${mode.name}`);
+      assert.ok(
+        Math.abs(cents(measured, mode.frequency)) < 0.6,
+        `${mode.name} error=${cents(measured, mode.frequency).toFixed(4)} cents`,
+      );
+    }
+  });
+
   it('returns null for silence and invalid inputs, including non-finite samples', () => {
     assert.equal(refineFrequencyBySineFit(new Float32Array(SIZE), RATE, BASE), null);
     assert.equal(refineFrequencyBySineFit(new Float32Array(100), RATE, BASE), null);
@@ -190,4 +219,55 @@ describe('time-domain sine-fit frequency refinement', () => {
       );
     }
   });
+
+  it('keeps all three independent modes separated under severe level and decay imbalance', () => {
+    const scenarios = [
+      {
+        modes: [
+          { frequency: BASE * 2 ** (-2.6 / 1200), decay: 0.7, amplitude: 0.055, phase: 0.17 },
+          { frequency: BASE * 2.0041 * 2 ** (1.8 / 1200), decay: 2.5, amplitude: 0.34, phase: 1.83 },
+          { frequency: BASE * 3.011 * 2 ** (-1.2 / 1200), decay: 4.1, amplitude: 0.19, phase: 3.01 },
+        ],
+      },
+      {
+        modes: [
+          { frequency: BASE * 2 ** (2.2 / 1200), decay: 2.8, amplitude: 0.31, phase: 2.41 },
+          { frequency: BASE * 1.9975 * 2 ** (-1.6 / 1200), decay: 0.9, amplitude: 0.065, phase: 0.61 },
+          { frequency: BASE * 3.014 * 2 ** (2.7 / 1200), decay: 3.6, amplitude: 0.14, phase: 4.72 },
+        ],
+      },
+      {
+        modes: [
+          { frequency: BASE * 2 ** (-0.9 / 1200), decay: 1.9, amplitude: 0.12, phase: 5.2 },
+          { frequency: BASE * 2.0033 * 2 ** (2.5 / 1200), decay: 3.9, amplitude: 0.22, phase: 2.3 },
+          { frequency: BASE * 3.008 * 2 ** (-2.1 / 1200), decay: 0.65, amplitude: 0.36, phase: 0.92 },
+        ],
+      },
+    ];
+
+    for (const [scenarioIndex, scenario] of scenarios.entries()) {
+      const samples = new Float32Array(SIZE);
+      let seed = 0x6d2b79f5 + scenarioIndex;
+      for (let i = 0; i < SIZE; i++) {
+        const time = i / RATE;
+        seed = (1664525 * seed + 1013904223) >>> 0;
+        const noise = (seed / 0x100000000 - 0.5) * 0.0002;
+        samples[i] = scenario.modes.reduce((sum, mode) =>
+          sum + mode.amplitude * Math.exp(-mode.decay * time) *
+            Math.sin(2 * Math.PI * mode.frequency * time + mode.phase), noise);
+      }
+
+      for (const [modeIndex, mode] of scenario.modes.entries()) {
+        const measured = refineFrequencyBySineFit(
+          samples, RATE, mode.frequency * 2 ** (1.5 / 1200), 8,
+        );
+        assert.ok(measured !== null, `no estimate in scenario ${scenarioIndex}, mode ${modeIndex}`);
+        assert.ok(
+          Math.abs(cents(measured, mode.frequency)) < 0.8,
+          `scenario ${scenarioIndex}, mode ${modeIndex}: error=${cents(measured, mode.frequency).toFixed(4)} cents`,
+        );
+      }
+    }
+  });
+
 });

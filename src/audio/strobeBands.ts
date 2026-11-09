@@ -22,7 +22,7 @@ export interface ParsedStrobeTargetExpression {
 
 export const DEFAULT_STROBE_BANDS: StrobeBandConfig[] = [
   { id: 'fundamental', name: 'Alaphang', source: 'fundamental', targetHz: 146.832384, centsOffset: 0, enabled: true },
-  { id: 'third-partial', name: '3. parciális', source: 'fifth', targetHz: 440.497152, centsOffset: 0, enabled: true },
+  { id: 'third-partial', name: 'Kvint (3×)', source: 'fifth', targetHz: 440.497152, centsOffset: 0, enabled: true },
   { id: 'octave', name: 'Oktáv', source: 'octave', targetHz: 293.664768, centsOffset: 0, enabled: true },
 ];
 
