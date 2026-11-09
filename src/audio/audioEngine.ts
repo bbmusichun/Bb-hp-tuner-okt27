@@ -14,10 +14,9 @@ import { isUsableSignalLevel } from './signalLevel';
 import { isSameMeasurementTarget } from './measurementCache';
 import { isReliableResonanceConfidence, isTrackableResonancePeak, resonanceConfidenceFromDb } from './peakConfidence';
 import { analyzeSpectralPeakInWindow } from './spectralPeak';
-import { refineFrequencyBySineFit } from './sineFitRefinement';
+import { refineIndependentResonances } from './multiResonanceFit';
 import { DecayDriftTracker } from './decayDrift';
 import { finalizePeakReading } from './resonanceMetrics';
-import { independentPitchConfirmsCandidate } from './frequencyFusion';
 import { shouldRetryDefaultAudioInput } from './deviceSelection';
 import { createMicrophoneAudioConstraints } from './microphoneConstraints';
 
@@ -477,49 +476,20 @@ export class BBAudioEngine {
     // applies a Blackman taper; suppressing the entire 341 ms frame after a strike
     // can hide a short-lived ding. Early readings remain visible as uncertain, but
     // are quarantined from smoothing and stability until the holdoff ends.
-    // Search each selected resonance within ±75 cents. This excludes the adjacent semitone's
-    // resonance while still allowing a substantially detuned handpan mode to be measured.
+    // Search each selected resonance within ±75 cents. The target windows stay
+    // independent: the octave and compound fifth are not forced to exact ratios.
     const fundamentalAnalysis = analyzeSpectralPeakInWindow(targetFundamentalHz, 75, this.freqData, this.sampleRate);
-    const rawFundamentalPeak = fundamentalAnalysis?.peak ?? null;
-    // Refine the fundamental only when the independent periodicity estimate strongly agrees
-    // with the FFT peak. The FFT remains the primary reference; YIN cannot pull it to an octave.
-    const fundamentalPeakIsTrackable = rawFundamentalPeak !== null &&
-      isTrackableResonancePeak(
-        fundamentalAnalysis?.ambiguous ?? false,
-        resonanceConfidenceFromDb(rawFundamentalPeak.magDb),
-        fundamentalAnalysis?.prominenceDb ?? 0,
-      );
-    // Refine the FFT candidate against the original waveform. This is a narrow
-    // local fit (±8 cents), so it improves sub-bin precision without allowing
-    // the estimator to jump to a neighbouring note or a distant partial.
-    const independentPitchConfirmsPeak = rawFundamentalPeak !== null &&
-      independentPitchConfirmsCandidate(
-        rawFundamentalPeak.freq,
-        yinEstimate.frequencyHz,
-        yinEstimate.clarity,
-      );
-    const sineFitHz = fundamentalPeakIsTrackable && rawFundamentalPeak && independentPitchConfirmsPeak
-      ? refineFrequencyBySineFit(this.timeData, this.sampleRate, rawFundamentalPeak.freq, 8)
-      : null;
-    const timeRefinedPeak = rawFundamentalPeak && sineFitHz !== null
-      ? { ...rawFundamentalPeak, freq: sineFitHz }
-      : rawFundamentalPeak;
-    // YIN is an independent plausibility check, not a second frequency standard.
-    // Once it corroborates the FFT candidate, keep the time-domain least-squares
-    // estimate as the reported frequency; blending a less precise periodicity
-    // estimate back into it can reintroduce several tenths of a cent of bias.
-    const fPeak = timeRefinedPeak;
-    // Search each resonance independently to reduce masking by a dominant fundamental.
     const fifthAnalysis = analyzeSpectralPeakInWindow(targetFifthHz, 75, this.freqData, this.sampleRate);
     const octaveAnalysis = analyzeSpectralPeakInWindow(targetOctaveHz, 75, this.freqData, this.sampleRate);
+    const rawFundamentalPeak = fundamentalAnalysis?.peak ?? null;
     const rawFifthPeak = fifthAnalysis?.peak ?? null;
     const rawOctavePeak = octaveAnalysis?.peak ?? null;
 
-    // Apply the same time-domain observation window to all three resonances.
-    // Using a full frame for the fundamental but only its last half for the upper
-    // modes makes the three reported values refer to different moments in a decaying
-    // strike. Precision takes priority here: fit every mode against the same samples.
-    const partialFitWindow = this.timeData;
+    const fundamentalTrackable = rawFundamentalPeak !== null && isTrackableResonancePeak(
+      fundamentalAnalysis?.ambiguous ?? false,
+      resonanceConfidenceFromDb(rawFundamentalPeak.magDb),
+      fundamentalAnalysis?.prominenceDb ?? 0,
+    );
     const fifthTrackable = rawFifthPeak !== null && isTrackableResonancePeak(
       fifthAnalysis?.ambiguous ?? false,
       resonanceConfidenceFromDb(rawFifthPeak.magDb),
@@ -530,17 +500,29 @@ export class BBAudioEngine {
       resonanceConfidenceFromDb(rawOctavePeak.magDb),
       octaveAnalysis?.prominenceDb ?? 0,
     );
-    const fifthSineFitHz = fifthTrackable && rawFifthPeak
-      ? refineFrequencyBySineFit(partialFitWindow, this.sampleRate, rawFifthPeak.freq, 8)
-      : null;
-    const octaveSineFitHz = octaveTrackable && rawOctavePeak
-      ? refineFrequencyBySineFit(partialFitWindow, this.sampleRate, rawOctavePeak.freq, 8)
-      : null;
-    const qPeak = rawFifthPeak && fifthSineFitHz !== null
-      ? { ...rawFifthPeak, freq: fifthSineFitHz }
+
+    // Jointly model all trackable partials in the same waveform. The least-squares
+    // fit removes the other two modes before refining each frequency, reducing
+    // cross-partial bias when one resonance is much louder or decays faster.
+    // Each frequency remains independent; no 1:2:3 ratio is imposed.
+    const refinedFrequencies = refineIndependentResonances(
+      this.timeData,
+      this.sampleRate,
+      [
+        fundamentalTrackable ? rawFundamentalPeak!.freq : null,
+        fifthTrackable ? rawFifthPeak!.freq : null,
+        octaveTrackable ? rawOctavePeak!.freq : null,
+      ],
+      8,
+    );
+    const fPeak = rawFundamentalPeak && refinedFrequencies[0] !== null
+      ? { ...rawFundamentalPeak, freq: refinedFrequencies[0]! }
+      : rawFundamentalPeak;
+    const qPeak = rawFifthPeak && refinedFrequencies[1] !== null
+      ? { ...rawFifthPeak, freq: refinedFrequencies[1]! }
       : rawFifthPeak;
-    const oPeak = rawOctavePeak && octaveSineFitHz !== null
-      ? { ...rawOctavePeak, freq: octaveSineFitHz }
+    const oPeak = rawOctavePeak && refinedFrequencies[2] !== null
+      ? { ...rawOctavePeak, freq: refinedFrequencies[2]! }
       : rawOctavePeak;
 
     // Construct measurements
