@@ -43,13 +43,19 @@ interface ModeBasis {
   sine: Float64Array;
 }
 
+interface FittedModes {
+  dc: number;
+  bases: ModeBasis[];
+  modes: number[][];
+}
+
 /** Fit DC and every available resonance together at fixed trial frequencies. */
 function fitModeAmplitudes(
   samples: Float32Array,
   sampleRate: number,
   frequencies: number[],
   weights: Float64Array,
-): { dc: number; modes: number[][] } | null {
+): FittedModes | null {
   const length = samples.length;
   const bases: ModeBasis[] = frequencies.map((frequencyHz) => {
     const cosine = new Float64Array(length);
